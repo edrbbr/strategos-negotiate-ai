@@ -63,14 +63,14 @@ const Landing = () => {
           <h2 className="text-center font-serif text-4xl md:text-5xl mb-16">Der Strategos-Protokoll</h2>
           <div className="grid md:grid-cols-3 gap-px bg-border/40">
             {[
-              { num: "01", title: "Situation", icon: Brain, color: "secondary", text: "Beschreiben Sie die Rahmenbedingungen. Wer sind die Akteure? Was sind die harten Fakten? Unsere KI erkennt sofort die Machtdynamik." },
-              { num: "02", title: "Strategie", icon: Target, color: "primary", text: "Wir berechnen den optimalen Verhandlungspfad basierend auf FBI-Geiselnahme-Taktiken und Harvard-Prinzipien.", featured: true },
-              { num: "03", title: "Text erhalten", icon: MessageSquare, color: "tertiary", text: "Sie erhalten fertige Textbausteine oder Skripte, die psychologisch darauf optimiert sind, Widerstände abzubauen." },
+              { num: "01", title: "Situation", icon: Brain, iconClass: "text-secondary", text: "Beschreiben Sie die Rahmenbedingungen. Wer sind die Akteure? Was sind die harten Fakten? Unsere KI erkennt sofort die Machtdynamik." },
+              { num: "02", title: "Strategie", icon: Target, iconClass: "text-primary", text: "Wir berechnen den optimalen Verhandlungspfad basierend auf FBI-Geiselnahme-Taktiken und Harvard-Prinzipien.", featured: true },
+              { num: "03", title: "Text erhalten", icon: MessageSquare, iconClass: "text-tertiary", text: "Sie erhalten fertige Textbausteine oder Skripte, die psychologisch darauf optimiert sind, Widerstände abzubauen." },
             ].map((step) => (
               <div key={step.num} className={`bg-background p-10 ${step.featured ? "border-y border-primary/40" : ""}`}>
                 <div className="flex items-start justify-between mb-8">
                   <span className="font-mono-label text-muted-foreground/60">{step.num}</span>
-                  <step.icon className={`w-6 h-6 text-${step.color}`} strokeWidth={1.5} />
+                  <step.icon className={`w-6 h-6 ${step.iconClass}`} strokeWidth={1.5} />
                 </div>
                 <h3 className="font-serif text-2xl mb-4">{step.title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{step.text}</p>
