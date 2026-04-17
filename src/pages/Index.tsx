@@ -1,12 +1,5 @@
-import { useState } from "react";
-import NotFound from "./NotFound";
+import { Navigate } from "react-router-dom";
 
-const Index = () => {
-  // Redirect users to landing page
-  if (typeof window !== "undefined") {
-    window.location.replace("/landing");
-  }
-  return null;
-};
+const Index = () => <Navigate to="/" replace />;
 
 export default Index;
