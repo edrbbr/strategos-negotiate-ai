@@ -2,9 +2,9 @@ import { Link } from "react-router-dom";
 import { Folder, Mail, MessageCircle, Search, Car, Briefcase, Home, Plus, ChevronRight } from "lucide-react";
 
 const stats = [
-  { label: "Fälle Gesamt", value: "012", color: "primary", icon: Folder },
-  { label: "Offene Fälle", value: "003", color: "secondary", icon: Mail },
-  { label: "Neue Nachrichten", value: "007", color: "tertiary", icon: MessageCircle },
+  { label: "Fälle Gesamt", value: "012", border: "border-primary", text: "text-primary", icon: Folder },
+  { label: "Offene Fälle", value: "003", border: "border-secondary", text: "text-secondary", icon: Mail },
+  { label: "Neue Nachrichten", value: "007", border: "border-tertiary", text: "text-tertiary", icon: MessageCircle },
 ];
 
 const filters = ["Alle", "E-Mail", "Verträge", "Archiv"];
@@ -13,7 +13,7 @@ const cases = [
   {
     id: "882-X9",
     agent: "Analyse",
-    color: "secondary",
+    badge: "text-secondary border-secondary/40",
     icon: Car,
     title: "Autoreklamation BMW — Mängelbeseitigung",
     desc: "Strategische Korrespondenz bezüglich Getriebeschaden. Aktueller Status: Warte auf Antwort der Rechtsabteilung…",
@@ -21,7 +21,7 @@ const cases = [
   {
     id: "991-A2",
     agent: "Strategie",
-    color: "primary",
+    badge: "text-primary border-primary/40",
     icon: Briefcase,
     title: "Gehaltsverhandlung Q4 — TechCorp AG",
     desc: "Vorbereitung des Jahresgesprächs. Fokus auf Leistungsmetriken und Benchmark-Vergleich. Eskalationsstufen definiert.",
@@ -29,7 +29,7 @@ const cases = [
   {
     id: "551-B7",
     agent: "Execution",
-    color: "tertiary",
+    badge: "text-tertiary border-tertiary/40",
     icon: Home,
     title: "Mietstreit Friedrichshain — Kaution",
     desc: "Forderung zur Rückzahlung der Kaution nach Auszug. Letzte Mahnung generiert. Rechtliche Prüfung durch Agent…",
@@ -48,11 +48,11 @@ const Dashboard = () => {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         {stats.map((s) => (
-          <div key={s.label} className={`relative bg-card border-l-2 border-${s.color} p-6 rounded-sm`}>
+          <div key={s.label} className={`relative bg-card border-l-2 ${s.border} p-6 rounded-sm`}>
             <div className="flex items-start justify-between">
               <div>
                 <p className="font-mono-label text-muted-foreground mb-3">{s.label}</p>
-                <p className={`font-serif text-5xl text-${s.color}`}>{s.value}</p>
+                <p className={`font-serif text-5xl ${s.text}`}>{s.value}</p>
               </div>
               <s.icon className="w-10 h-10 text-foreground/10" strokeWidth={1.2} />
             </div>
@@ -93,7 +93,7 @@ const Dashboard = () => {
             className="group bg-card border border-border/30 hover:border-primary/40 p-7 rounded-sm transition-colors flex flex-col"
           >
             <div className="flex items-start justify-between mb-6">
-              <span className={`font-mono-label text-${c.color} border border-${c.color}/40 px-3 py-1`}>
+              <span className={`font-mono-label ${c.badge} border px-3 py-1`}>
                 Agent: {c.agent}
               </span>
               <div className="flex items-center gap-2 text-muted-foreground/40">
