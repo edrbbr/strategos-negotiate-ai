@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Brain, Target, MessageSquare, Car, FileWarning, Briefcase, Home, ShoppingBag, Diamond, Check, Plus } from "lucide-react";
 import { useState } from "react";
+import { formatPrice, getPriceForCycle, usePlans } from "@/hooks/usePlans";
 
 const Landing = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -103,39 +105,8 @@ const Landing = () => {
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="container py-24">
-        <p className="text-center font-mono-label text-primary mb-4">◆ Preise</p>
-        <h2 className="text-center font-serif text-4xl md:text-5xl mb-16">Wählen Sie Ihre Kapazität</h2>
-        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          {[
-            { name: "Standard", price: "€0", period: "/ Monat", features: ["1 Verhandlung / Monat", "Basis KI-Modell", "FBI-Playbooks"], cta: "Starten", featured: false, disabled: 1 },
-            { name: "Souverän", badge: "Empfohlen", price: "€29", period: "/ Monat", features: ["Unbegrenzte Analysen", "GPT-4o Intelligenz", "Alle Playbooks Inklusive", "E-Mail Support"], cta: "Jetzt Sichern", featured: true },
-            { name: "Sovereign", price: "€99", period: "/ Monat", features: ["Alles aus Souverän", "1-on-1 Review (Digital)", "Priority Infrastruktur"], cta: "Kontakt", featured: false },
-          ].map((tier) => (
-            <div key={tier.name} className={`relative p-8 border ${tier.featured ? "border-primary bg-card" : "border-border/40 bg-card/40"}`}>
-              {tier.badge && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground font-mono-label px-3 py-1">{tier.badge}</span>
-              )}
-              <p className="font-mono-label text-muted-foreground mb-6">{tier.name}</p>
-              <div className="flex items-baseline gap-2 mb-8">
-                <span className="font-serif text-5xl">{tier.price}</span>
-                <span className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">{tier.period}</span>
-              </div>
-              <ul className="space-y-3 mb-8">
-                {tier.features.map((f, i) => (
-                  <li key={f} className={`flex items-center gap-3 text-sm ${tier.disabled && i >= tier.disabled ? "text-muted-foreground/40" : "text-foreground/80"}`}>
-                    <Check className="w-4 h-4 text-primary shrink-0" strokeWidth={2} />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <Link to="/register">
-                <Button variant={tier.featured ? "gold" : "gold-outline"} className="w-full" size="lg">{tier.cta}</Button>
-              </Link>
-            </div>
-          ))}
-        </div>
-      </section>
+      <PricingSection />
+
 
       {/* FAQ */}
       <section id="intelligence" className="container py-24 max-w-3xl">
