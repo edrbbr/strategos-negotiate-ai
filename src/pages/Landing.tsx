@@ -24,7 +24,7 @@ const Landing = () => {
           <a href="#process" className="hover:text-primary transition-colors">Process</a>
           <a href="#capabilities" className="hover:text-primary transition-colors">Capabilities</a>
           <a href="#intelligence" className="hover:text-primary transition-colors">Intelligence</a>
-          <a href="#pricing" className="hover:text-primary transition-colors">Preise</a>
+          <Link to="/preise" className="hover:text-primary transition-colors">Preise</Link>
         </nav>
         <div className="flex items-center gap-4">
           <Link to="/login" className="font-sans uppercase tracking-[0.2em] text-xs text-muted-foreground hover:text-primary">
