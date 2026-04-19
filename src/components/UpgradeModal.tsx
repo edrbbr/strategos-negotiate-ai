@@ -1,53 +1,155 @@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Hexagon, Diamond } from "lucide-react";
+import { Link } from "react-router-dom";
+import {
+  formatPrice,
+  getPriceForCycle,
+  usePlans,
+  type PlanWithDetails,
+} from "@/hooks/usePlans";
 
 interface UpgradeModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+const TierCard = ({
+  plan,
+  featured,
+}: {
+  plan: PlanWithDetails;
+  featured: boolean;
+}) => {
+  const price = getPriceForCycle(plan, "monthly");
+  const features = plan.features.slice(0, 3);
+
+  return (
+    <div
+      className={`relative p-6 border rounded-sm ${
+        featured
+          ? "border-primary/40 bg-background"
+          : "border-border/40 bg-background/40"
+      }`}
+    >
+      {featured && (
+        <span className="absolute -top-3 right-4 bg-primary text-primary-foreground font-mono-label px-3 py-1">
+          EMPFEHLUNG
+        </span>
+      )}
+      <div className="flex items-baseline justify-between mb-6">
+        <span className="font-mono-label text-foreground">{plan.name}</span>
+        <span className="font-mono-label text-muted-foreground">
+          {price ? formatPrice(price.amount_cents, price.currency) : "—"} /
+          Monat
+        </span>
+      </div>
+      <ul className="space-y-3">
+        {features.map((f) => (
+          <li
+            key={f.id}
+            className="flex items-center gap-3 font-serif text-sm"
+          >
+            <Diamond
+              className="w-3 h-3 text-primary shrink-0"
+              fill="currentColor"
+            />
+            {f.feature_text}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+const SkeletonTierCard = () => (
+  <div className="p-6 border border-border/40 bg-background/40 rounded-sm space-y-4">
+    <div className="flex justify-between">
+      <Skeleton className="h-4 w-16" />
+      <Skeleton className="h-4 w-24" />
+    </div>
+    <Skeleton className="h-4 w-full" />
+    <Skeleton className="h-4 w-5/6" />
+    <Skeleton className="h-4 w-4/6" />
+  </div>
+);
+
 export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
+  const { data: plans, isLoading, isError, refetch } = usePlans();
+  const upgradePlans = (plans ?? []).filter(
+    (p) => p.id === "pro" || p.id === "elite",
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl bg-card border border-primary/30 rounded-sm p-12">
         <div className="text-center mb-10">
-          <Hexagon className="w-10 h-10 text-primary mx-auto mb-6" strokeWidth={1.2} />
+          <Hexagon
+            className="w-10 h-10 text-primary mx-auto mb-6"
+            strokeWidth={1.2}
+          />
           <h2 className="font-serif italic text-3xl mb-4">
             Limit erreicht. Du hast deine 3 kostenlosen Fälle verwendet.
           </h2>
           <p className="font-serif italic text-muted-foreground max-w-lg mx-auto">
-            Setzen Sie Ihre strategische Überlegenheit fort. Wählen Sie einen Plan, um weitere Verhandlungen zu führen.
+            Setzen Sie Ihre strategische Überlegenheit fort. Wählen Sie einen
+            Plan, um weitere Verhandlungen zu führen.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {[
-            { name: "Pro", price: "€49", features: ["Unbegrenzte Fallanalysen", "Erweiterte Taktik-Modelle", "Export-Funktion (PDF/XLS)"] },
-            { name: "Elite", price: "€129", featured: true, features: ["Echtzeit-Coaching via API", "Deep-Psychology Engine", "Multi-User Dashboard"] },
-          ].map((tier) => (
-            <div key={tier.name} className={`relative p-6 border rounded-sm ${tier.featured ? "border-primary/40 bg-background" : "border-border/40 bg-background/40"}`}>
-              {tier.featured && (
-                <span className="absolute -top-3 right-4 bg-primary text-primary-foreground font-mono-label px-3 py-1">Empfehlung</span>
-              )}
-              <div className="flex items-baseline justify-between mb-6">
-                <span className="font-mono-label text-foreground">{tier.name}</span>
-                <span className="font-mono-label text-muted-foreground">{tier.price} / Monat</span>
-              </div>
-              <ul className="space-y-3">
-                {tier.features.map((f) => (
-                  <li key={f} className="flex items-center gap-3 font-serif text-sm">
-                    <Diamond className="w-3 h-3 text-primary shrink-0" fill="currentColor" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
+        {isLoading && (
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            <SkeletonTierCard />
+            <SkeletonTierCard />
+          </div>
+        )}
 
-        <Button variant="gold" size="xl" className="w-full mb-3">Pro werden</Button>
-        <button onClick={() => onOpenChange(false)} className="block mx-auto font-serif italic text-sm text-muted-foreground hover:text-primary">
+        {isError && (
+          <div className="text-center py-8 mb-4">
+            <p className="font-serif italic text-sm text-muted-foreground mb-4">
+              Preisinformationen vorübergehend nicht verfügbar. Bitte Seite neu
+              laden.
+            </p>
+            <Button
+              variant="gold-outline"
+              size="sm"
+              onClick={() => refetch()}
+            >
+              Erneut versuchen
+            </Button>
+          </div>
+        )}
+
+        {!isLoading && !isError && upgradePlans.length === 0 && (
+          <div className="text-center py-8 mb-4">
+            <p className="font-serif italic text-sm text-muted-foreground">
+              Preisinformationen vorübergehend nicht verfügbar.
+            </p>
+          </div>
+        )}
+
+        {!isLoading && !isError && upgradePlans.length > 0 && (
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            {upgradePlans.map((plan) => (
+              <TierCard
+                key={plan.id}
+                plan={plan}
+                featured={plan.id === "elite"}
+              />
+            ))}
+          </div>
+        )}
+
+        <Link to="/register?plan=pro" onClick={() => onOpenChange(false)}>
+          <Button variant="gold" size="xl" className="w-full mb-3">
+            PRO WERDEN
+          </Button>
+        </Link>
+        <button
+          onClick={() => onOpenChange(false)}
+          className="block mx-auto font-serif italic text-sm text-muted-foreground hover:text-primary"
+        >
           Vielleicht später
         </button>
       </DialogContent>
