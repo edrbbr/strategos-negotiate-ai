@@ -1,19 +1,64 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
-import { LogIn } from "lucide-react";
+import { LogIn, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const Login = () => {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const returnUrl = params.get("returnUrl") || "/app/dashboard";
+  const { signInWithEmail, signInWithGoogle, isAuthenticated } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [needsConfirm, setNeedsConfirm] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) navigate(returnUrl, { replace: true });
+  }, [isAuthenticated, navigate, returnUrl]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/app/dashboard");
+    setError(null);
+    setNeedsConfirm(false);
+    setLoading(true);
+    const { error: err } = await signInWithEmail(email, password);
+    setLoading(false);
+    if (err) {
+      if (/confirm/i.test(err) || /not confirmed/i.test(err)) {
+        setNeedsConfirm(true);
+        setError("Email noch nicht bestätigt.");
+      } else {
+        setError("Zugang verweigert. Identität nicht verifizierbar.");
+      }
+      return;
+    }
+    navigate(returnUrl, { replace: true });
+  };
+
+  const resendConfirm = async () => {
+    const { error: err } = await supabase.auth.resend({ type: "signup", email });
+    if (err) toast.error(err.message);
+    else toast.success("Bestätigungs-Email erneut gesendet.");
+  };
+
+  const handleGoogle = async () => {
+    setLoading(true);
+    const { error: err } = await signInWithGoogle();
+    if (err) {
+      setError(err);
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
-      {/* Left */}
       <div className="hidden lg:flex flex-col justify-between p-12 border-r border-border/40">
         <Logo />
         <div>
@@ -38,7 +83,6 @@ const Login = () => {
         </div>
       </div>
 
-      {/* Right */}
       <div className="flex items-center justify-center p-8 lg:p-12">
         <div className="w-full max-w-md">
           <h1 className="font-serif text-5xl mb-3">Willkommen zurück</h1>
@@ -51,6 +95,9 @@ const Login = () => {
               <label className="font-mono-label text-muted-foreground mb-2 block">Email Adresse</label>
               <input
                 type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@institution.com"
                 className="w-full bg-transparent border-0 border-b border-border/60 focus:border-primary focus:outline-none py-2 font-serif text-lg placeholder:text-muted-foreground/40 transition-colors"
               />
@@ -59,17 +106,35 @@ const Login = () => {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="font-mono-label text-muted-foreground">Passwort</label>
-                <Link to="#" className="font-mono-label text-muted-foreground hover:text-primary">Vergessen?</Link>
+                <Link to="/passwort-vergessen" className="font-mono-label text-muted-foreground hover:text-primary">Vergessen?</Link>
               </div>
               <input
                 type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
                 className="w-full bg-transparent border-0 border-b border-border/60 focus:border-primary focus:outline-none py-2 font-serif text-lg tracking-widest placeholder:text-muted-foreground/40 transition-colors"
               />
             </div>
 
-            <Button type="submit" variant="gold-outline" size="xl" className="w-full">
-              <LogIn className="w-4 h-4" />
+            {error && (
+              <div className="border-l-2 border-destructive bg-destructive/10 px-4 py-3 font-mono-label text-destructive text-xs">
+                {error}
+                {needsConfirm && (
+                  <button
+                    type="button"
+                    onClick={resendConfirm}
+                    className="block mt-2 text-primary hover:underline"
+                  >
+                    Bestätigungs-Email erneut senden
+                  </button>
+                )}
+              </div>
+            )}
+
+            <Button type="submit" variant="gold-outline" size="xl" className="w-full" disabled={loading}>
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
               Anmelden
             </Button>
 
@@ -81,7 +146,9 @@ const Login = () => {
 
             <button
               type="button"
-              className="w-full border border-border/60 hover:border-primary/40 py-3 flex items-center justify-center gap-3 font-sans uppercase tracking-[0.2em] text-xs text-foreground hover:text-primary transition-colors rounded-sm"
+              onClick={handleGoogle}
+              disabled={loading}
+              className="w-full border border-border/60 hover:border-primary/40 py-3 flex items-center justify-center gap-3 font-sans uppercase tracking-[0.2em] text-xs text-foreground hover:text-primary transition-colors rounded-sm disabled:opacity-50"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />

@@ -2,6 +2,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { BarChart3, Award, Gavel, ScrollText, Settings, Plus, LogOut, User } from "lucide-react";
 import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { label: "Analyse", to: "/app/dashboard", icon: BarChart3 },
@@ -19,6 +20,18 @@ const activeCases = [
 export const AppSidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { profile, signOut } = useAuth();
+
+  const planName = profile?.plan?.name ?? "Free";
+  const limit = profile?.plan?.case_limit;
+  const used = profile?.cases_used ?? 0;
+  const showUsage = limit !== null && limit !== undefined;
+  const usagePct = showUsage ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   return (
     <aside className="hidden lg:flex flex-col w-72 shrink-0 bg-sidebar border-r border-sidebar-border min-h-screen">
@@ -80,11 +93,18 @@ export const AppSidebar = () => {
       <div className="p-6 border-t border-sidebar-border space-y-4">
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="font-mono-label text-muted-foreground">Free Plan</span>
-            <span className="font-sans text-xs text-primary">3/5 Fälle</span>
+            <span className="font-mono-label text-muted-foreground">{planName} Plan</span>
+            {showUsage ? (
+              <span className="font-sans text-xs text-primary">{used}/{limit} Fälle</span>
+            ) : (
+              <span className="font-sans text-xs text-primary">Unlimited</span>
+            )}
           </div>
           <div className="h-0.5 bg-muted overflow-hidden">
-            <div className="h-full bg-primary" style={{ width: "60%" }} />
+            <div
+              className="h-full bg-primary"
+              style={{ width: showUsage ? `${usagePct}%` : "100%" }}
+            />
           </div>
         </div>
         <div className="space-y-1">
@@ -92,10 +112,13 @@ export const AppSidebar = () => {
             <User className="w-4 h-4" strokeWidth={1.5} />
             Profile
           </NavLink>
-          <NavLink to="/login" className="flex items-center gap-3 py-2 text-sidebar-foreground/70 hover:text-primary font-sans uppercase tracking-[0.18em] text-xs">
+          <button
+            onClick={handleLogout}
+            className="w-full text-left flex items-center gap-3 py-2 text-sidebar-foreground/70 hover:text-primary font-sans uppercase tracking-[0.18em] text-xs"
+          >
             <LogOut className="w-4 h-4" strokeWidth={1.5} />
             Logout
-          </NavLink>
+          </button>
         </div>
       </div>
     </aside>
