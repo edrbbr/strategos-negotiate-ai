@@ -156,4 +156,81 @@ const Landing = () => {
   );
 };
 
+const PricingSection = () => {
+  const { data: plans, isLoading, isError, refetch } = usePlans();
+
+  return (
+    <section id="pricing" className="container py-24">
+      <p className="text-center font-mono-label text-primary mb-4">◆ Preise</p>
+      <h2 className="text-center font-serif text-4xl md:text-5xl mb-16">Wählen Sie Ihre Kapazität</h2>
+
+      {isLoading && (
+        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="p-8 border border-border/40 bg-card/40 space-y-6">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-12 w-32" />
+              {[...Array(4)].map((_, j) => (
+                <Skeleton key={j} className="h-4 w-full" />
+              ))}
+              <Skeleton className="h-11 w-full" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isError && (
+        <div className="text-center">
+          <p className="font-serif italic text-muted-foreground mb-6">
+            Preisinformationen vorübergehend nicht verfügbar. Bitte Seite neu laden.
+          </p>
+          <Button variant="gold-outline" onClick={() => refetch()}>Erneut versuchen</Button>
+        </div>
+      )}
+
+      {!isLoading && !isError && plans && plans.length > 0 && (
+        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          {plans.map((plan) => {
+            const price = getPriceForCycle(plan, "monthly");
+            const features = plan.features.slice(0, 4);
+            const featured = plan.is_recommended;
+            return (
+              <div key={plan.id} className={`relative p-8 border ${featured ? "border-primary bg-card" : "border-border/40 bg-card/40"}`}>
+                {plan.badge && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground font-mono-label px-3 py-1">
+                    {plan.badge}
+                  </span>
+                )}
+                <p className="font-mono-label text-muted-foreground mb-6">{plan.name}</p>
+                <div className="flex items-baseline gap-2 mb-8">
+                  <span className="font-serif text-5xl">
+                    {price ? formatPrice(price.amount_cents, price.currency) : "—"}
+                  </span>
+                  <span className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">/ Monat</span>
+                </div>
+                <ul className="space-y-3 mb-8">
+                  {features.map((f) => (
+                    <li
+                      key={f.id}
+                      className={`flex items-center gap-3 text-sm ${f.is_highlight ? "font-semibold text-foreground" : "text-foreground/80"}`}
+                    >
+                      <Check className="w-4 h-4 text-primary shrink-0" strokeWidth={2} />
+                      {f.feature_text}
+                    </li>
+                  ))}
+                </ul>
+                <Link to="/preise">
+                  <Button variant={featured ? "gold" : "gold-outline"} className="w-full" size="lg">
+                    PLAN WÄHLEN
+                  </Button>
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+};
+
 export default Landing;
