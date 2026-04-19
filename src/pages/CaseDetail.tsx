@@ -1,12 +1,51 @@
 import { useParams } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, Copy, Send, ChevronDown, Bot, Diamond } from "lucide-react";
+import { Upload, Copy, Send, ChevronDown, Bot, Diamond, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+
+type StrategosResult = {
+  analysis: string[];
+  strategy: string;
+  draft: string;
+  model?: string;
+  plan?: string;
+};
+
+// TODO: replace with the authenticated user's actual plan from the profiles table.
+const DUMMY_USER_PLAN: "free" | "pro" | "elite" = "pro";
 
 const CaseDetail = () => {
   const { id } = useParams();
   const [refinement, setRefinement] = useState("");
+  const [situation, setSituation] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<StrategosResult | null>(null);
+
+  const runPipeline = async () => {
+    if (situation.trim().length < 10) {
+      toast.error("Bitte beschreiben Sie die Situation (mind. 10 Zeichen).");
+      return;
+    }
+    setLoading(true);
+    setResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("strategos-ai-router", {
+        body: { situation_text: situation, user_plan: DUMMY_USER_PLAN },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      setResult(data as StrategosResult);
+      toast.success("Pipeline abgeschlossen");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unbekannter Fehler";
+      toast.error(`Pipeline-Fehler: ${msg}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <div className="animate-fade-in">
@@ -36,8 +75,10 @@ const CaseDetail = () => {
           <div>
             <p className="font-mono-label text-primary mb-3">◆ Situationsbeschreibung</p>
             <textarea
+              value={situation}
+              onChange={(e) => setSituation(e.target.value)}
               placeholder="Beschreiben Sie hier die aktuelle Verhandlungssituation, die Beteiligten und Ihre bisherigen Schritte…"
-              className="w-full min-h-[280px] bg-card border border-border/30 rounded-sm p-5 font-serif italic text-lg text-muted-foreground placeholder:text-muted-foreground/50 focus:border-primary/40 focus:outline-none resize-none"
+              className="w-full min-h-[280px] bg-card border border-border/30 rounded-sm p-5 font-serif italic text-lg text-foreground placeholder:text-muted-foreground/50 focus:border-primary/40 focus:outline-none resize-none"
             />
           </div>
 
@@ -64,8 +105,21 @@ const CaseDetail = () => {
             </div>
           </div>
 
-          <Button variant="gold" size="xl" className="w-full">
-            ▸ Pipeline Starten
+          <Button
+            variant="gold"
+            size="xl"
+            className="w-full"
+            onClick={runPipeline}
+            disabled={loading}
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Analyzing power dynamics…
+              </span>
+            ) : (
+              <>▸ Pipeline Starten</>
+            )}
           </Button>
         </div>
 
@@ -75,31 +129,44 @@ const CaseDetail = () => {
           <div className="bg-card border-l-2 border-secondary rounded-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="font-mono-label text-secondary flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-secondary animate-pulse-soft" />
-                Analyse-Modul Active
+                <span className={`w-2 h-2 rounded-full bg-secondary ${loading ? "animate-pulse-soft" : ""}`} />
+                Analyse-Modul {loading ? "Analyzing…" : result ? "Complete" : "Idle"}
               </p>
-              <span className="font-mono-label text-muted-foreground/60">0.4s Latency</span>
+              <span className="font-mono-label text-muted-foreground/60">
+                {result?.model ? result.model : loading ? "Streaming…" : "0.4s Latency"}
+              </span>
             </div>
-            <ul className="space-y-3 text-sm text-foreground/90 leading-relaxed">
-              <li className="flex gap-3">
-                <Diamond className="w-3 h-3 text-secondary mt-1.5 shrink-0" fill="currentColor" />
-                <p><strong className="font-semibold">Ziel-Analyse:</strong> Maximierung der kurzfristigen Liquidität bei Erhaltung der langfristigen Lieferantenbeziehung.</p>
-              </li>
-              <li className="flex gap-3">
-                <Diamond className="w-3 h-3 text-secondary mt-1.5 shrink-0" fill="currentColor" />
-                <p><strong className="font-semibold">Gegenpartei:</strong> Dominantes Verhalten, Fokus auf Standardisierung. Schwachpunkt: Zeitdruck zum Quartalsende.</p>
-              </li>
-            </ul>
+            {loading && !result ? (
+              <p className="font-serif italic text-sm text-muted-foreground">Analyzing power dynamics…</p>
+            ) : (
+              <ul className="space-y-3 text-sm text-foreground/90 leading-relaxed">
+                {(result?.analysis ?? [
+                  "Ziel-Analyse: Maximierung der kurzfristigen Liquidität bei Erhaltung der langfristigen Lieferantenbeziehung.",
+                  "Gegenpartei: Dominantes Verhalten, Fokus auf Standardisierung. Schwachpunkt: Zeitdruck zum Quartalsende.",
+                ]).map((item, i) => (
+                  <li key={i} className="flex gap-3">
+                    <Diamond className="w-3 h-3 text-secondary mt-1.5 shrink-0" fill="currentColor" />
+                    <p>{item}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Strategie */}
           <div className="bg-card border-l-2 border-primary rounded-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="font-mono-label text-primary">○ Strategie-Entwurf</p>
-              <span className="font-mono-label text-muted-foreground/60">Calculating…</span>
+              <span className="font-mono-label text-muted-foreground/60">
+                {loading ? "Calculating…" : result ? "Ready" : "Idle"}
+              </span>
             </div>
-            <p className="text-sm text-foreground/90 leading-relaxed">
-              Wir verfolgen den <em className="text-primary not-italic font-medium">"Anchoring-Pivot"</em>. Wir akzeptieren die technischen Parameter, fordern aber im Gegenzug eine exklusive Revisionsklausel nach 6 Monaten.
+            <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line">
+              {result?.strategy ?? (
+                <>
+                  Wir verfolgen den <em className="text-primary not-italic font-medium">"Anchoring-Pivot"</em>. Wir akzeptieren die technischen Parameter, fordern aber im Gegenzug eine exklusive Revisionsklausel nach 6 Monaten.
+                </>
+              )}
             </p>
           </div>
 
@@ -110,17 +177,20 @@ const CaseDetail = () => {
               <Button
                 variant="gold-outline"
                 size="sm"
-                onClick={() => { navigator.clipboard.writeText("Sehr geehrte Damen und Herren…"); toast.success("Entwurf kopiert"); }}
+                onClick={() => {
+                  const text = result?.draft ?? "Sehr geehrte Damen und Herren…";
+                  navigator.clipboard.writeText(text);
+                  toast.success("Entwurf kopiert");
+                }}
               >
                 <Copy className="w-3 h-3" /> Kopieren
               </Button>
             </div>
-            <p className="font-serif italic text-base leading-relaxed text-foreground/90">
-              "Sehr geehrte Damen und Herren, wir haben die vorliegenden Parameter geprüft. Während die technische Spezifikation unseren Anforderungen entspricht, ist die aktuelle Zahlungsziel-Regelung für uns in dieser Form nicht abbildbar. Wir schlagen vor, den Fokus auf die Revisionsklausel zu legen, um die Partnerschaft agil zu halten…"
+            <p className="font-serif italic text-base leading-relaxed text-foreground/90 whitespace-pre-line">
+              {result?.draft ??
+                "\"Sehr geehrte Damen und Herren, wir haben die vorliegenden Parameter geprüft. Während die technische Spezifikation unseren Anforderungen entspricht, ist die aktuelle Zahlungsziel-Regelung für uns in dieser Form nicht abbildbar. Wir schlagen vor, den Fokus auf die Revisionsklausel zu legen, um die Partnerschaft agil zu halten…\""}
             </p>
           </div>
-
-          {/* Refinement chat */}
           <div className="bg-card border border-border/30 rounded-sm p-6">
             <div className="flex items-center gap-3 mb-4">
               <span className="w-8 h-8 rounded-full bg-tertiary/20 flex items-center justify-center">
