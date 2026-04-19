@@ -14,7 +14,130 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      plan_features: {
+        Row: {
+          created_at: string
+          feature_text: string
+          id: string
+          is_highlight: boolean
+          plan_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          feature_text: string
+          id?: string
+          is_highlight?: boolean
+          plan_id: string
+          sort_order: number
+        }
+        Update: {
+          created_at?: string
+          feature_text?: string
+          id?: string
+          is_highlight?: boolean
+          plan_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_features_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_prices: {
+        Row: {
+          amount_cents: number
+          billing_cycle: string
+          created_at: string
+          currency: string
+          id: string
+          is_active: boolean
+          plan_id: string
+          stripe_price_id: string | null
+        }
+        Insert: {
+          amount_cents: number
+          billing_cycle: string
+          created_at?: string
+          currency?: string
+          id?: string
+          is_active?: boolean
+          plan_id: string
+          stripe_price_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          billing_cycle?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          is_active?: boolean
+          plan_id?: string
+          stripe_price_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_prices_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plans: {
+        Row: {
+          badge: string | null
+          case_limit: number | null
+          case_limit_type: string
+          created_at: string
+          id: string
+          is_active: boolean
+          is_recommended: boolean
+          model_id: string
+          name: string
+          sort_order: number
+          tagline: string | null
+          tier_label: string
+          updated_at: string
+        }
+        Insert: {
+          badge?: string | null
+          case_limit?: number | null
+          case_limit_type?: string
+          created_at?: string
+          id: string
+          is_active?: boolean
+          is_recommended?: boolean
+          model_id: string
+          name: string
+          sort_order: number
+          tagline?: string | null
+          tier_label: string
+          updated_at?: string
+        }
+        Update: {
+          badge?: string | null
+          case_limit?: number | null
+          case_limit_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_recommended?: boolean
+          model_id?: string
+          name?: string
+          sort_order?: number
+          tagline?: string | null
+          tier_label?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
