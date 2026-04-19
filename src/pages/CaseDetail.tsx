@@ -1,12 +1,51 @@
 import { useParams } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, Copy, Send, ChevronDown, Bot, Diamond } from "lucide-react";
+import { Upload, Copy, Send, ChevronDown, Bot, Diamond, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+
+type StrategosResult = {
+  analysis: string[];
+  strategy: string;
+  draft: string;
+  model?: string;
+  plan?: string;
+};
+
+// TODO: replace with the authenticated user's actual plan from the profiles table.
+const DUMMY_USER_PLAN: "free" | "pro" | "elite" = "pro";
 
 const CaseDetail = () => {
   const { id } = useParams();
   const [refinement, setRefinement] = useState("");
+  const [situation, setSituation] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<StrategosResult | null>(null);
+
+  const runPipeline = async () => {
+    if (situation.trim().length < 10) {
+      toast.error("Bitte beschreiben Sie die Situation (mind. 10 Zeichen).");
+      return;
+    }
+    setLoading(true);
+    setResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("strategos-ai-router", {
+        body: { situation_text: situation, user_plan: DUMMY_USER_PLAN },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      setResult(data as StrategosResult);
+      toast.success("Pipeline abgeschlossen");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unbekannter Fehler";
+      toast.error(`Pipeline-Fehler: ${msg}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <div className="animate-fade-in">
