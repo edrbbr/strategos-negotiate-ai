@@ -129,31 +129,44 @@ const CaseDetail = () => {
           <div className="bg-card border-l-2 border-secondary rounded-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="font-mono-label text-secondary flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-secondary animate-pulse-soft" />
-                Analyse-Modul Active
+                <span className={`w-2 h-2 rounded-full bg-secondary ${loading ? "animate-pulse-soft" : ""}`} />
+                Analyse-Modul {loading ? "Analyzing…" : result ? "Complete" : "Idle"}
               </p>
-              <span className="font-mono-label text-muted-foreground/60">0.4s Latency</span>
+              <span className="font-mono-label text-muted-foreground/60">
+                {result?.model ? result.model : loading ? "Streaming…" : "0.4s Latency"}
+              </span>
             </div>
-            <ul className="space-y-3 text-sm text-foreground/90 leading-relaxed">
-              <li className="flex gap-3">
-                <Diamond className="w-3 h-3 text-secondary mt-1.5 shrink-0" fill="currentColor" />
-                <p><strong className="font-semibold">Ziel-Analyse:</strong> Maximierung der kurzfristigen Liquidität bei Erhaltung der langfristigen Lieferantenbeziehung.</p>
-              </li>
-              <li className="flex gap-3">
-                <Diamond className="w-3 h-3 text-secondary mt-1.5 shrink-0" fill="currentColor" />
-                <p><strong className="font-semibold">Gegenpartei:</strong> Dominantes Verhalten, Fokus auf Standardisierung. Schwachpunkt: Zeitdruck zum Quartalsende.</p>
-              </li>
-            </ul>
+            {loading && !result ? (
+              <p className="font-serif italic text-sm text-muted-foreground">Analyzing power dynamics…</p>
+            ) : (
+              <ul className="space-y-3 text-sm text-foreground/90 leading-relaxed">
+                {(result?.analysis ?? [
+                  "Ziel-Analyse: Maximierung der kurzfristigen Liquidität bei Erhaltung der langfristigen Lieferantenbeziehung.",
+                  "Gegenpartei: Dominantes Verhalten, Fokus auf Standardisierung. Schwachpunkt: Zeitdruck zum Quartalsende.",
+                ]).map((item, i) => (
+                  <li key={i} className="flex gap-3">
+                    <Diamond className="w-3 h-3 text-secondary mt-1.5 shrink-0" fill="currentColor" />
+                    <p>{item}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Strategie */}
           <div className="bg-card border-l-2 border-primary rounded-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="font-mono-label text-primary">○ Strategie-Entwurf</p>
-              <span className="font-mono-label text-muted-foreground/60">Calculating…</span>
+              <span className="font-mono-label text-muted-foreground/60">
+                {loading ? "Calculating…" : result ? "Ready" : "Idle"}
+              </span>
             </div>
-            <p className="text-sm text-foreground/90 leading-relaxed">
-              Wir verfolgen den <em className="text-primary not-italic font-medium">"Anchoring-Pivot"</em>. Wir akzeptieren die technischen Parameter, fordern aber im Gegenzug eine exklusive Revisionsklausel nach 6 Monaten.
+            <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line">
+              {result?.strategy ?? (
+                <>
+                  Wir verfolgen den <em className="text-primary not-italic font-medium">"Anchoring-Pivot"</em>. Wir akzeptieren die technischen Parameter, fordern aber im Gegenzug eine exklusive Revisionsklausel nach 6 Monaten.
+                </>
+              )}
             </p>
           </div>
 
@@ -164,17 +177,20 @@ const CaseDetail = () => {
               <Button
                 variant="gold-outline"
                 size="sm"
-                onClick={() => { navigator.clipboard.writeText("Sehr geehrte Damen und Herren…"); toast.success("Entwurf kopiert"); }}
+                onClick={() => {
+                  const text = result?.draft ?? "Sehr geehrte Damen und Herren…";
+                  navigator.clipboard.writeText(text);
+                  toast.success("Entwurf kopiert");
+                }}
               >
                 <Copy className="w-3 h-3" /> Kopieren
               </Button>
             </div>
-            <p className="font-serif italic text-base leading-relaxed text-foreground/90">
-              "Sehr geehrte Damen und Herren, wir haben die vorliegenden Parameter geprüft. Während die technische Spezifikation unseren Anforderungen entspricht, ist die aktuelle Zahlungsziel-Regelung für uns in dieser Form nicht abbildbar. Wir schlagen vor, den Fokus auf die Revisionsklausel zu legen, um die Partnerschaft agil zu halten…"
+            <p className="font-serif italic text-base leading-relaxed text-foreground/90 whitespace-pre-line">
+              {result?.draft ??
+                "\"Sehr geehrte Damen und Herren, wir haben die vorliegenden Parameter geprüft. Während die technische Spezifikation unseren Anforderungen entspricht, ist die aktuelle Zahlungsziel-Regelung für uns in dieser Form nicht abbildbar. Wir schlagen vor, den Fokus auf die Revisionsklausel zu legen, um die Partnerschaft agil zu halten…\""}
             </p>
           </div>
-
-          {/* Refinement chat */}
           <div className="bg-card border border-border/30 rounded-sm p-6">
             <div className="flex items-center gap-3 mb-4">
               <span className="w-8 h-8 rounded-full bg-tertiary/20 flex items-center justify-center">
