@@ -138,12 +138,68 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          aggressive_mode: boolean
+          archive_mode: boolean
+          avatar_url: string | null
+          billing_cycle: string | null
+          cases_used: number
+          created_at: string
+          full_name: string | null
+          id: string
+          organization: string | null
+          plan_id: string
+          stripe_customer_id: string | null
+          subscription_status: string | null
+          updated_at: string
+        }
+        Insert: {
+          aggressive_mode?: boolean
+          archive_mode?: boolean
+          avatar_url?: string | null
+          billing_cycle?: string | null
+          cases_used?: number
+          created_at?: string
+          full_name?: string | null
+          id: string
+          organization?: string | null
+          plan_id?: string
+          stripe_customer_id?: string | null
+          subscription_status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aggressive_mode?: boolean
+          archive_mode?: boolean
+          avatar_url?: string | null
+          billing_cycle?: string | null
+          cases_used?: number
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          organization?: string | null
+          plan_id?: string
+          stripe_customer_id?: string | null
+          subscription_status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_cases_used: { Args: { p_user_id: string }; Returns: number }
     }
     Enums: {
       [_ in never]: never

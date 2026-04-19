@@ -1,9 +1,11 @@
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, Copy, Send, ChevronDown, Bot, Diamond, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { UpgradeModal } from "@/components/UpgradeModal";
+import { useAuth } from "@/contexts/AuthContext";
 
 type StrategosResult = {
   analysis: string[];
@@ -11,17 +13,19 @@ type StrategosResult = {
   draft: string;
   model?: string;
   plan?: string;
+  cases_used?: number;
+  case_limit?: number | null;
 };
-
-// TODO: replace with the authenticated user's actual plan from the profiles table.
-const DUMMY_USER_PLAN: "free" | "pro" | "elite" = "pro";
 
 const CaseDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { refreshProfile } = useAuth();
   const [refinement, setRefinement] = useState("");
   const [situation, setSituation] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<StrategosResult | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   const runPipeline = async () => {
     if (situation.trim().length < 10) {
@@ -32,11 +36,53 @@ const CaseDetail = () => {
     setResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("strategos-ai-router", {
-        body: { situation_text: situation, user_plan: DUMMY_USER_PLAN },
+        body: { situation_text: situation },
       });
-      if (error) throw error;
-      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
-      setResult(data as StrategosResult);
+
+      // Functions errors come back via FunctionsHttpError; check status when present
+      if (error) {
+        const ctx = (error as { context?: Response }).context;
+        if (ctx?.status === 401) {
+          toast.error("Sitzung abgelaufen. Bitte neu anmelden.");
+          navigate("/login");
+          return;
+        }
+        if (ctx?.status === 403) {
+          // try to read body for CASE_LIMIT_REACHED
+          try {
+            const body = await ctx.json();
+            if (body?.error === "CASE_LIMIT_REACHED") {
+              setShowUpgrade(true);
+              return;
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+        throw error;
+      }
+
+      const payload = data as StrategosResult & { error?: string };
+      if (payload?.error === "CASE_LIMIT_REACHED") {
+        setShowUpgrade(true);
+        return;
+      }
+      if (payload?.error) throw new Error(payload.error);
+
+      setResult(payload);
+      refreshProfile();
+
+      if (
+        payload.case_limit !== null &&
+        payload.case_limit !== undefined &&
+        payload.cases_used !== undefined
+      ) {
+        const remaining = payload.case_limit - payload.cases_used;
+        if (remaining <= 1 && remaining >= 0) {
+          toast.message(`Noch ${remaining} Fall übrig in deinem Plan.`);
+        }
+      }
+
       toast.success("Pipeline abgeschlossen");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unbekannter Fehler";
@@ -224,6 +270,8 @@ const CaseDetail = () => {
           </div>
         </div>
       </div>
+
+      <UpgradeModal open={showUpgrade} onOpenChange={setShowUpgrade} />
     </div>
   );
 };
