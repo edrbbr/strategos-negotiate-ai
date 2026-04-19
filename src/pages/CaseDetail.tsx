@@ -36,8 +36,10 @@ const CaseDetail = () => {
           <div>
             <p className="font-mono-label text-primary mb-3">◆ Situationsbeschreibung</p>
             <textarea
+              value={situation}
+              onChange={(e) => setSituation(e.target.value)}
               placeholder="Beschreiben Sie hier die aktuelle Verhandlungssituation, die Beteiligten und Ihre bisherigen Schritte…"
-              className="w-full min-h-[280px] bg-card border border-border/30 rounded-sm p-5 font-serif italic text-lg text-muted-foreground placeholder:text-muted-foreground/50 focus:border-primary/40 focus:outline-none resize-none"
+              className="w-full min-h-[280px] bg-card border border-border/30 rounded-sm p-5 font-serif italic text-lg text-foreground placeholder:text-muted-foreground/50 focus:border-primary/40 focus:outline-none resize-none"
             />
           </div>
 
@@ -64,8 +66,21 @@ const CaseDetail = () => {
             </div>
           </div>
 
-          <Button variant="gold" size="xl" className="w-full">
-            ▸ Pipeline Starten
+          <Button
+            variant="gold"
+            size="xl"
+            className="w-full"
+            onClick={runPipeline}
+            disabled={loading}
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Analyzing power dynamics…
+              </span>
+            ) : (
+              <>▸ Pipeline Starten</>
+            )}
           </Button>
         </div>
 
