@@ -16,7 +16,70 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const SYSTEM_PROMPT = `You are STRATEGOS in REFINEMENT mode. The user has an existing negotiation draft and wants you to adjust it according to their instruction. Keep the strategic intent intact, only modify tone, length, or emphasis as instructed. Always reply in the requested language. Output only the rewritten draft text — no preamble, no explanation.`;
+const SYSTEM_PROMPT = `You are STRATEGOS in REFINEMENT mode.
+You receive an existing negotiation draft and a user instruction.
+Your job: produce a COMPLETE, FULLY REWRITTEN draft that clearly
+reflects the user instruction. Do NOT copy the previous draft
+sentence by sentence. Restructure freely. Change wording, order,
+and emphasis as needed so the change is unmistakable to a reader
+who compares both versions.
+
+Hard rules:
+- Keep the underlying strategic goal and key facts (numbers, names, deadlines).
+- Reply ONLY in the requested language.
+- Match the requested medium (email/WhatsApp/SMS/letter) — length and tone.
+- Output ONLY the rewritten draft text. No preamble, no labels, no explanation, no markdown fences.`;
+
+const MODEL = "google/gemini-2.5-flash";
+
+// Rough token-overlap heuristic to detect "the model basically copied the old draft"
+function similarityRatio(a: string, b: string): number {
+  const tokenize = (s: string) =>
+    s.toLowerCase().replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const aTokens = tokenize(a);
+  const bTokens = tokenize(b);
+  if (aTokens.length === 0 || bTokens.length === 0) return 0;
+  const bSet = new Map<string, number>();
+  for (const t of bTokens) bSet.set(t, (bSet.get(t) ?? 0) + 1);
+  let overlap = 0;
+  for (const t of aTokens) {
+    const c = bSet.get(t) ?? 0;
+    if (c > 0) {
+      overlap++;
+      bSet.set(t, c - 1);
+    }
+  }
+  return overlap / Math.max(aTokens.length, bTokens.length);
+}
+
+async function callGateway(
+  apiKey: string,
+  systemPrompt: string,
+  userContent: string,
+): Promise<{ ok: true; text: string } | { ok: false; status: number; body: string }> {
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    return { ok: false, status: res.status, body };
+  }
+  const data = await res.json();
+  const text: string = (data?.choices?.[0]?.message?.content ?? "").trim();
+  return { ok: true, text };
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
