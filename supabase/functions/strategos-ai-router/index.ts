@@ -240,6 +240,7 @@ Deno.serve(async (req: Request) => {
           situationText: situation_text,
           anthropicKey: ANTHROPIC_API_KEY,
           openaiKey: OPENAI_API_KEY,
+          lovableKey: LOVABLE_API_KEY,
           onStageComplete: writeStage,
           medium,
           languageLabel: language_label,

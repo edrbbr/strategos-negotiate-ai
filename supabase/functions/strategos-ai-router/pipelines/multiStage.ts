@@ -1,4 +1,5 @@
 import { callAnthropic } from "../providers/anthropic.ts";
+import { callGemini } from "../providers/gemini.ts";
 import { callOpenAI } from "../providers/openai.ts";
 import {
   PROMPT_ANALYSIS,
@@ -62,6 +63,7 @@ export interface MultiStageParams {
   situationText: string;
   anthropicKey: string | null;
   openaiKey: string | null;
+  lovableKey?: string | null;
   onStageComplete?: (p: StageCompletePayload) => Promise<void>;
   medium?: string;
   languageLabel?: string;
@@ -82,7 +84,7 @@ function getStage(cfg: PipelineConfig, name: string) {
 export async function runMultiStagePipeline(
   params: MultiStageParams,
 ): Promise<MultiStageResult> {
-  const { config, situationText, anthropicKey, openaiKey, onStageComplete, medium, languageLabel, attachmentsContext } = params;
+  const { config, situationText, anthropicKey, openaiKey, lovableKey, onStageComplete, medium, languageLabel, attachmentsContext } = params;
   const langLine = `Target language: ${languageLabel ?? "Deutsch"}`;
   const mediumLine = `Medium: ${medium ?? "email"}`;
   const attachLine = attachmentsContext ? `\n\nReference documents:\n"""\n${attachmentsContext}\n"""` : "";
@@ -123,20 +125,86 @@ export async function runMultiStagePipeline(
   const t2 = Date.now();
   let strategyOut: Record<string, unknown>;
   try {
-    strategyOut = await callOpenAI({
-      apiKey: openaiKey!,
-      model: s2.model,
-      systemPrompt: PROMPT_STRATEGY,
-      userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.map((b) => "- " + b).join("\n")}${attachLine}`,
-      tool: {
-        type: "function",
-        function: {
-          name: "return_strategy",
-          description: "Return the chosen strategic framework.",
-          parameters: STRATEGY_SCHEMA,
+    const strategyUserMessage = `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.map((b) => "- " + b).join("\n")}${attachLine}`;
+    try {
+      strategyOut = await callOpenAI({
+        apiKey: openaiKey!,
+        model: s2.model,
+        systemPrompt: PROMPT_STRATEGY,
+        userMessage: strategyUserMessage,
+        tool: {
+          type: "function",
+          function: {
+            name: "return_strategy",
+            description: "Return the chosen strategic framework.",
+            parameters: STRATEGY_SCHEMA,
+          },
         },
-      },
-    });
+      });
+    } catch (e) {
+      if (!(e instanceof ProviderError) || e.code !== "RATE_LIMIT" || !lovableKey) throw e;
+      strategyOut = await callGemini({
+        apiKey: lovableKey,
+        model: "google/gemini-2.5-flash",
+        systemPrompt: PROMPT_STRATEGY,
+        userMessage: strategyUserMessage,
+        tool: {
+          type: "function",
+          function: {
+            name: "return_strategy",
+            description: "Return the chosen strategic framework.",
+            parameters: STRATEGY_SCHEMA,
+          },
+        },
+      });
+      stageMetas.push({ stage: "strategy", model: "google/gemini-2.5-flash", latency_ms: Date.now() - t2 });
+      const strategy = String(strategyOut.strategy ?? "");
+      await onStageComplete?.({ stage: "strategy", data: { strategy } });
+
+      const s3 = getStage(config, "draft");
+      const t3 = Date.now();
+      let draftOut: Record<string, unknown>;
+      try {
+        draftOut = await callAnthropic({
+          apiKey: anthropicKey!,
+          model: s3.model,
+          systemPrompt: PROMPT_DRAFT,
+          userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}${attachLine}`,
+          tool: {
+            name: "return_draft",
+            description: "Return the final draft, title and icon hint.",
+            input_schema: DRAFT_SCHEMA,
+          },
+        });
+      } catch (draftError) {
+        throw stageError("draft", ["analysis", "strategy"], draftError);
+      }
+      const lat3 = Date.now() - t3;
+      const icon = String(draftOut.icon_hint ?? "briefcase") as IconHint;
+      const title = String(draftOut.title ?? "Neuer Fall").slice(0, 80);
+      const draft = String(draftOut.draft ?? "");
+      stageMetas.push({ stage: "draft", model: s3.model, latency_ms: lat3 });
+      await onStageComplete?.({
+        stage: "draft",
+        data: {
+          title,
+          icon_hint: VALID_ICONS.includes(icon) ? icon : "briefcase",
+          draft,
+          model_used: "multi_stage_elite",
+        },
+      });
+
+      return {
+        result: {
+          title,
+          icon_hint: VALID_ICONS.includes(icon) ? icon : "briefcase",
+          analysis,
+          strategy,
+          draft,
+        },
+        stageMetas,
+      };
+    }
   } catch (e) {
     throw stageError("strategy", ["analysis"], e);
   }
