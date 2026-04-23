@@ -378,39 +378,135 @@ const CaseDetail = () => {
           <div className="grid grid-cols-2 gap-6">
             <div>
               <p className="font-mono-label text-muted-foreground mb-2">Medium</p>
-              <button className="w-full flex items-center justify-between bg-transparent border border-border/40 rounded-sm px-4 py-3 font-mono-label text-foreground hover:border-primary/40 transition-colors">
-                E-Mail (Formal) <ChevronDown className="w-4 h-4" />
-              </button>
+              <Select value={medium} onValueChange={setMedium}>
+                <SelectTrigger className="w-full bg-transparent border border-border/40 rounded-sm px-4 py-3 h-auto font-mono-label text-foreground hover:border-primary/40 transition-colors">
+                  <SelectValue placeholder="Medium wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MEDIUMS.map((m) => (
+                    <SelectItem key={m.value} value={m.value} className="font-mono-label">
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <p className="font-mono-label text-muted-foreground mb-2">Sprache</p>
-              <button className="w-full flex items-center justify-between bg-transparent border border-border/40 rounded-sm px-4 py-3 font-mono-label text-foreground hover:border-primary/40 transition-colors">
-                Deutsch (Hoch) <ChevronDown className="w-4 h-4" />
-              </button>
+              <Popover open={langOpen} onOpenChange={setLangOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-expanded={langOpen}
+                    className="w-full flex items-center justify-between bg-transparent border border-border/40 rounded-sm px-4 py-3 font-mono-label text-foreground hover:border-primary/40 transition-colors"
+                  >
+                    {languageLabel}
+                    <ChevronsUpDown className="w-4 h-4 opacity-50" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start">
+                  <Command>
+                    <CommandInput placeholder="Sprache suchen…" />
+                    <CommandList>
+                      <CommandEmpty>Keine Sprache gefunden.</CommandEmpty>
+                      <CommandGroup>
+                        {LANGUAGES.map((l) => (
+                          <CommandItem
+                            key={l.code}
+                            value={l.label}
+                            onSelect={() => {
+                              setLanguageCode(l.code);
+                              setLanguageLabel(l.label);
+                              setLangOpen(false);
+                            }}
+                            className="font-mono-label"
+                          >
+                            <Check
+                              className={cn(
+                                "w-4 h-4 mr-2",
+                                languageCode === l.code ? "opacity-100" : "opacity-0",
+                              )}
+                            />
+                            {l.label}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
           <div>
-            <p className="font-mono-label text-muted-foreground mb-2">Referenz-Dokumente</p>
-            <div className="border border-dashed border-border/40 rounded-sm py-12 flex flex-col items-center justify-center hover:border-primary/40 transition-colors cursor-pointer">
+            <div className="flex items-baseline justify-between mb-2">
+              <p className="font-mono-label text-muted-foreground">Referenz-Dokumente</p>
+              <p className="font-mono-label text-muted-foreground/60 text-[10px]">
+                {(serverAttachments?.length ?? 0) + pendingFiles.length}/{maxAttachments}
+                {tier === "free" && " · Free"}
+              </p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,image/jpeg,image/jpg,image/png,.pdf,.jpg,.jpeg,.png"
+              multiple={maxAttachments > 1}
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) addFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full border border-dashed border-border/40 rounded-sm py-10 flex flex-col items-center justify-center hover:border-primary/40 transition-colors"
+            >
               <Upload className="w-6 h-6 text-muted-foreground mb-3" strokeWidth={1.5} />
               <p className="font-mono-label text-muted-foreground">PDF, JPG oder PNG hochladen</p>
-            </div>
+              <p className="font-mono-label text-muted-foreground/50 text-[10px] mt-1">max. 10 MB pro Datei</p>
+            </button>
+
+            {(serverAttachments?.length || pendingFiles.length) ? (
+              <ul className="mt-3 space-y-2">
+                {serverAttachments?.map((a) => (
+                  <li key={a.id} className="flex items-center justify-between gap-3 border border-border/30 rounded-sm px-3 py-2">
+                    <span className="font-mono-label text-foreground truncate">{a.file_name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeServerAttachment(a)}
+                      className="text-muted-foreground hover:text-destructive shrink-0"
+                      aria-label="Anhang entfernen"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </li>
+                ))}
+                {pendingFiles.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-3 border border-dashed border-border/40 rounded-sm px-3 py-2">
+                    <span className="font-mono-label text-muted-foreground truncate">
+                      {f.name} <span className="text-muted-foreground/50">(wartet)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removePendingFile(i)}
+                      className="text-muted-foreground hover:text-destructive shrink-0"
+                      aria-label="Datei entfernen"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
 
           {(() => {
-            const isCreating = routeId === "new" && !caseId && !createError;
             const tooShort = situation.trim().length < 10;
-            const disabled = loading || !caseId || isCreating || tooShort;
-            const reason = createError
-              ? null
-              : isCreating
-                ? "Fall wird vorbereitet…"
-                : !caseId
-                  ? "Fall wird vorbereitet…"
-                  : tooShort
-                    ? `Bitte mindestens 10 Zeichen eingeben (${situation.trim().length}/10).`
-                    : null;
+            const disabled = loading || tooShort || !medium || !languageCode;
+            const reason = tooShort
+              ? `Bitte mindestens 10 Zeichen eingeben (${situation.trim().length}/10).`
+              : null;
             return (
               <>
                 <Button
@@ -425,35 +521,13 @@ const CaseDetail = () => {
                       <Loader2 className="w-4 h-4 animate-spin" />
                       {isMultiStage ? "Multi-Stage Pipeline läuft…" : "Analyzing power dynamics…"}
                     </span>
-                  ) : isCreating ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Fall wird angelegt…
-                    </span>
                   ) : (
                     <>▸ Pipeline Starten</>
                   )}
                 </Button>
-
                 {reason && !loading && (
-                  <p className="text-center font-mono-label text-muted-foreground/70 mt-2">
-                    {reason}
-                  </p>
+                  <p className="text-center font-mono-label text-muted-foreground/70 mt-2">{reason}</p>
                 )}
-
-                {createError && (
-                  <div className="mt-3 border border-destructive/40 bg-destructive/5 rounded-sm p-4 flex items-start gap-3">
-                    <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-                    <div className="flex-1">
-                      <p className="font-mono-label text-destructive mb-1">Fall konnte nicht angelegt werden</p>
-                      <p className="text-sm text-muted-foreground mb-3">{createError}</p>
-                      <Button variant="gold-outline" size="sm" onClick={triggerCreate}>
-                        <RefreshCcw className="w-3.5 h-3.5" /> Erneut versuchen
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
                 {loading && !isMultiStage && (
                   <p className="text-center font-mono-label text-muted-foreground/70 mt-2">Analyse wird durchgeführt…</p>
                 )}
