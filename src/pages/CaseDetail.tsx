@@ -115,21 +115,102 @@ const CaseDetail = () => {
     updateMut.mutate({ id: caseId, patch: { situation_text: situation } });
   };
 
+  const addFiles = (files: FileList | File[]) => {
+    const accepted = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+    const MAX_SIZE = 10 * 1024 * 1024;
+    const existing = (serverAttachments?.length ?? 0) + pendingFiles.length;
+    const capacity = Math.max(0, maxAttachments - existing);
+    if (capacity === 0) {
+      toast.error(
+        tier === "free"
+          ? "Free-Plan erlaubt maximal 1 Referenz-Dokument. Upgrade für mehr."
+          : `Maximal ${maxAttachments} Anhänge.`,
+      );
+      return;
+    }
+    const next: File[] = [];
+    for (const f of Array.from(files)) {
+      if (next.length >= capacity) break;
+      const type = f.type || "";
+      const nameLower = f.name.toLowerCase();
+      const okType = accepted.includes(type) || /\.(pdf|jpe?g|png)$/i.test(nameLower);
+      if (!okType) { toast.error(`"${f.name}" hat ein nicht unterstütztes Format.`); continue; }
+      if (f.size > MAX_SIZE) { toast.error(`"${f.name}" ist größer als 10 MB.`); continue; }
+      next.push(f);
+    }
+    if (next.length) setPendingFiles((prev) => [...prev, ...next]);
+  };
+
+  const removePendingFile = (i: number) => {
+    setPendingFiles((prev) => prev.filter((_, idx) => idx !== i));
+  };
+
+  const removeServerAttachment = async (att: CaseAttachment) => {
+    try {
+      await deleteAttMut.mutateAsync(att);
+      toast.success("Anhang entfernt");
+    } catch (e) {
+      toast.error(`Entfernen fehlgeschlagen: ${(e as Error).message}`);
+    }
+  };
+
   // ---- Run pipeline ----
   const runPipeline = async () => {
     if (situation.trim().length < 10) {
       toast.error("Bitte beschreiben Sie die Situation (mind. 10 Zeichen).");
       return;
     }
-    if (!caseId) {
-      toast.error("Fall noch nicht initialisiert.");
+    if (!user) {
+      toast.error("Bitte erneut anmelden.");
       return;
     }
 
-    // Save situation first so backend writes go to a row that has it too
-    if (situation !== caseRow?.situation_text) {
-      await updateMut.mutateAsync({ id: caseId, patch: { situation_text: situation } }).catch(() => {});
+    // Resolve or create case
+    let activeCaseId = caseId;
+    if (!activeCaseId) {
+      try {
+        const created = await createMut.mutateAsync({
+          situation_text: situation,
+          medium,
+          language_code: languageCode,
+          language_label: languageLabel,
+        });
+        activeCaseId = created.id;
+        navigate(`/app/case/${created.id}`, { replace: true });
+      } catch (e) {
+        toast.error(`Fall konnte nicht angelegt werden: ${(e as Error).message}`);
+        return;
+      }
+    } else {
+      // Persist current form state onto the existing case
+      await updateMut
+        .mutateAsync({
+          id: activeCaseId,
+          patch: {
+            situation_text: situation,
+            medium,
+            language_code: languageCode,
+            language_label: languageLabel,
+          } as Partial<typeof caseRow> as never,
+        })
+        .catch(() => {});
     }
+
+    // Upload any pending attachments before running the pipeline
+    const uploadedIds: string[] = [];
+    for (const file of pendingFiles) {
+      try {
+        const att = await uploadMut.mutateAsync({ caseId: activeCaseId, file });
+        uploadedIds.push(att.id);
+      } catch (e) {
+        toast.error(`Upload "${file.name}" fehlgeschlagen: ${(e as Error).message}`);
+      }
+    }
+    setPendingFiles([]);
+    const attachmentIds = [
+      ...(serverAttachments?.map((a) => a.id) ?? []),
+      ...uploadedIds,
+    ];
 
     setLoading(true);
     setStageMeta({});
@@ -141,7 +222,14 @@ const CaseDetail = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("strategos-ai-router", {
-        body: { situation_text: situation, case_id: caseId },
+        body: {
+          situation_text: situation,
+          case_id: activeCaseId,
+          medium,
+          language_code: languageCode,
+          language_label: languageLabel,
+          attachment_ids: attachmentIds,
+        },
       });
 
       if (error) {
