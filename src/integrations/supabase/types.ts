@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      case_attachments: {
+        Row: {
+          case_id: string
+          created_at: string
+          extracted_text: string | null
+          file_name: string
+          file_path: string
+          id: string
+          mime_type: string | null
+          size_bytes: number | null
+          user_id: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          extracted_text?: string | null
+          file_name: string
+          file_path: string
+          id?: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          user_id: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          extracted_text?: string | null
+          file_name?: string
+          file_path?: string
+          id?: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_attachments_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cases: {
         Row: {
           analysis: Json | null
@@ -21,7 +65,10 @@ export type Database = {
           draft: string | null
           icon_hint: string
           id: string
+          language_code: string
+          language_label: string
           last_analyzed_at: string | null
+          medium: string
           model_used: string | null
           situation_text: string | null
           status: string
@@ -36,7 +83,10 @@ export type Database = {
           draft?: string | null
           icon_hint?: string
           id?: string
+          language_code?: string
+          language_label?: string
           last_analyzed_at?: string | null
+          medium?: string
           model_used?: string | null
           situation_text?: string | null
           status?: string
@@ -51,7 +101,10 @@ export type Database = {
           draft?: string | null
           icon_hint?: string
           id?: string
+          language_code?: string
+          language_label?: string
           last_analyzed_at?: string | null
+          medium?: string
           model_used?: string | null
           situation_text?: string | null
           status?: string
