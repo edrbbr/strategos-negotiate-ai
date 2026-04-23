@@ -16,8 +16,6 @@ import { AppLayout } from "./components/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import CaseDetail from "./pages/CaseDetail";
 import Settings from "./pages/Settings";
-import History from "./pages/History";
-import Execution from "./pages/Execution";
 import NotFound from "./pages/NotFound";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
@@ -56,8 +54,6 @@ const App = () => (
               <Route path="case/:id" element={<CaseDetail />} />
               <Route path="case/new" element={<CaseDetail />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="history" element={<History />} />
-              <Route path="execution" element={<Execution />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
