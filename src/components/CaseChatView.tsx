@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Copy, Diamond, History, Loader2, Send, Sparkles, User } from "lucide-react";
+import { Bot, ChevronDown, Copy, Diamond, History, Loader2, MessageSquare, Send, Sparkles, User } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import type { CaseRow } from "@/hooks/useCases";
 import {
