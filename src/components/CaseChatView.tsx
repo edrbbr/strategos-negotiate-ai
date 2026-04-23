@@ -204,23 +204,18 @@ function VersionBlock({
   onRestore: () => void;
   restoring: boolean;
 }) {
-  const showUserBubble = version.kind !== "initial" && version.user_prompt;
+  const promptText =
+    version.kind === "initial"
+      ? "Erste Version aus dem Initial-Setup."
+      : version.user_prompt ?? "—";
+  const promptLabel =
+    version.kind === "initial"
+      ? "INITIAL"
+      : version.kind === "restore"
+        ? "RESTORE"
+        : "PROMPT";
   return (
     <div className="space-y-4">
-      {showUserBubble && (
-        <div className="flex justify-end">
-          <div className="max-w-[80%] bg-tertiary/10 border border-tertiary/30 rounded-sm px-4 py-3">
-            <div className="flex items-center gap-2 mb-1.5">
-              <User className="w-3 h-3 text-tertiary" />
-              <span className="font-mono-label text-tertiary text-[10px]">
-                {version.kind === "restore" ? "RESTORE" : "STRATEGIST"}
-              </span>
-            </div>
-            <p className="font-serif italic text-sm text-foreground/90">{version.user_prompt}</p>
-          </div>
-        </div>
-      )}
-
       <div className="bg-card border border-border/30 rounded-sm p-5">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <p className="font-mono-label text-primary flex items-center gap-2">
@@ -249,21 +244,14 @@ function VersionBlock({
         </div>
 
         <div className="grid lg:grid-cols-3 gap-4">
-          {/* Analysis */}
-          <div className="bg-background/50 border-l border-secondary/60 rounded-sm p-3">
-            <p className="font-mono-label text-secondary text-[10px] mb-2">ANALYSE</p>
-            {Array.isArray(version.analysis) && version.analysis.length > 0 ? (
-              <ul className="space-y-2 text-xs text-foreground/85 leading-relaxed">
-                {(version.analysis as string[]).map((it, i) => (
-                  <li key={i} className="flex gap-2">
-                    <Diamond className="w-2 h-2 text-secondary mt-1 shrink-0" fill="currentColor" />
-                    <span>{it}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="font-mono-label text-muted-foreground/60 text-[10px]">—</p>
-            )}
+          {/* Prompt */}
+          <div className="bg-background/50 border-l border-tertiary/60 rounded-sm p-3">
+            <p className="font-mono-label text-tertiary text-[10px] mb-2 flex items-center gap-1.5">
+              <MessageSquare className="w-2.5 h-2.5" /> {promptLabel}
+            </p>
+            <p className="font-serif italic text-xs text-foreground/85 leading-relaxed whitespace-pre-line">
+              {promptText}
+            </p>
           </div>
           {/* Strategy */}
           <div className="bg-background/50 border-l border-primary/60 rounded-sm p-3">
@@ -273,8 +261,8 @@ function VersionBlock({
             </p>
           </div>
           {/* Draft */}
-          <div className="bg-background/50 border-l border-tertiary/60 rounded-sm p-3">
-            <p className="font-mono-label text-tertiary text-[10px] mb-2">ENTWURF</p>
+          <div className="bg-background/50 border-l border-secondary/60 rounded-sm p-3">
+            <p className="font-mono-label text-secondary text-[10px] mb-2">ENTWURF</p>
             <p className="font-serif italic text-xs text-foreground/90 leading-relaxed whitespace-pre-line">
               {version.draft ?? "—"}
             </p>
