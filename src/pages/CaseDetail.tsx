@@ -637,53 +637,9 @@ const CaseDetail = () => {
               <Sparkles className="w-3.5 h-3.5" /> Pipeline erneut starten
             </Button>
           )}
-
-          {/* Refinement chat */}
-          {caseRow?.draft && stageState.draft === "complete" && (
-            <div className="bg-card border border-border/30 rounded-sm p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="w-8 h-8 rounded-full bg-tertiary/20 flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-tertiary" strokeWidth={1.5} />
-                </span>
-                <p className="font-mono-label text-tertiary">Refinement Chat</p>
-              </div>
-              <div className="bg-muted/40 rounded-sm p-4 mb-4">
-                <p className="font-serif italic text-sm text-foreground/80 leading-relaxed">
-                  Möchten Sie den Tonfall anpassen oder die Argumentation verschärfen?
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {["Aggressiver", "Kürzer fassen", "Mehr Empathie"].map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() => setRefinement(tag)}
-                    className="px-3 py-1.5 border border-border/40 rounded-sm font-mono-label text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-              <div className="relative">
-                <input
-                  value={refinement}
-                  onChange={(e) => setRefinement(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && runRefinement()}
-                  disabled={refining}
-                  placeholder="Anweisung zur Anpassung eingeben…"
-                  className="w-full bg-transparent border-b border-border/40 focus:border-primary/40 focus:outline-none py-3 pr-10 font-serif italic text-sm placeholder:text-muted-foreground/60 disabled:opacity-50"
-                />
-                <button
-                  onClick={runRefinement}
-                  disabled={refining || refinement.trim().length < 2}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 text-tertiary hover:text-primary disabled:opacity-40"
-                >
-                  {refining ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
+      )}
 
       <UpgradeModal open={showUpgrade} onOpenChange={setShowUpgrade} />
     </div>
