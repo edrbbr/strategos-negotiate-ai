@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.create-portal-session]
 verify_jwt = false
+
+[functions.admin-set-tax-codes]
+verify_jwt = false
