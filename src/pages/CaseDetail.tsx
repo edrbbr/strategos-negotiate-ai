@@ -203,8 +203,14 @@ const CaseDetail = () => {
 
   const segmentClass = (state: StageState, color: "secondary" | "primary" | "tertiary") => {
     const base = "h-1 transition-colors";
-    if (state === "complete") return `${base} bg-${color}`;
-    if (state === "running") return `${base} bg-${color}/60 animate-pulse-soft`;
+    const completeMap = { secondary: "bg-secondary", primary: "bg-primary", tertiary: "bg-tertiary" };
+    const runningMap = {
+      secondary: "bg-secondary/60 animate-pulse-soft",
+      primary: "bg-primary/60 animate-pulse-soft",
+      tertiary: "bg-tertiary/60 animate-pulse-soft",
+    };
+    if (state === "complete") return `${base} ${completeMap[color]}`;
+    if (state === "running") return `${base} ${runningMap[color]}`;
     if (state === "failed") return `${base} bg-destructive/70`;
     return `${base} bg-border/30`;
   };
