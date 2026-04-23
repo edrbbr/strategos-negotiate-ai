@@ -128,6 +128,42 @@ export function useUpdateCase() {
     },
     onSuccess: (data) => {
       qc.setQueryData(["case", data.id], data);
+      qc.invalidateQueries({ queryKey: ["cases"] });
+    },
+  });
+}
+
+export function useArchiveCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { id: string; archived: boolean }) => {
+      const { data, error } = await supabase
+        .from("cases")
+        .update({ status: params.archived ? "archived" : "active" })
+        .eq("id", params.id)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data as CaseRow;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(["case", data.id], data);
+      qc.invalidateQueries({ queryKey: ["cases"] });
+    },
+  });
+}
+
+export function useDeleteCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("cases").delete().eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: (id) => {
+      qc.removeQueries({ queryKey: ["case", id] });
+      qc.invalidateQueries({ queryKey: ["cases"] });
     },
   });
 }
