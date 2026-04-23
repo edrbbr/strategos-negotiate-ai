@@ -7,7 +7,8 @@ import {
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Hexagon, Diamond, Loader2 } from "lucide-react";
+import { Diamond, Loader2 } from "lucide-react";
+import strategosLogo from "@/assets/strategos-logo.svg";
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -116,9 +117,10 @@ export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl bg-card border border-primary/30 rounded-sm p-12">
         <div className="text-center mb-10">
-          <Hexagon
-            className="w-10 h-10 text-primary mx-auto mb-6"
-            strokeWidth={1.2}
+          <img
+            src={strategosLogo}
+            alt="Strategos"
+            className="w-12 h-12 mx-auto mb-6 rounded-sm"
           />
           <h2 className="font-serif italic text-3xl mb-4">
             Limit erreicht. Du hast deine 3 kostenlosen Fälle verwendet.
