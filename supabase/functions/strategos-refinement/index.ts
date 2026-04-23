@@ -360,11 +360,18 @@ type LatestRow = {
 };
 type CaseRow = { id: string; user_id: string; language_label: string; medium: string; situation_text: string | null };
 
+interface PersistPayload {
+  analysis: unknown;
+  strategy: string;
+  strategy_labels: string[];
+  draft: string;
+}
+
 async function persistAndReply(
   service: ReturnType<typeof createClient>,
   caseRow: CaseRow,
   latest: LatestRow,
-  newDraft: string,
+  payload: PersistPayload,
   instruction: string,
   model: string,
 ) {
@@ -377,10 +384,10 @@ async function persistAndReply(
       version_number: nextNumber,
       kind: "refinement",
       user_prompt: instruction,
-      analysis: latest.analysis,
-      strategy: latest.strategy,
-      draft: newDraft,
-      strategy_labels: latest.strategy_labels,
+      analysis: payload.analysis,
+      strategy: payload.strategy,
+      draft: payload.draft,
+      strategy_labels: payload.strategy_labels,
       model_used: model,
     })
     .select("id")
@@ -393,7 +400,8 @@ async function persistAndReply(
   await service
     .from("cases")
     .update({
-      draft: newDraft,
+      draft: payload.draft,
+      strategy: payload.strategy,
       current_version_id: inserted.id,
       updated_at: new Date().toISOString(),
     })
@@ -409,5 +417,12 @@ async function persistAndReply(
     body: JSON.stringify({ case_id: caseRow.id, _internal: true, _user_id: caseRow.user_id }),
   }).catch(() => undefined);
 
-  return json({ refined_draft: newDraft, version_id: inserted.id, version_number: nextNumber, model });
+  return json({
+    refined_draft: payload.draft,
+    strategy: payload.strategy,
+    strategy_labels: payload.strategy_labels,
+    version_id: inserted.id,
+    version_number: nextNumber,
+    model,
+  });
 }
