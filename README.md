@@ -90,11 +90,11 @@ profiles (1:1 auth.users) ──> plans
 
 | Dashboard | Case-Detail-Pipeline |
 |---|---|
-| ![Dashboard](./docs/screenshots/dashboard.png) | ![Case Detail](./docs/screenshots/fall_details.png) |
+| ![Dashboard](public/Dashboard.jpeg) | ![Case Detail](public/Case.jpeg) |
 
 | Landing | Pricing |
 |---|---|
-| ![Landing](./docs/screenshots/landing_page.png) | ![Pricing](./docs/screenshots/preise.png) |
+| ![Landing](public/Landingpage.jpeg) | ![Pricing](public/pricing.jpeg) |
 
 ### Design-System
 
@@ -240,11 +240,11 @@ profiles (1:1 auth.users) ──> plans
 
 | Dashboard | Case Detail Pipeline |
 |---|---|
-| ![Dashboard](./docs/screenshots/dashboard.png) | ![Case Detail](./docs/screenshots/fall_details.png) |
+| ![Dashboard](public/Dashboard.jpeg) | ![Case Detail](public/Case.jpeg) |
 
 | Landing | Pricing |
 |---|---|
-| ![Landing](./docs/screenshots/landing_page.png) | ![Pricing](./docs/screenshots/preise.png) |
+| ![Landing](public/Landingpage.jpeg) | ![Pricing](public/pricing.jpeg) |
 
 ### Design System
 
