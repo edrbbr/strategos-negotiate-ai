@@ -44,6 +44,12 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const situation_text: string = body?.situation_text;
     const case_id: string | undefined = body?.case_id;
+    const medium: string = typeof body?.medium === "string" ? body.medium : "email";
+    const language_code: string = typeof body?.language_code === "string" ? body.language_code : "de";
+    const language_label: string = typeof body?.language_label === "string" ? body.language_label : "Deutsch";
+    const attachment_ids: string[] = Array.isArray(body?.attachment_ids)
+      ? body.attachment_ids.filter((x: unknown) => typeof x === "string")
+      : [];
 
     if (!situation_text || typeof situation_text !== "string" || situation_text.trim().length < 10) {
       return json({ error: "situation_text muss mindestens 10 Zeichen enthalten." }, 400);
@@ -92,6 +98,91 @@ Deno.serve(async (req: Request) => {
     const allKeysMissing = !ANTHROPIC_API_KEY && !OPENAI_API_KEY && !LOVABLE_API_KEY;
 
     const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // ---- Persist medium/language onto the case row (best effort) ----
+    if (case_id) {
+      await serviceClient
+        .from("cases")
+        .update({ medium, language_code, language_label })
+        .eq("id", case_id)
+        .eq("user_id", userId)
+        .then(() => undefined, (e) => console.warn("meta update failed", e));
+    }
+
+    // ---- Build attachments context ----
+    let attachmentsContext = "";
+    if (case_id && attachment_ids.length > 0 && LOVABLE_API_KEY) {
+      try {
+        const { data: atts } = await serviceClient
+          .from("case_attachments")
+          .select("id, file_path, file_name, mime_type, extracted_text")
+          .eq("case_id", case_id)
+          .eq("user_id", userId)
+          .in("id", attachment_ids);
+        if (atts && atts.length > 0) {
+          const parts: string[] = [];
+          for (const a of atts) {
+            if (a.extracted_text && a.extracted_text.length > 20) {
+              parts.push(`[${a.file_name}]\n${a.extracted_text.slice(0, 4000)}`);
+              continue;
+            }
+            try {
+              const { data: blob } = await serviceClient.storage
+                .from("case-attachments")
+                .download(a.file_path);
+              if (!blob) continue;
+              const buf = new Uint8Array(await blob.arrayBuffer());
+              let bin = "";
+              for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+              const b64 = btoa(bin);
+              const mime = a.mime_type || "application/octet-stream";
+              const geminiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-2.5-flash",
+                  messages: [
+                    {
+                      role: "user",
+                      content: [
+                        {
+                          type: "text",
+                          text: "Extract all relevant text content from this document. Keep it concise, no commentary. Reproduce factual content (names, dates, amounts, clauses) verbatim where possible. Max ~1500 words.",
+                        },
+                        { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
+                      ],
+                    },
+                  ],
+                }),
+              });
+              if (geminiResp.ok) {
+                const gj = await geminiResp.json();
+                const extracted = gj?.choices?.[0]?.message?.content;
+                if (typeof extracted === "string" && extracted.trim().length > 10) {
+                  const trimmed = extracted.slice(0, 4000);
+                  parts.push(`[${a.file_name}]\n${trimmed}`);
+                  // Cache extracted text for future runs
+                  await serviceClient
+                    .from("case_attachments")
+                    .update({ extracted_text: trimmed })
+                    .eq("id", a.id);
+                }
+              } else {
+                console.warn("Gemini extract failed", geminiResp.status);
+              }
+            } catch (e) {
+              console.warn("attachment extract error", a.file_name, e);
+            }
+          }
+          attachmentsContext = parts.join("\n\n---\n\n");
+        }
+      } catch (e) {
+        console.warn("attachments load failed", e);
+      }
+    }
 
     // Helper: writes a stage payload to the case row (only if case_id provided)
     const writeStage = async (payload: StageCompletePayload) => {
@@ -150,6 +241,9 @@ Deno.serve(async (req: Request) => {
           anthropicKey: ANTHROPIC_API_KEY,
           openaiKey: OPENAI_API_KEY,
           onStageComplete: writeStage,
+          medium,
+          languageLabel: language_label,
+          attachmentsContext,
         });
         const total = Date.now() - t0;
         const cases_used = await incrementCounter();
@@ -193,6 +287,9 @@ Deno.serve(async (req: Request) => {
         situationText: situation_text,
         anthropicKey: ANTHROPIC_API_KEY,
         lovableKey: LOVABLE_API_KEY,
+        medium,
+        languageLabel: language_label,
+        attachmentsContext,
       });
       const total = Date.now() - t0;
 
