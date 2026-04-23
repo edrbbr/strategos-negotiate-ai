@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Folder, Mail, MessageCircle, Plus, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import { useAllCases, useCaseStats, type CaseRow } from "@/hooks/useCases";
 import { CaseCard } from "@/components/CaseCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,13 +21,32 @@ const pad3 = (n: number) => (n > 999 ? String(n) : String(n).padStart(3, "0"));
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { profile, user } = useAuth();
+  const { profile, user, refreshProfile } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: cases, isLoading, isError, refetch } = useAllCases();
   const stats = useCaseStats();
 
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Handle Stripe checkout return
+  useEffect(() => {
+    if (searchParams.get("checkout") === "success") {
+      toast.success("Willkommen im Sovereign-System.", {
+        description: "Ihr Plan wird gerade aktiviert.",
+      });
+      // Refresh profile a few times — webhook may take a moment
+      const timers = [500, 1500, 4000].map((ms) =>
+        setTimeout(() => refreshProfile(), ms),
+      );
+      const next = new URLSearchParams(searchParams);
+      next.delete("checkout");
+      next.delete("session_id");
+      setSearchParams(next, { replace: true });
+      return () => timers.forEach(clearTimeout);
+    }
+  }, [searchParams, setSearchParams, refreshProfile]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 300);

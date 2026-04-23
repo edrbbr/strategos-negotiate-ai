@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Award, Loader2 } from "lucide-react";
+import { Award, ExternalLink, Loader2 } from "lucide-react";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatPrice, getPriceForCycle, usePlans } from "@/hooks/usePlans";
+import { getStripeEnvironment } from "@/lib/stripe";
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -19,6 +20,31 @@ const Settings = () => {
   const [archive, setArchive] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [openingPortal, setOpeningPortal] = useState(false);
+
+  const isPaidPlan =
+    profile?.plan_id === "pro" || profile?.plan_id === "elite";
+
+  const openPortal = async () => {
+    setOpeningPortal(true);
+    const { data, error } = await supabase.functions.invoke(
+      "create-portal-session",
+      {
+        body: {
+          returnUrl: `${window.location.origin}/app/settings`,
+          environment: getStripeEnvironment(),
+        },
+      },
+    );
+    setOpeningPortal(false);
+    if (error || !data?.url) {
+      toast.error(
+        `Portal konnte nicht geöffnet werden: ${error?.message ?? "unbekannt"}`,
+      );
+      return;
+    }
+    window.location.href = data.url as string;
+  };
 
   useEffect(() => {
     if (profile) {
@@ -188,9 +214,24 @@ const Settings = () => {
                 </div>
               </div>
               <div className="text-right space-y-3">
-                <Button variant="gold" onClick={() => navigate("/preise")}>
-                  Plan ändern
-                </Button>
+                {isPaidPlan ? (
+                  <Button
+                    variant="gold"
+                    onClick={openPortal}
+                    disabled={openingPortal}
+                  >
+                    {openingPortal ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                    )}
+                    Plan verwalten
+                  </Button>
+                ) : (
+                  <Button variant="gold" onClick={() => navigate("/preise")}>
+                    Jetzt upgraden
+                  </Button>
+                )}
                 <button
                   onClick={() => setShowUpgrade(true)}
                   className="block ml-auto font-mono-label text-muted-foreground hover:text-primary underline underline-offset-4"
