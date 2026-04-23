@@ -1,64 +1,52 @@
 
 
-# Fix: Strategie-JSON & smartes Strategy-Update bei Refinement
+# Fix: `create-checkout` muss userId verifizieren
 
-## Befund (aus DB)
-Alle 8 Versionen V1–V8 haben **identisch** denselben Strategy-Wert. Der Wert ist ein roher JSON-String:
-```
-{"strategy": "Chris Voss/FBI-Methode — Diese Methode fokussiert..."
-```
+## Schwachstelle
+`supabase/functions/create-checkout/index.ts` akzeptiert `userId` aus dem Request-Body und setzt ihn als `metadata.userId` in der Stripe-Session. Ohne JWT vertraut die Funktion einfach dem, was im Body steht. Da `payments-webhook` per `metadata.userId` Subscriptions auf `profiles` schreibt, kann ein nicht-authentifizierter Caller mit einer beliebigen User-ID eine Subscription auf ein fremdes Konto buchen (oder einem anderen Konto eine Test-Subscription „aufzwingen").
 
-Zwei getrennte Bugs:
+## Fix-Strategie
+**Server-Seite ist die einzige Source of Truth für `userId`.** Body-`userId` wird komplett ignoriert; gleiches gilt für `customerEmail`, sobald ein verifizierter User vorliegt (verhindert Spoofing der Käufer-Mail).
 
-### Bug A — Roh-JSON in `strategy`
-In `multiStage.ts` ruft Stage 2 `callOpenAI(...)` mit Tool-Call. Stage liest `strategyOut.strategy`. Bei OpenAI gibt das Tool-Call-Wrapping aber offenbar manchmal `{ strategy: '{"strategy": "..."}' }` zurück — also einen JSON-String **innerhalb** des Felds. Das wird via `String(strategyOut.strategy ?? "")` direkt in die DB geschrieben. Da Stage 3 (Draft) den Strategy-String nur weiterreicht, fällt es in der Pipeline nicht auf.
+### Änderungen in `supabase/functions/create-checkout/index.ts`
+1. **Body-Schema entrümpeln**: `userId` aus dem destrukturierten Body entfernen. Wir lesen ihn nicht mehr aus dem Request.
+2. **Auth-Header parsen** (wie bisher) via `supabase.auth.getClaims(token)`.
+   - Bei vorhandenem **gültigen** Token → `resolvedUserId = claims.sub`, `resolvedEmail = claims.email` (überschreibt body-Email).
+   - Bei vorhandenem, aber **ungültigem** Token → `401 Unauthorized` (heute wird der Fehler stillschweigend verschluckt).
+3. **Anonymer Checkout bleibt erlaubt** — nur ohne `userId`-Metadata. Das deckt Gast-Checkouts (One-time-Payments) ab und verhindert, dass der Webhook die Session einem User zuschreibt.
+4. **`customerEmail` aus dem Body** wird nur noch verwendet, wenn KEIN Auth-Header anliegt. Mit Auth gewinnt immer die JWT-Email.
+5. Stripe-Session-Erstellung unverändert, aber `metadata.userId` wird ausschließlich aus dem verifizierten Claim gesetzt.
 
-→ **Fix**: Defensives Unwrapping nach Stage 2 — wenn der String mit `{` startet und valides JSON mit `strategy`-Key ist, den inneren Wert extrahieren. Identisch in `singleCall.ts` für die Anti-Korruption-Schicht.
+### Änderungen im Client
+6. `src/components/StripeEmbeddedCheckout.tsx`: `userId` aus dem Body-Payload des `functions.invoke("create-checkout", …)`-Aufrufs entfernen (er wird ohnehin ignoriert; sauber halten).
+7. `src/hooks/useStripeCheckout.tsx`: `userId` aus `CheckoutOptions`-Interface entfernen.
+8. Aufrufer (`src/pages/Pricing.tsx`, `src/components/UpgradeModal.tsx`): `userId`-Property aus `openCheckout({…})` entfernen. Der eingeloggte User wird serverseitig aus dem JWT abgeleitet, nicht mehr clientseitig durchgereicht.
 
-→ **Frontend-Härtung in `CaseChatView.tsx`**: Render-Funktion `renderStrategy(raw)` die JSON-Wrapper erkennt und nur den Klartext zeigt — schützt auch vor zukünftigen Modell-Macken.
-
-→ **Daten-Migration für bestehende 8 Versionen** dieses Falls (und alle anderen betroffenen Zeilen): UPDATE, das `strategy` aus dem JSON entpackt, wenn er mit `{"strategy":` beginnt. Gleiches für `cases.strategy`.
-
-### Bug B — Strategie ändert sich nie bei Refinement
-`strategos-refinement/index.ts` Zeile 204: `strategy: latest.strategy` und Zeile 206: `strategy_labels: latest.strategy_labels` werden **immer** vom Vorgänger kopiert. Der zuvor approvte Smart-Classifier wurde nie eingebaut.
-
-→ **Fix**: Smart-Classifier vor dem Draft-Call:
-1. Klassifikator-Call (Gemini 2.5 Flash-Lite, ~50 Tokens, JSON-Mode):
-   ```
-   System: "Entscheide, ob die User-Instruktion eine neue Verhandlungsstrategie verlangt
-   oder nur den Draft-Stil betrifft. Antworte als JSON: 
-   { regenerate_strategy: bool, strategy_labels: string[] }.
-   Verfügbare Labels: harvard, chris_voss, ackerman, batna, win_win, hard_bargaining."
-   User: instruction + aktuelle Strategie als Kontext
-   ```
-2. Wenn `regenerate_strategy=true`:
-   - Strategy-Call (Gemini 2.5 Flash) mit V1-Analyse + alter Strategie + Instruktion → neuer Strategie-Klartext (NICHT als JSON gewrappt — wir parsen `choices[0].message.content` direkt als String)
-   - Labels aus dem Klassifikator übernehmen
-3. Wenn `false`: Strategie/Labels weiterhin vom Vorgänger kopieren (heutiges Verhalten)
-4. Draft-Call wie heute, jetzt aber mit der **neuen** Strategie als Kontext, falls regeneriert
-5. **Analyse**: weiter immer aus **V1** kopieren (wie zuvor entschieden) — nicht aus `latest`, sondern explizit aus dem ältesten `case_versions`-Eintrag ziehen, damit die Analyse über alle Versionen stabil V1 entspricht
-
-Fehlertoleranz: Klassifikator-Fehler (429/Timeout) → Fallback auf reinen Draft-Pfad (heutiges Verhalten), kein Crash.
-
-## Dateien
-
-| Datei | Änderung |
-|---|---|
-| `supabase/functions/strategos-ai-router/pipelines/multiStage.ts` | Strategy-String entwrappen (`unwrapStrategy()`), bevor Stage 3 + DB-Persist |
-| `supabase/functions/strategos-ai-router/pipelines/singleCall.ts` | Gleiches Unwrapping als Safety-Net |
-| `supabase/functions/strategos-refinement/index.ts` | Klassifikator-Call + bedingter Strategy-Call + V1-Analyse-Lookup |
-| `src/components/CaseChatView.tsx` | `renderStrategy()` Helper für defensives Anzeigen |
-| Migration | `UPDATE case_versions SET strategy = (strategy::jsonb->>'strategy') WHERE strategy LIKE '{"strategy":%'` + selbiges für `cases` |
+### Edge-Function-Konfiguration
+`supabase/config.toml` bleibt unverändert (`verify_jwt = false`), weil:
+- Anonyme One-Time-Payments weiter erlaubt sein sollen,
+- die CORS-Preflight-Reqs nicht durch Gateway-401 abgewiesen werden dürfen,
+- die Auth-Validierung jetzt **in der Funktion** stattfindet (Pflicht-Pattern für Stripe-Functions laut Knowledge).
 
 ## Akzeptanzkriterien
-- Bestehende 8 Versionen zeigen sofort Klartext-Strategie statt `{"strategy":"…"}`
-- Neue Refinements mit Instruktion „nutze Harvard-Stil" / „andere Strategie" produzieren sichtbar **andere** Strategie + ggf. neue Labels
-- Refinements mit Instruktion „kürzer" / „freundlicher" lassen Strategie unverändert (Token-Sparsam)
-- Analyse-Akkordeon zeigt weiterhin V1-Analyse, identisch über alle Versionen
-- Bei Klassifikator-Ausfall: Refinement schlägt nicht fehl, sondern verhält sich wie heute (nur Draft neu)
+- Body-`userId` wird vollständig ignoriert; Mit/Ohne JWT.
+- Mit gültigem JWT: `metadata.userId === claims.sub`, Email aus Claims.
+- Mit ungültigem/abgelaufenem JWT: HTTP 401, keine Stripe-Session.
+- Ohne JWT: Session ohne `metadata.userId` (Gast-Checkout, kein Profile-Mapping im Webhook).
+- Pricing-Page und Upgrade-Modal funktionieren weiterhin für eingeloggte User (Subscription wird korrekt dem JWT-User zugeordnet).
+- Bestehender `payments-webhook` braucht keine Änderungen — er nutzt `metadata.userId` weiter, die jetzt aber garantiert vertrauenswürdig ist.
+
+## Dateien
+| Datei | Änderung |
+|---|---|
+| `supabase/functions/create-checkout/index.ts` | `userId` aus Body entfernen; 401 bei ungültigem JWT; Email-Override aus Claims |
+| `src/components/StripeEmbeddedCheckout.tsx` | `userId`-Prop & Body-Feld entfernen |
+| `src/hooks/useStripeCheckout.tsx` | `userId` aus `CheckoutOptions` entfernen |
+| `src/pages/Pricing.tsx` | `userId` aus `openCheckout`-Call entfernen |
+| `src/components/UpgradeModal.tsx` | `userId` aus `openCheckout`-Call entfernen |
 
 ## Nicht enthalten
-- Diff-Highlighting alt vs. neu Strategie
-- Manueller Override-Toggle „Strategie erzwingen"
-- Re-Generierung der Analyse pro Refinement (bewusst durch User-Wahl ausgeschlossen)
+- Änderungen am `payments-webhook` (Vertragsschnittstelle bleibt gleich).
+- Neue UI für Gast-Checkout (One-Time-Payments unterstützen das bereits implizit).
+- Rate-Limiting / Abuse-Protection auf der Funktion (separater Task).
 
