@@ -65,9 +65,9 @@ STRATEGOS ist eine SaaS-Plattform, die Fach- und Führungskräften in komplexen 
 
 - **Frontend:** React, TailwindCSS, shadcn/ui, React Query, Vite
 - **Backend:** Supabase (PostgreSQL, Auth, Row-Level Security, Edge Functions in Deno)
-- **AI-Layer:** Multi-Model-Routing via Lovable AI Gateway — Google Gemini 2.5 (Flash-Lite / Flash), OpenAI GPT-5
+- **AI-Layer:** Multi-Model-Routing via different LLM's
 - **Strict-JSON-Outputs** via OpenAI Tool Calling für deterministische, parse-sichere AI-Antworten
-- **Entwicklungsumgebung:** Lovable.dev (Vibe-Coding-Workflow)
+- **Entwicklungsumgebung:** Microsoft VisualStudio Code
 
 ### Datenmodell (vereinfacht)
 
@@ -139,7 +139,6 @@ npm run dev
 1. Neues Projekt auf [supabase.com](https://supabase.com) anlegen
 2. SQL-Migrationen aus `supabase/migrations/` in Reihenfolge ausführen
 3. Edge Functions deployen via Supabase CLI
-4. Environment-Variable `LOVABLE_API_KEY` (oder direkte Provider-Keys) für AI-Zugriff setzen — ohne Key läuft ein Mock-Modus mit simulierten Antworten
 
 ### Roadmap
 
@@ -157,7 +156,7 @@ npm run dev
 
 ### Projekt-Kontext
 
-STRATEGOS ist ein persönliches End-to-End-Projekt — von Konzeption über Architektur und technische Umsetzung bis zur Monetarisierungs-Strategie. Mehr dazu auf [LinkedIn](https://linkedin.com/in/<your-handle>).
+STRATEGOS ist ein persönliches End-to-End-Projekt — von Konzeption über Architektur und technische Umsetzung bis zur Monetarisierungs-Strategie. Mehr dazu auf [LinkedIn](https://www.linkedin.com/in/enderbabuer/).
 
 ### Lizenz
 
@@ -216,9 +215,9 @@ STRATEGOS is a SaaS platform that gives professionals and executives a structure
 
 - **Frontend:** React, TailwindCSS, shadcn/ui, React Query, Vite
 - **Backend:** Supabase (PostgreSQL, Auth, Row-Level Security, Edge Functions in Deno)
-- **AI Layer:** Multi-model routing via Lovable AI Gateway — Google Gemini 2.5 (Flash-Lite / Flash), OpenAI GPT-5
+- **AI Layer:** Multi-model routing via different LLM's
 - **Strict JSON Outputs** via OpenAI Tool Calling for deterministic, parse-safe AI responses
-- **Development Environment:** Lovable.dev (vibe-coding workflow)
+- **Development Environment:** Microsoft VisualStudio Code
 
 ### Data Model (simplified)
 
@@ -290,7 +289,6 @@ npm run dev
 1. Create a new project at [supabase.com](https://supabase.com)
 2. Run SQL migrations from `supabase/migrations/` in order
 3. Deploy edge functions via Supabase CLI
-4. Set `LOVABLE_API_KEY` environment variable (or direct provider keys) for AI access — without a key, a mock mode with simulated responses runs
 
 ### Roadmap
 
@@ -308,7 +306,7 @@ npm run dev
 
 ### Project Context
 
-STRATEGOS is a personal end-to-end project — from concept through architecture and technical implementation to monetization strategy. More on [LinkedIn](https://linkedin.com/in/<your-handle>).
+STRATEGOS is a personal end-to-end project — from concept through architecture and technical implementation to monetization strategy. More on [LinkedIn](https://www.linkedin.com/in/enderbabuer/).
 
 ### License
 
@@ -317,7 +315,5 @@ Proprietary — all rights reserved. This code serves documentation and portfoli
 ---
 
 <div align="center">
-
-**Built with Lovable.dev · Powered by Supabase · AI via Gemini & GPT**
 
 </div>
