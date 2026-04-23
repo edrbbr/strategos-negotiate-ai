@@ -94,13 +94,18 @@ ${strategyHints}
 
     const userPrompt = `Situation:\n"""\n${caseRow.situation_text ?? ""}\n"""\n\nAnalysis (bullets):\n${JSON.stringify(latest.analysis ?? [])}\n\nStrategy:\n"""\n${latest.strategy ?? ""}\n"""\n\nCurrent draft:\n"""\n${latest.draft ?? ""}\n"""\n\nReturn 4 case-specific refinement suggestions via the suggest_refinements tool.`;
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25_000);
+    let aiResp: Response;
+    try {
+      aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
         model: "google/gemini-2.5-flash-lite",
         messages: [
           { role: "system", content: systemPrompt },
@@ -137,8 +142,15 @@ ${strategyHints}
           },
         ],
         tool_choice: { type: "function", function: { name: "suggest_refinements" } },
-      }),
-    });
+        }),
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      const aborted = (err as Error)?.name === "AbortError";
+      console.error("suggest gateway fetch failed", aborted ? "timeout" : err);
+      return json({ error: aborted ? "AI timeout" : "Gateway unreachable" }, 504);
+    }
+    clearTimeout(timeoutId);
 
     if (aiResp.status === 429) return json({ error: "Rate limit" }, 429);
     if (aiResp.status === 402) return json({ error: "AI credits exhausted" }, 402);
