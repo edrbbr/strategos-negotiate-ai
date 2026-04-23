@@ -108,14 +108,15 @@ export function useCreateCase() {
       language_label?: string;
     }): Promise<CaseRow> => {
       if (!user) throw new Error("Not authenticated");
-      const payload: Record<string, unknown> = { user_id: user.id };
-      if (input?.situation_text) payload.situation_text = input.situation_text;
-      if (input?.medium) payload.medium = input.medium;
-      if (input?.language_code) payload.language_code = input.language_code;
-      if (input?.language_label) payload.language_label = input.language_label;
       const { data, error } = await supabase
         .from("cases")
-        .insert(payload)
+        .insert({
+          user_id: user.id,
+          ...(input?.situation_text ? { situation_text: input.situation_text } : {}),
+          ...(input?.medium ? { medium: input.medium } : {}),
+          ...(input?.language_code ? { language_code: input.language_code } : {}),
+          ...(input?.language_label ? { language_label: input.language_label } : {}),
+        })
         .select("*")
         .single();
       if (error) throw error;
