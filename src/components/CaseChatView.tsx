@@ -302,6 +302,76 @@ function PendingBlock() {
   );
 }
 
+function AnalysisAccordion({
+  caseId,
+  versions,
+}: {
+  caseId: string;
+  versions: CaseVersionRow[];
+}) {
+  const v1 = versions[0];
+  const analysis = Array.isArray(v1?.analysis) ? (v1!.analysis as string[]) : [];
+  const storageKey = `case-analysis-seen:${caseId}`;
+
+  const initialOpen = useMemo(() => {
+    if (analysis.length === 0) return false;
+    if (typeof window === "undefined") return false;
+    const seen = window.localStorage.getItem(storageKey);
+    if (seen) return false;
+    return versions.length === 1 && v1?.kind === "initial";
+  }, [analysis.length, storageKey, versions.length, v1?.kind]);
+
+  const [open, setOpen] = useState(initialOpen);
+
+  // Mark as seen as soon as a second version exists, or when user toggled it once.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (versions.length > 1) {
+      window.localStorage.setItem(storageKey, "1");
+    }
+  }, [versions.length, storageKey]);
+
+  if (analysis.length === 0) return null;
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(storageKey, "1");
+    }
+  };
+
+  return (
+    <Collapsible open={open} onOpenChange={handleOpenChange}>
+      <div className="bg-card border-l-2 border-secondary rounded-sm">
+        <CollapsibleTrigger className="w-full flex items-center justify-between gap-3 p-4 group">
+          <div className="flex items-center gap-2">
+            <Diamond className="w-3 h-3 text-secondary" fill="currentColor" />
+            <span className="font-mono-label text-secondary">ANALYSE</span>
+            <span className="font-mono-label text-muted-foreground/70 text-[10px]">
+              · {analysis.length} {analysis.length === 1 ? "Punkt" : "Punkte"}
+            </span>
+          </div>
+          <ChevronDown
+            className={`w-4 h-4 text-secondary transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="px-4 pb-4 pt-1 border-t border-border/30">
+            <ul className="space-y-2 text-xs text-foreground/85 leading-relaxed mt-3">
+              {analysis.map((it, i) => (
+                <li key={i} className="flex gap-2">
+                  <Diamond className="w-2 h-2 text-secondary mt-1 shrink-0" fill="currentColor" />
+                  <span>{it}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
+
 function SuggestionChips({
   suggestions,
   loading,
