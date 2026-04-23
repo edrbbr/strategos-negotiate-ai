@@ -280,7 +280,7 @@ function VersionBlock({
           <div className="bg-background/50 border-l border-primary/60 rounded-sm p-3">
             <p className="font-mono-label text-primary text-[10px] mb-2">STRATEGIE</p>
             <p className="text-xs text-foreground/85 leading-relaxed whitespace-pre-line">
-              {version.strategy ?? "—"}
+              {renderStrategy(version.strategy)}
             </p>
           </div>
           {/* Draft */}
