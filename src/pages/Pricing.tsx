@@ -43,14 +43,20 @@ const calcYearlyDiscount = (plans: PlanWithDetails[]): number | null => {
 const PlanCard = ({
   plan,
   cycle,
+  onCheckout,
+  pendingPriceId,
 }: {
   plan: PlanWithDetails;
   cycle: BillingCycle;
+  onCheckout: (planId: string, cycle: BillingCycle) => void;
+  pendingPriceId: string | null;
 }) => {
   const price = getPriceForCycle(plan, cycle);
   const monthly = getPriceForCycle(plan, "monthly");
-  const cta = ctaForPlan(plan.id);
   const featured = plan.is_recommended;
+  const lookupKey = lookupKeyFor(plan.id, cycle);
+  const isFree = plan.id === "free";
+  const isPending = lookupKey !== null && pendingPriceId === lookupKey;
 
   const showEffective =
     cycle === "yearly" && price && price.amount_cents > 0;
@@ -107,15 +113,34 @@ const PlanCard = ({
           </li>
         ))}
       </ul>
-      <Link to={cta.to}>
+      {isFree ? (
+        <Link to="/register">
+          <Button
+            variant={featured ? "gold" : "gold-outline"}
+            className="w-full"
+            size="lg"
+          >
+            {ctaLabelFor(plan.id)}
+          </Button>
+        </Link>
+      ) : (
         <Button
           variant={featured ? "gold" : "gold-outline"}
           className="w-full"
           size="lg"
+          disabled={isPending || !lookupKey}
+          onClick={() => onCheckout(plan.id, cycle)}
         >
-          {cta.label}
+          {isPending ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              LADEN…
+            </>
+          ) : (
+            ctaLabelFor(plan.id)
+          )}
         </Button>
-      </Link>
+      )}
       {monthly && cycle === "yearly" && monthly.amount_cents > 0 && (
         <p className="mt-3 text-[10px] text-muted-foreground/60 text-center font-sans uppercase tracking-[0.18em]">
           Statt {formatPrice(monthly.amount_cents, monthly.currency)} / Monat
