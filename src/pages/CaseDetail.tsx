@@ -1,13 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, Bot, ChevronDown, Copy, Diamond, Loader2, RefreshCcw, Send, Sparkles, Star, Upload } from "lucide-react";
+import { Bot, Check, ChevronDown, ChevronsUpDown, Copy, Diamond, Loader2, Send, Sparkles, Star, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+import { LANGUAGES, MEDIUMS } from "@/lib/languages";
 import { supabase } from "@/integrations/supabase/client";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCase, useCaseRealtime, useCreateCase, useUpdateCase } from "@/hooks/useCases";
+import {
+  useCaseAttachments,
+  useDeleteAttachment,
+  useUploadAttachment,
+  type CaseAttachment,
+} from "@/hooks/useCaseAttachments";
 
 type StageState = "pending" | "running" | "complete" | "failed";
 type Tier = "free" | "pro" | "elite";
@@ -36,41 +53,25 @@ const CaseDetail = () => {
   const { user, profile, refreshProfile } = useAuth();
   const tier = tierFromPlanId(profile?.plan_id);
   const isMultiStage = tier === "elite";
+  const maxAttachments = tier === "free" ? 1 : 10;
 
-  // ---- Resolve / create case ----
+  // ---- Case id / loaders ----
   const createMut = useCreateCase();
-  const hasAttemptedCreate = useRef(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-
-  const triggerCreate = () => {
-    setCreateError(null);
-    hasAttemptedCreate.current = true;
-    createMut.mutate(undefined, {
-      onSuccess: (c) => navigate(`/app/case/${c.id}`, { replace: true }),
-      onError: (e) => {
-        const msg = (e as Error).message ?? "Unbekannter Fehler";
-        setCreateError(msg);
-        toast.error(`Fall konnte nicht angelegt werden: ${msg}`);
-        // Allow retry on next render
-        hasAttemptedCreate.current = false;
-      },
-    });
-  };
-
-  useEffect(() => {
-    if (routeId !== "new") return;
-    if (!user) return; // wait for auth rehydration
-    if (hasAttemptedCreate.current) return; // strict-mode guard
-    triggerCreate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeId, user?.id]);
-
+  const uploadMut = useUploadAttachment();
+  const deleteAttMut = useDeleteAttachment();
   const caseId = routeId !== "new" ? routeId : undefined;
   const { data: caseRow } = useCase(caseId);
   const updateMut = useUpdateCase();
+  const { data: serverAttachments } = useCaseAttachments(caseId);
 
   // ---- Local state ----
   const [situation, setSituation] = useState("");
+  const [medium, setMedium] = useState<string>("email");
+  const [languageCode, setLanguageCode] = useState<string>("de");
+  const [languageLabel, setLanguageLabel] = useState<string>("Deutsch");
+  const [langOpen, setLangOpen] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [refinement, setRefinement] = useState("");
   const [refining, setRefining] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -82,9 +83,16 @@ const CaseDetail = () => {
   });
   const [stageMeta, setStageMeta] = useState<{ failed_at?: "analysis"|"strategy"|"draft"; error?: string }>({});
 
-  // Hydrate situation textarea once when case loads
+  // Hydrate form once when case loads
   useEffect(() => {
-    if (caseRow?.situation_text && situation === "") setSituation(caseRow.situation_text);
+    if (!caseRow) return;
+    if (caseRow.situation_text && situation === "") setSituation(caseRow.situation_text);
+    const mediumVal = (caseRow as unknown as { medium?: string }).medium;
+    const langCode = (caseRow as unknown as { language_code?: string }).language_code;
+    const langLabel = (caseRow as unknown as { language_label?: string }).language_label;
+    if (mediumVal) setMedium(mediumVal);
+    if (langCode) setLanguageCode(langCode);
+    if (langLabel) setLanguageLabel(langLabel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseRow?.id]);
 
@@ -107,21 +115,102 @@ const CaseDetail = () => {
     updateMut.mutate({ id: caseId, patch: { situation_text: situation } });
   };
 
+  const addFiles = (files: FileList | File[]) => {
+    const accepted = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+    const MAX_SIZE = 10 * 1024 * 1024;
+    const existing = (serverAttachments?.length ?? 0) + pendingFiles.length;
+    const capacity = Math.max(0, maxAttachments - existing);
+    if (capacity === 0) {
+      toast.error(
+        tier === "free"
+          ? "Free-Plan erlaubt maximal 1 Referenz-Dokument. Upgrade für mehr."
+          : `Maximal ${maxAttachments} Anhänge.`,
+      );
+      return;
+    }
+    const next: File[] = [];
+    for (const f of Array.from(files)) {
+      if (next.length >= capacity) break;
+      const type = f.type || "";
+      const nameLower = f.name.toLowerCase();
+      const okType = accepted.includes(type) || /\.(pdf|jpe?g|png)$/i.test(nameLower);
+      if (!okType) { toast.error(`"${f.name}" hat ein nicht unterstütztes Format.`); continue; }
+      if (f.size > MAX_SIZE) { toast.error(`"${f.name}" ist größer als 10 MB.`); continue; }
+      next.push(f);
+    }
+    if (next.length) setPendingFiles((prev) => [...prev, ...next]);
+  };
+
+  const removePendingFile = (i: number) => {
+    setPendingFiles((prev) => prev.filter((_, idx) => idx !== i));
+  };
+
+  const removeServerAttachment = async (att: CaseAttachment) => {
+    try {
+      await deleteAttMut.mutateAsync(att);
+      toast.success("Anhang entfernt");
+    } catch (e) {
+      toast.error(`Entfernen fehlgeschlagen: ${(e as Error).message}`);
+    }
+  };
+
   // ---- Run pipeline ----
   const runPipeline = async () => {
     if (situation.trim().length < 10) {
       toast.error("Bitte beschreiben Sie die Situation (mind. 10 Zeichen).");
       return;
     }
-    if (!caseId) {
-      toast.error("Fall noch nicht initialisiert.");
+    if (!user) {
+      toast.error("Bitte erneut anmelden.");
       return;
     }
 
-    // Save situation first so backend writes go to a row that has it too
-    if (situation !== caseRow?.situation_text) {
-      await updateMut.mutateAsync({ id: caseId, patch: { situation_text: situation } }).catch(() => {});
+    // Resolve or create case
+    let activeCaseId = caseId;
+    if (!activeCaseId) {
+      try {
+        const created = await createMut.mutateAsync({
+          situation_text: situation,
+          medium,
+          language_code: languageCode,
+          language_label: languageLabel,
+        });
+        activeCaseId = created.id;
+        navigate(`/app/case/${created.id}`, { replace: true });
+      } catch (e) {
+        toast.error(`Fall konnte nicht angelegt werden: ${(e as Error).message}`);
+        return;
+      }
+    } else {
+      // Persist current form state onto the existing case
+      await updateMut
+        .mutateAsync({
+          id: activeCaseId,
+          patch: {
+            situation_text: situation,
+            medium,
+            language_code: languageCode,
+            language_label: languageLabel,
+          } as Partial<typeof caseRow> as never,
+        })
+        .catch(() => {});
     }
+
+    // Upload any pending attachments before running the pipeline
+    const uploadedIds: string[] = [];
+    for (const file of pendingFiles) {
+      try {
+        const att = await uploadMut.mutateAsync({ caseId: activeCaseId, file });
+        uploadedIds.push(att.id);
+      } catch (e) {
+        toast.error(`Upload "${file.name}" fehlgeschlagen: ${(e as Error).message}`);
+      }
+    }
+    setPendingFiles([]);
+    const attachmentIds = [
+      ...(serverAttachments?.map((a) => a.id) ?? []),
+      ...uploadedIds,
+    ];
 
     setLoading(true);
     setStageMeta({});
@@ -133,7 +222,14 @@ const CaseDetail = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("strategos-ai-router", {
-        body: { situation_text: situation, case_id: caseId },
+        body: {
+          situation_text: situation,
+          case_id: activeCaseId,
+          medium,
+          language_code: languageCode,
+          language_label: languageLabel,
+          attachment_ids: attachmentIds,
+        },
       });
 
       if (error) {
@@ -282,39 +378,135 @@ const CaseDetail = () => {
           <div className="grid grid-cols-2 gap-6">
             <div>
               <p className="font-mono-label text-muted-foreground mb-2">Medium</p>
-              <button className="w-full flex items-center justify-between bg-transparent border border-border/40 rounded-sm px-4 py-3 font-mono-label text-foreground hover:border-primary/40 transition-colors">
-                E-Mail (Formal) <ChevronDown className="w-4 h-4" />
-              </button>
+              <Select value={medium} onValueChange={setMedium}>
+                <SelectTrigger className="w-full bg-transparent border border-border/40 rounded-sm px-4 py-3 h-auto font-mono-label text-foreground hover:border-primary/40 transition-colors">
+                  <SelectValue placeholder="Medium wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MEDIUMS.map((m) => (
+                    <SelectItem key={m.value} value={m.value} className="font-mono-label">
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <p className="font-mono-label text-muted-foreground mb-2">Sprache</p>
-              <button className="w-full flex items-center justify-between bg-transparent border border-border/40 rounded-sm px-4 py-3 font-mono-label text-foreground hover:border-primary/40 transition-colors">
-                Deutsch (Hoch) <ChevronDown className="w-4 h-4" />
-              </button>
+              <Popover open={langOpen} onOpenChange={setLangOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-expanded={langOpen}
+                    className="w-full flex items-center justify-between bg-transparent border border-border/40 rounded-sm px-4 py-3 font-mono-label text-foreground hover:border-primary/40 transition-colors"
+                  >
+                    {languageLabel}
+                    <ChevronsUpDown className="w-4 h-4 opacity-50" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start">
+                  <Command>
+                    <CommandInput placeholder="Sprache suchen…" />
+                    <CommandList>
+                      <CommandEmpty>Keine Sprache gefunden.</CommandEmpty>
+                      <CommandGroup>
+                        {LANGUAGES.map((l) => (
+                          <CommandItem
+                            key={l.code}
+                            value={l.label}
+                            onSelect={() => {
+                              setLanguageCode(l.code);
+                              setLanguageLabel(l.label);
+                              setLangOpen(false);
+                            }}
+                            className="font-mono-label"
+                          >
+                            <Check
+                              className={cn(
+                                "w-4 h-4 mr-2",
+                                languageCode === l.code ? "opacity-100" : "opacity-0",
+                              )}
+                            />
+                            {l.label}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
           <div>
-            <p className="font-mono-label text-muted-foreground mb-2">Referenz-Dokumente</p>
-            <div className="border border-dashed border-border/40 rounded-sm py-12 flex flex-col items-center justify-center hover:border-primary/40 transition-colors cursor-pointer">
+            <div className="flex items-baseline justify-between mb-2">
+              <p className="font-mono-label text-muted-foreground">Referenz-Dokumente</p>
+              <p className="font-mono-label text-muted-foreground/60 text-[10px]">
+                {(serverAttachments?.length ?? 0) + pendingFiles.length}/{maxAttachments}
+                {tier === "free" && " · Free"}
+              </p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,image/jpeg,image/jpg,image/png,.pdf,.jpg,.jpeg,.png"
+              multiple={maxAttachments > 1}
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) addFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full border border-dashed border-border/40 rounded-sm py-10 flex flex-col items-center justify-center hover:border-primary/40 transition-colors"
+            >
               <Upload className="w-6 h-6 text-muted-foreground mb-3" strokeWidth={1.5} />
               <p className="font-mono-label text-muted-foreground">PDF, JPG oder PNG hochladen</p>
-            </div>
+              <p className="font-mono-label text-muted-foreground/50 text-[10px] mt-1">max. 10 MB pro Datei</p>
+            </button>
+
+            {(serverAttachments?.length || pendingFiles.length) ? (
+              <ul className="mt-3 space-y-2">
+                {serverAttachments?.map((a) => (
+                  <li key={a.id} className="flex items-center justify-between gap-3 border border-border/30 rounded-sm px-3 py-2">
+                    <span className="font-mono-label text-foreground truncate">{a.file_name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeServerAttachment(a)}
+                      className="text-muted-foreground hover:text-destructive shrink-0"
+                      aria-label="Anhang entfernen"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </li>
+                ))}
+                {pendingFiles.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-3 border border-dashed border-border/40 rounded-sm px-3 py-2">
+                    <span className="font-mono-label text-muted-foreground truncate">
+                      {f.name} <span className="text-muted-foreground/50">(wartet)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removePendingFile(i)}
+                      className="text-muted-foreground hover:text-destructive shrink-0"
+                      aria-label="Datei entfernen"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
 
           {(() => {
-            const isCreating = routeId === "new" && !caseId && !createError;
             const tooShort = situation.trim().length < 10;
-            const disabled = loading || !caseId || isCreating || tooShort;
-            const reason = createError
-              ? null
-              : isCreating
-                ? "Fall wird vorbereitet…"
-                : !caseId
-                  ? "Fall wird vorbereitet…"
-                  : tooShort
-                    ? `Bitte mindestens 10 Zeichen eingeben (${situation.trim().length}/10).`
-                    : null;
+            const disabled = loading || tooShort || !medium || !languageCode;
+            const reason = tooShort
+              ? `Bitte mindestens 10 Zeichen eingeben (${situation.trim().length}/10).`
+              : null;
             return (
               <>
                 <Button
@@ -329,35 +521,13 @@ const CaseDetail = () => {
                       <Loader2 className="w-4 h-4 animate-spin" />
                       {isMultiStage ? "Multi-Stage Pipeline läuft…" : "Analyzing power dynamics…"}
                     </span>
-                  ) : isCreating ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Fall wird angelegt…
-                    </span>
                   ) : (
                     <>▸ Pipeline Starten</>
                   )}
                 </Button>
-
                 {reason && !loading && (
-                  <p className="text-center font-mono-label text-muted-foreground/70 mt-2">
-                    {reason}
-                  </p>
+                  <p className="text-center font-mono-label text-muted-foreground/70 mt-2">{reason}</p>
                 )}
-
-                {createError && (
-                  <div className="mt-3 border border-destructive/40 bg-destructive/5 rounded-sm p-4 flex items-start gap-3">
-                    <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-                    <div className="flex-1">
-                      <p className="font-mono-label text-destructive mb-1">Fall konnte nicht angelegt werden</p>
-                      <p className="text-sm text-muted-foreground mb-3">{createError}</p>
-                      <Button variant="gold-outline" size="sm" onClick={triggerCreate}>
-                        <RefreshCcw className="w-3.5 h-3.5" /> Erneut versuchen
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
                 {loading && !isMultiStage && (
                   <p className="text-center font-mono-label text-muted-foreground/70 mt-2">Analyse wird durchgeführt…</p>
                 )}

@@ -99,16 +99,31 @@ export function useCaseRealtime(caseId: string | undefined, enabled: boolean) {
 
 export function useCreateCase() {
   const { user } = useAuth();
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (): Promise<CaseRow> => {
+    mutationFn: async (input?: {
+      situation_text?: string;
+      medium?: string;
+      language_code?: string;
+      language_label?: string;
+    }): Promise<CaseRow> => {
       if (!user) throw new Error("Not authenticated");
       const { data, error } = await supabase
         .from("cases")
-        .insert({ user_id: user.id })
+        .insert({
+          user_id: user.id,
+          ...(input?.situation_text ? { situation_text: input.situation_text } : {}),
+          ...(input?.medium ? { medium: input.medium } : {}),
+          ...(input?.language_code ? { language_code: input.language_code } : {}),
+          ...(input?.language_label ? { language_label: input.language_label } : {}),
+        })
         .select("*")
         .single();
       if (error) throw error;
       return data as CaseRow;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cases"] });
     },
   });
 }
