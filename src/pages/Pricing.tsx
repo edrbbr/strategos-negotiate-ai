@@ -7,7 +7,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useStripeCheckout } from "@/hooks/useStripeCheckout";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   formatPrice,
   getPriceForCycle,
@@ -23,9 +29,11 @@ const lookupKeyFor = (planId: string, cycle: BillingCycle): string | null => {
   return null;
 };
 
-const ctaLabelFor = (planId: string): string => {
-  if (planId === "free") return "STARTEN";
-  if (planId === "elite") return "ELITE WERDEN";
+const ctaLabelFor = (planId: string, opts?: { isAuthed?: boolean }): string => {
+  if (planId === "free") {
+    return opts?.isAuthed ? "FALL STARTEN" : "KOSTENLOS STARTEN";
+  }
+  if (planId === "elite") return "ELITE FREISCHALTEN";
   return "JETZT SICHERN";
 };
 
@@ -45,11 +53,15 @@ const PlanCard = ({
   cycle,
   onCheckout,
   pendingPriceId,
+  isAuthed,
+  freeCtaTo,
 }: {
   plan: PlanWithDetails;
   cycle: BillingCycle;
   onCheckout: (planId: string, cycle: BillingCycle) => void;
   pendingPriceId: string | null;
+  isAuthed: boolean;
+  freeCtaTo: string;
 }) => {
   const price = getPriceForCycle(plan, cycle);
   const monthly = getPriceForCycle(plan, "monthly");
@@ -114,13 +126,13 @@ const PlanCard = ({
         ))}
       </ul>
       {isFree ? (
-        <Link to="/register">
+        <Link to={freeCtaTo}>
           <Button
             variant={featured ? "gold" : "gold-outline"}
             className="w-full"
             size="lg"
           >
-            {ctaLabelFor(plan.id)}
+            {ctaLabelFor(plan.id, { isAuthed })}
           </Button>
         </Link>
       ) : (
@@ -137,7 +149,7 @@ const PlanCard = ({
               LADEN…
             </>
           ) : (
-            ctaLabelFor(plan.id)
+            ctaLabelFor(plan.id, { isAuthed })
           )}
         </Button>
       )}
@@ -201,6 +213,9 @@ const Pricing = () => {
       returnUrl: `${window.location.origin}/app/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     });
   };
+
+  const isAuthed = !!user;
+  const freeCtaTo = isAuthed ? "/app/case/new" : "/register";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -289,6 +304,8 @@ const Pricing = () => {
                 cycle={cycle}
                 onCheckout={handleCheckout}
                 pendingPriceId={pendingPriceId}
+                isAuthed={isAuthed}
+                freeCtaTo={freeCtaTo}
               />
             ))}
           </div>
@@ -305,6 +322,12 @@ const Pricing = () => {
         }}
       >
         <DialogContent className="max-w-2xl bg-background border border-primary/30 p-6">
+          <VisuallyHidden>
+            <DialogTitle>Checkout</DialogTitle>
+            <DialogDescription>
+              Sicheres Bezahlen über Stripe.
+            </DialogDescription>
+          </VisuallyHidden>
           {checkoutElement}
         </DialogContent>
       </Dialog>

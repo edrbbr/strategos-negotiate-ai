@@ -2,7 +2,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
-import { LogIn, Loader2 } from "lucide-react";
+import { LogIn, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -50,17 +50,26 @@ const Login = () => {
 
   const handleGoogle = async () => {
     setLoading(true);
-    const { error: err } = await signInWithGoogle();
+    setError(null);
+    const { error: err, redirected } = await signInWithGoogle();
+    if (redirected) {
+      // Browser is navigating away — keep spinner until unload.
+      return;
+    }
     if (err) {
       setError(err);
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       <div className="hidden lg:flex flex-col justify-between p-12 border-r border-border/40">
-        <Logo />
+        <Link to="/" aria-label="Zur Startseite">
+          <Logo />
+        </Link>
         <div>
           <p className="font-mono-label text-muted-foreground mb-6">Souveränes Verhandlungssystem v.2.4</p>
           <blockquote className="font-serif italic text-3xl leading-tight max-w-md">
@@ -85,6 +94,13 @@ const Login = () => {
 
       <div className="flex items-center justify-center p-8 lg:p-12">
         <div className="w-full max-w-md">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 font-mono-label text-muted-foreground hover:text-primary mb-6 transition-colors lg:hidden"
+          >
+            <ArrowLeft className="w-3 h-3" />
+            Zurück zur Startseite
+          </Link>
           <h1 className="font-serif text-5xl mb-3">Willkommen zurück</h1>
           <p className="font-mono-label text-primary mb-12">
             Identität bestätigen <span className="text-muted-foreground">·</span> Terminal Zugriff

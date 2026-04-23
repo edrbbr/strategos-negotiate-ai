@@ -32,6 +32,7 @@ export type AuthProfile = {
 };
 
 type AuthResult = { error: string | null };
+type OAuthResult = { error: string | null; redirected: boolean };
 
 interface AuthContextValue {
   user: User | null;
@@ -45,7 +46,7 @@ interface AuthContextValue {
     password: string,
     fullName: string,
   ) => Promise<AuthResult>;
-  signInWithGoogle: () => Promise<AuthResult>;
+  signInWithGoogle: () => Promise<OAuthResult>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -142,19 +143,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     [],
   );
 
-  const signInWithGoogle = useCallback(async (): Promise<AuthResult> => {
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/app/dashboard`,
-    });
-    if (result.error) {
-      return {
-        error:
+  const signInWithGoogle = useCallback(async (): Promise<OAuthResult> => {
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: `${window.location.origin}/app/dashboard`,
+      });
+      if (result.error) {
+        const msg =
           result.error instanceof Error
             ? result.error.message
-            : String(result.error),
+            : String(result.error);
+        console.error("[Google OAuth] error:", result.error);
+        return { error: msg, redirected: false };
+      }
+      const redirected = !!(result as { redirected?: boolean }).redirected;
+      return { error: null, redirected };
+    } catch (e) {
+      console.error("[Google OAuth] exception:", e);
+      return {
+        error: e instanceof Error ? e.message : "Google sign-in fehlgeschlagen.",
+        redirected: false,
       };
     }
-    return { error: null };
   }, []);
 
   const signOut = useCallback(async () => {

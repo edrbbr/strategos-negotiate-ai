@@ -1,4 +1,10 @@
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Hexagon, Diamond, Loader2 } from "lucide-react";
@@ -200,6 +206,12 @@ export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
       }}
     >
       <DialogContent className="max-w-2xl bg-background border border-primary/30 p-6">
+        <VisuallyHidden>
+          <DialogTitle>Checkout</DialogTitle>
+          <DialogDescription>
+            Sicheres Bezahlen über Stripe.
+          </DialogDescription>
+        </VisuallyHidden>
         {checkoutElement}
       </DialogContent>
     </Dialog>
