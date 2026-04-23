@@ -23,9 +23,6 @@ export interface GeminiCallParams {
 export async function callGemini(
   params: GeminiCallParams,
 ): Promise<Record<string, unknown>> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
