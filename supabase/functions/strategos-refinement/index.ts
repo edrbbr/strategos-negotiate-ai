@@ -246,12 +246,63 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (latestErr || !latest) return json({ error: "No prior version" }, 404);
 
+    // Pin analysis to V1 (oldest version) so it stays stable across refinements.
+    const { data: v1 } = await service
+      .from("case_versions")
+      .select("analysis")
+      .eq("case_id", case_id)
+      .order("version_number", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const pinnedAnalysis = v1?.analysis ?? latest.analysis;
+
     const currentDraft: string = latest.draft ?? "";
+    const currentStrategy: string = latest.strategy ?? "";
+    const currentLabels: string[] = Array.isArray(latest.strategy_labels) ? latest.strategy_labels : [];
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       const newDraft = `${currentDraft}\n\n[Refinement (mock): ${instruction}]`;
-      return await persistAndReply(service, caseRow, latest, newDraft, instruction, "mock");
+      return await persistAndReply(service, caseRow, latest, {
+        analysis: pinnedAnalysis,
+        strategy: currentStrategy,
+        strategy_labels: currentLabels,
+        draft: newDraft,
+      }, instruction, "mock");
+    }
+
+    // Smart classifier: does this instruction require a new strategy?
+    const classification = await classifyInstruction(LOVABLE_API_KEY, instruction, currentStrategy);
+    let nextStrategy = currentStrategy;
+    let nextLabels = currentLabels;
+
+    if (classification.regenerate_strategy) {
+      const analysisLines = Array.isArray(pinnedAnalysis)
+        ? (pinnedAnalysis as string[]).map((b) => "- " + String(b)).join("\n")
+        : "";
+      const stratUser =
+        `Language: ${caseRow.language_label}\n` +
+        `Medium: ${caseRow.medium}\n\n` +
+        `Situation:\n"""\n${caseRow.situation_text ?? ""}\n"""\n\n` +
+        `Analysis:\n${analysisLines}\n\n` +
+        `Previous strategy:\n"""\n${currentStrategy}\n"""\n\n` +
+        `User instruction (highest priority — change strategy accordingly):\n${instruction}\n\n` +
+        `Now produce the new strategy text in ${caseRow.language_label}.`;
+      const stratRes = await callPlainGateway(
+        LOVABLE_API_KEY,
+        STRATEGY_MODEL,
+        STRATEGY_REGEN_PROMPT,
+        stratUser,
+        0.5,
+      );
+      if (stratRes.ok && stratRes.text) {
+        nextStrategy = stratRes.text;
+        if (classification.strategy_labels.length > 0) {
+          nextLabels = classification.strategy_labels;
+        }
+      } else {
+        console.warn("Strategy regen failed, keeping previous strategy");
+      }
     }
 
     const buildUserContent = (extraNudge?: string) =>
@@ -259,6 +310,7 @@ Deno.serve(async (req: Request) => {
       `LANGUAGE: ${caseRow.language_label}\n` +
       `MEDIUM: ${caseRow.medium}\n\n` +
       `ORIGINAL SITUATION:\n"""\n${caseRow.situation_text ?? ""}\n"""\n\n` +
+      `STRATEGY TO APPLY:\n"""\n${nextStrategy}\n"""\n\n` +
       `PREVIOUS DRAFT (rewrite this completely according to the instruction above):\n"""\n${currentDraft}\n"""\n\n` +
       `Now return the fully rewritten draft in ${caseRow.language_label}.\n` +
       `Do not start with the same opening as the previous draft unless the instruction explicitly asks for it.` +
@@ -288,7 +340,12 @@ Deno.serve(async (req: Request) => {
       if (retry.ok && retry.text) newDraft = retry.text;
     }
 
-    return await persistAndReply(service, caseRow, latest, newDraft, instruction, MODEL);
+    return await persistAndReply(service, caseRow, latest, {
+      analysis: pinnedAnalysis,
+      strategy: nextStrategy,
+      strategy_labels: nextLabels,
+      draft: newDraft,
+    }, instruction, MODEL);
   } catch (e) {
     console.error("strategos-refinement error", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
