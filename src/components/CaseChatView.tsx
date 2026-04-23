@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Copy, Diamond, History, Loader2, Send, Sparkles, User } from "lucide-react";
+import { Bot, ChevronDown, Copy, Diamond, History, Loader2, MessageSquare, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import type { CaseRow } from "@/hooks/useCases";
 import {
@@ -105,6 +106,9 @@ export function CaseChatView({ caseRow }: Props) {
         {/* V0 Initial situation */}
         <InitialBlock caseRow={caseRow} />
 
+        {/* Analyse einmalig (V1-fix), standardmäßig zugeklappt */}
+        <AnalysisAccordion caseId={caseRow.id} versions={versions} />
+
         {versionsLoading && versions.length === 0 ? (
           <Skeleton className="h-40 w-full" />
         ) : (
@@ -200,23 +204,18 @@ function VersionBlock({
   onRestore: () => void;
   restoring: boolean;
 }) {
-  const showUserBubble = version.kind !== "initial" && version.user_prompt;
+  const promptText =
+    version.kind === "initial"
+      ? "Erste Version aus dem Initial-Setup."
+      : version.user_prompt ?? "—";
+  const promptLabel =
+    version.kind === "initial"
+      ? "INITIAL"
+      : version.kind === "restore"
+        ? "RESTORE"
+        : "PROMPT";
   return (
     <div className="space-y-4">
-      {showUserBubble && (
-        <div className="flex justify-end">
-          <div className="max-w-[80%] bg-tertiary/10 border border-tertiary/30 rounded-sm px-4 py-3">
-            <div className="flex items-center gap-2 mb-1.5">
-              <User className="w-3 h-3 text-tertiary" />
-              <span className="font-mono-label text-tertiary text-[10px]">
-                {version.kind === "restore" ? "RESTORE" : "STRATEGIST"}
-              </span>
-            </div>
-            <p className="font-serif italic text-sm text-foreground/90">{version.user_prompt}</p>
-          </div>
-        </div>
-      )}
-
       <div className="bg-card border border-border/30 rounded-sm p-5">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <p className="font-mono-label text-primary flex items-center gap-2">
@@ -245,21 +244,14 @@ function VersionBlock({
         </div>
 
         <div className="grid lg:grid-cols-3 gap-4">
-          {/* Analysis */}
-          <div className="bg-background/50 border-l border-secondary/60 rounded-sm p-3">
-            <p className="font-mono-label text-secondary text-[10px] mb-2">ANALYSE</p>
-            {Array.isArray(version.analysis) && version.analysis.length > 0 ? (
-              <ul className="space-y-2 text-xs text-foreground/85 leading-relaxed">
-                {(version.analysis as string[]).map((it, i) => (
-                  <li key={i} className="flex gap-2">
-                    <Diamond className="w-2 h-2 text-secondary mt-1 shrink-0" fill="currentColor" />
-                    <span>{it}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="font-mono-label text-muted-foreground/60 text-[10px]">—</p>
-            )}
+          {/* Prompt */}
+          <div className="bg-background/50 border-l border-tertiary/60 rounded-sm p-3">
+            <p className="font-mono-label text-tertiary text-[10px] mb-2 flex items-center gap-1.5">
+              <MessageSquare className="w-2.5 h-2.5" /> {promptLabel}
+            </p>
+            <p className="font-serif italic text-xs text-foreground/85 leading-relaxed whitespace-pre-line">
+              {promptText}
+            </p>
           </div>
           {/* Strategy */}
           <div className="bg-background/50 border-l border-primary/60 rounded-sm p-3">
@@ -269,8 +261,8 @@ function VersionBlock({
             </p>
           </div>
           {/* Draft */}
-          <div className="bg-background/50 border-l border-tertiary/60 rounded-sm p-3">
-            <p className="font-mono-label text-tertiary text-[10px] mb-2">ENTWURF</p>
+          <div className="bg-background/50 border-l border-secondary/60 rounded-sm p-3">
+            <p className="font-mono-label text-secondary text-[10px] mb-2">ENTWURF</p>
             <p className="font-serif italic text-xs text-foreground/90 leading-relaxed whitespace-pre-line">
               {version.draft ?? "—"}
             </p>
@@ -307,6 +299,76 @@ function PendingBlock() {
         <Skeleton className="h-20" />
       </div>
     </div>
+  );
+}
+
+function AnalysisAccordion({
+  caseId,
+  versions,
+}: {
+  caseId: string;
+  versions: CaseVersionRow[];
+}) {
+  const v1 = versions[0];
+  const analysis = Array.isArray(v1?.analysis) ? (v1!.analysis as string[]) : [];
+  const storageKey = `case-analysis-seen:${caseId}`;
+
+  const initialOpen = useMemo(() => {
+    if (analysis.length === 0) return false;
+    if (typeof window === "undefined") return false;
+    const seen = window.localStorage.getItem(storageKey);
+    if (seen) return false;
+    return versions.length === 1 && v1?.kind === "initial";
+  }, [analysis.length, storageKey, versions.length, v1?.kind]);
+
+  const [open, setOpen] = useState(initialOpen);
+
+  // Mark as seen as soon as a second version exists, or when user toggled it once.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (versions.length > 1) {
+      window.localStorage.setItem(storageKey, "1");
+    }
+  }, [versions.length, storageKey]);
+
+  if (analysis.length === 0) return null;
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(storageKey, "1");
+    }
+  };
+
+  return (
+    <Collapsible open={open} onOpenChange={handleOpenChange}>
+      <div className="bg-card border-l-2 border-secondary rounded-sm">
+        <CollapsibleTrigger className="w-full flex items-center justify-between gap-3 p-4 group">
+          <div className="flex items-center gap-2">
+            <Diamond className="w-3 h-3 text-secondary" fill="currentColor" />
+            <span className="font-mono-label text-secondary">ANALYSE</span>
+            <span className="font-mono-label text-muted-foreground/70 text-[10px]">
+              · {analysis.length} {analysis.length === 1 ? "Punkt" : "Punkte"}
+            </span>
+          </div>
+          <ChevronDown
+            className={`w-4 h-4 text-secondary transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="px-4 pb-4 pt-1 border-t border-border/30">
+            <ul className="space-y-2 text-xs text-foreground/85 leading-relaxed mt-3">
+              {analysis.map((it, i) => (
+                <li key={i} className="flex gap-2">
+                  <Diamond className="w-2 h-2 text-secondary mt-1 shrink-0" fill="currentColor" />
+                  <span>{it}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 }
 
