@@ -47,11 +47,20 @@ export interface SingleCallParams {
   situationText: string;
   anthropicKey: string | null;
   lovableKey: string | null;
+  medium?: string;
+  languageLabel?: string;
+  attachmentsContext?: string;
 }
 
 export async function runSingleCall(params: SingleCallParams): Promise<StrategosResult> {
-  const { modelId, situationText } = params;
-  const userMessage = `Situation:\n"""\n${situationText}\n"""\n\nLiefere die strategische Auswertung.`;
+  const { modelId, situationText, medium, languageLabel, attachmentsContext } = params;
+  const userMessage = [
+    `Target language: ${languageLabel ?? "Deutsch"}`,
+    `Medium: ${medium ?? "email"}`,
+    `Situation:\n"""\n${situationText}\n"""`,
+    attachmentsContext ? `Reference documents:\n"""\n${attachmentsContext}\n"""` : null,
+    `Produce the strategic evaluation strictly in the target language and matching the medium conventions.`,
+  ].filter(Boolean).join("\n\n");
 
   // Provider-Auswahl anhand Model-Name
   if (modelId.startsWith("claude")) {

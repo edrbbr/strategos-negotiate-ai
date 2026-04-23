@@ -63,6 +63,9 @@ export interface MultiStageParams {
   anthropicKey: string | null;
   openaiKey: string | null;
   onStageComplete?: (p: StageCompletePayload) => Promise<void>;
+  medium?: string;
+  languageLabel?: string;
+  attachmentsContext?: string;
 }
 
 export interface MultiStageResult {
@@ -79,7 +82,10 @@ function getStage(cfg: PipelineConfig, name: string) {
 export async function runMultiStagePipeline(
   params: MultiStageParams,
 ): Promise<MultiStageResult> {
-  const { config, situationText, anthropicKey, openaiKey, onStageComplete } = params;
+  const { config, situationText, anthropicKey, openaiKey, onStageComplete, medium, languageLabel, attachmentsContext } = params;
+  const langLine = `Target language: ${languageLabel ?? "Deutsch"}`;
+  const mediumLine = `Medium: ${medium ?? "email"}`;
+  const attachLine = attachmentsContext ? `\n\nReference documents:\n"""\n${attachmentsContext}\n"""` : "";
   const stageMetas: StageMeta[] = [];
 
   // ---- Stage 1: Analysis ----
@@ -94,7 +100,7 @@ export async function runMultiStagePipeline(
       apiKey: anthropicKey!,
       model: s1.model,
       systemPrompt: PROMPT_ANALYSIS,
-      userMessage: `Situation:\n"""\n${situationText}\n"""`,
+      userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""${attachLine}`,
       tool: {
         name: "return_analysis",
         description: "Return the analysis bullets.",
@@ -121,7 +127,7 @@ export async function runMultiStagePipeline(
       apiKey: openaiKey!,
       model: s2.model,
       systemPrompt: PROMPT_STRATEGY,
-      userMessage: `Situation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.map((b) => "- " + b).join("\n")}`,
+      userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.map((b) => "- " + b).join("\n")}${attachLine}`,
       tool: {
         type: "function",
         function: {
@@ -148,7 +154,7 @@ export async function runMultiStagePipeline(
       apiKey: anthropicKey!,
       model: s3.model,
       systemPrompt: PROMPT_DRAFT,
-      userMessage: `Situation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}`,
+      userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}${attachLine}`,
       tool: {
         name: "return_draft",
         description: "Return the final draft, title and icon hint.",
