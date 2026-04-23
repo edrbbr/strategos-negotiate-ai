@@ -1,9 +1,13 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useStripeCheckout } from "@/hooks/useStripeCheckout";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   formatPrice,
   getPriceForCycle,
@@ -12,16 +16,17 @@ import {
   type PlanWithDetails,
 } from "@/hooks/usePlans";
 
-const ctaForPlan = (planId: string): { label: string; to: string } => {
-  switch (planId) {
-    case "free":
-      return { label: "STARTEN", to: "/register" };
-    case "elite":
-      return { label: "KONTAKTIEREN", to: "/register?plan=elite" };
-    case "pro":
-    default:
-      return { label: "JETZT SICHERN", to: "/register?plan=pro" };
-  }
+const lookupKeyFor = (planId: string, cycle: BillingCycle): string | null => {
+  if (planId === "pro") return cycle === "yearly" ? "pro_yearly" : "pro_monthly";
+  if (planId === "elite")
+    return cycle === "yearly" ? "elite_yearly" : "elite_monthly";
+  return null;
+};
+
+const ctaLabelFor = (planId: string): string => {
+  if (planId === "free") return "STARTEN";
+  if (planId === "elite") return "ELITE WERDEN";
+  return "JETZT SICHERN";
 };
 
 const calcYearlyDiscount = (plans: PlanWithDetails[]): number | null => {

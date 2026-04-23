@@ -19,6 +19,7 @@ import Settings from "./pages/Settings";
 import History from "./pages/History";
 import Execution from "./pages/Execution";
 import NotFound from "./pages/NotFound";
+import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <PaymentTestModeBanner />
           <Routes>
             {/* Public */}
             <Route path="/" element={<Landing />} />
