@@ -38,6 +38,39 @@ export function useCase(caseId: string | undefined) {
   });
 }
 
+/** List all cases for the current user, sorted by updated_at DESC. */
+export function useAllCases() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["cases", user?.id],
+    enabled: !!user,
+    queryFn: async (): Promise<CaseRow[]> => {
+      const { data, error } = await supabase
+        .from("cases")
+        .select("*")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as CaseRow[];
+    },
+  });
+}
+
+export interface CaseStats {
+  total: number;
+  open: number;
+  messages: number;
+}
+
+export function useCaseStats(): CaseStats {
+  const { data } = useAllCases();
+  const cases = data ?? [];
+  return {
+    total: cases.length,
+    open: cases.filter((c) => c.status === "draft" || c.status === "active").length,
+    messages: 0,
+  };
+}
+
 /** Subscribe to realtime UPDATEs on a single case while `enabled` is true. */
 export function useCaseRealtime(caseId: string | undefined, enabled: boolean) {
   const qc = useQueryClient();
