@@ -15,7 +15,7 @@ const PLANS_QUERY_KEY = ["plans"] as const;
 async function fetchPlans(): Promise<PlanWithDetails[]> {
   const [plansRes, pricesRes, featuresRes] = await Promise.all([
     supabase
-      .from("plans" as never)
+      .from("plans_public" as never)
       .select("*")
       .eq("is_active", true)
       .order("sort_order", { ascending: true }),

@@ -232,6 +232,13 @@ export type Database = {
             referencedRelation: "plans"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "plan_features_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       plan_prices: {
@@ -271,6 +278,13 @@ export type Database = {
             columns: ["plan_id"]
             isOneToOne: false
             referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_prices_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans_public"
             referencedColumns: ["id"]
           },
         ]
@@ -380,6 +394,13 @@ export type Database = {
             referencedRelation: "plans"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "profiles_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       subscriptions: {
@@ -432,7 +453,51 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      plans_public: {
+        Row: {
+          badge: string | null
+          case_limit: number | null
+          case_limit_type: string | null
+          created_at: string | null
+          id: string | null
+          is_active: boolean | null
+          is_recommended: boolean | null
+          name: string | null
+          sort_order: number | null
+          tagline: string | null
+          tier_label: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          badge?: string | null
+          case_limit?: number | null
+          case_limit_type?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_recommended?: boolean | null
+          name?: string | null
+          sort_order?: number | null
+          tagline?: string | null
+          tier_label?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          badge?: string | null
+          case_limit?: number | null
+          case_limit_type?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_recommended?: boolean | null
+          name?: string | null
+          sort_order?: number | null
+          tagline?: string | null
+          tier_label?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       increment_cases_used: { Args: { p_user_id: string }; Returns: number }
