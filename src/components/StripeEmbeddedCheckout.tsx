@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import {
   EmbeddedCheckoutProvider,
   EmbeddedCheckout,
@@ -13,13 +14,13 @@ interface StripeEmbeddedCheckoutProps {
   returnUrl: string;
 }
 
-export function StripeEmbeddedCheckoutComponent({
-  priceId,
-  quantity,
-  customerEmail,
-  userId,
-  returnUrl,
-}: StripeEmbeddedCheckoutProps) {
+export const StripeEmbeddedCheckoutComponent = forwardRef<
+  HTMLDivElement,
+  StripeEmbeddedCheckoutProps
+>(function StripeEmbeddedCheckoutComponent(
+  { priceId, quantity, customerEmail, userId, returnUrl },
+  ref,
+) {
   const fetchClientSecret = async (): Promise<string> => {
     const { data, error } = await supabase.functions.invoke("create-checkout", {
       body: {
@@ -32,7 +33,9 @@ export function StripeEmbeddedCheckoutComponent({
       },
     });
     if (error || !data?.clientSecret) {
-      throw new Error(error?.message || "Konnte Checkout-Session nicht erstellen");
+      throw new Error(
+        error?.message || "Konnte Checkout-Session nicht erstellen",
+      );
     }
     return data.clientSecret as string;
   };
@@ -40,7 +43,7 @@ export function StripeEmbeddedCheckoutComponent({
   const checkoutOptions = { fetchClientSecret };
 
   return (
-    <div id="stripe-checkout">
+    <div id="stripe-checkout" ref={ref}>
       <EmbeddedCheckoutProvider
         stripe={getStripe()}
         options={checkoutOptions}
@@ -49,4 +52,4 @@ export function StripeEmbeddedCheckoutComponent({
       </EmbeddedCheckoutProvider>
     </div>
   );
-}
+});

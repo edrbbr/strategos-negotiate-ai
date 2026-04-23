@@ -214,6 +214,9 @@ const Pricing = () => {
     });
   };
 
+  const isAuthed = !!user;
+  const freeCtaTo = isAuthed ? "/app/case/new" : "/register";
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="container flex items-center justify-between py-6">
@@ -301,6 +304,8 @@ const Pricing = () => {
                 cycle={cycle}
                 onCheckout={handleCheckout}
                 pendingPriceId={pendingPriceId}
+                isAuthed={isAuthed}
+                freeCtaTo={freeCtaTo}
               />
             ))}
           </div>
@@ -317,6 +322,12 @@ const Pricing = () => {
         }}
       >
         <DialogContent className="max-w-2xl bg-background border border-primary/30 p-6">
+          <VisuallyHidden>
+            <DialogTitle>Checkout</DialogTitle>
+            <DialogDescription>
+              Sicheres Bezahlen über Stripe.
+            </DialogDescription>
+          </VisuallyHidden>
           {checkoutElement}
         </DialogContent>
       </Dialog>
