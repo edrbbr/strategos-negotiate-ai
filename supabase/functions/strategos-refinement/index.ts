@@ -134,36 +134,41 @@ Deno.serve(async (req: Request) => {
       return await persistAndReply(service, caseRow, latest, newDraft, instruction, "mock");
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `Language: ${caseRow.language_label}\nMedium: ${caseRow.medium}\nOriginal situation:\n"""\n${caseRow.situation_text ?? ""}\n"""\n\nCurrent draft:\n"""\n${currentDraft}\n"""\n\nInstruction: ${instruction}\n\nReturn only the rewritten draft in ${caseRow.language_label}.`,
-          },
-        ],
-      }),
-    });
+    const buildUserContent = (extraNudge?: string) =>
+      `INSTRUCTION (highest priority):\n${instruction}\n\n` +
+      `LANGUAGE: ${caseRow.language_label}\n` +
+      `MEDIUM: ${caseRow.medium}\n\n` +
+      `ORIGINAL SITUATION:\n"""\n${caseRow.situation_text ?? ""}\n"""\n\n` +
+      `PREVIOUS DRAFT (rewrite this completely according to the instruction above):\n"""\n${currentDraft}\n"""\n\n` +
+      `Now return the fully rewritten draft in ${caseRow.language_label}.\n` +
+      `Do not start with the same opening as the previous draft unless the instruction explicitly asks for it.` +
+      (extraNudge ? `\n\n${extraNudge}` : "");
 
-    if (response.status === 429) return json({ error: "Rate limit" }, 429);
-    if (response.status === 402) return json({ error: "AI credits exhausted" }, 402);
-    if (!response.ok) {
-      const t = await response.text();
-      console.error("Refinement gateway error", response.status, t);
+    let result = await callGateway(LOVABLE_API_KEY, SYSTEM_PROMPT, buildUserContent());
+    if (!result.ok) {
+      if (result.status === 429) return json({ error: "Rate limit" }, 429);
+      if (result.status === 402) return json({ error: "AI credits exhausted" }, 402);
+      console.error("Refinement gateway error", result.status, result.body);
       return json({ error: "Gateway error" }, 500);
     }
-
-    const data = await response.json();
-    const newDraft: string = (data?.choices?.[0]?.message?.content ?? "").trim();
+    let newDraft = result.text;
     if (!newDraft) return json({ error: "Empty draft" }, 500);
-    return await persistAndReply(service, caseRow, latest, newDraft, instruction, "google/gemini-2.5-flash-lite");
+
+    // Sanity check: if too similar to the previous draft, retry once with a stronger nudge.
+    const sim = similarityRatio(newDraft, currentDraft);
+    if (sim > 0.85) {
+      console.log("Refinement too similar (ratio=", sim, "), retrying with stronger nudge");
+      const retry = await callGateway(
+        LOVABLE_API_KEY,
+        SYSTEM_PROMPT,
+        buildUserContent(
+          "The previous attempt was too similar to the old draft. Rewrite more boldly: change structure, opening, and wording.",
+        ),
+      );
+      if (retry.ok && retry.text) newDraft = retry.text;
+    }
+
+    return await persistAndReply(service, caseRow, latest, newDraft, instruction, MODEL);
   } catch (e) {
     console.error("strategos-refinement error", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
