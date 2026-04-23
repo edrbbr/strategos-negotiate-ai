@@ -31,13 +31,31 @@ const FULL_TOOL_PARAMS = {
 
 const VALID_ICONS: IconHint[] = ["car", "home", "cash", "document", "briefcase", "handshake"];
 
+function unwrapStrategy(raw: unknown): string {
+  let s = String(raw ?? "").trim();
+  for (let i = 0; i < 3; i++) {
+    if (!s.startsWith("{")) break;
+    try {
+      const parsed = JSON.parse(s);
+      if (parsed && typeof parsed === "object" && typeof parsed.strategy === "string") {
+        s = parsed.strategy.trim();
+        continue;
+      }
+      break;
+    } catch {
+      break;
+    }
+  }
+  return s;
+}
+
 function coerce(out: Record<string, unknown>): StrategosResult {
   const icon = String(out.icon_hint ?? "briefcase") as IconHint;
   return {
     title: String(out.title ?? "Neuer Fall").slice(0, 80),
     icon_hint: VALID_ICONS.includes(icon) ? icon : "briefcase",
     analysis: Array.isArray(out.analysis) ? out.analysis.map(String) : [],
-    strategy: String(out.strategy ?? ""),
+    strategy: unwrapStrategy(out.strategy),
     draft: String(out.draft ?? ""),
   };
 }

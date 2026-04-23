@@ -46,6 +46,30 @@ const DRAFT_SCHEMA = {
 
 const VALID_ICONS: IconHint[] = ["car", "home", "cash", "document", "briefcase", "handshake"];
 
+/**
+ * Defensive unwrapping for strategy strings.
+ * Some providers occasionally return tool-call output where the inner field
+ * is itself a JSON-encoded string like `{"strategy":"..."}`. We strip that wrapper
+ * so consumers always see plain text.
+ */
+function unwrapStrategy(raw: unknown): string {
+  let s = String(raw ?? "").trim();
+  for (let i = 0; i < 3; i++) {
+    if (!s.startsWith("{")) break;
+    try {
+      const parsed = JSON.parse(s);
+      if (parsed && typeof parsed === "object" && typeof parsed.strategy === "string") {
+        s = parsed.strategy.trim();
+        continue;
+      }
+      break;
+    } catch {
+      break;
+    }
+  }
+  return s;
+}
+
 export interface StageCompletePayload {
   stage: 'analysis' | 'strategy' | 'draft';
   data: {
@@ -158,7 +182,7 @@ export async function runMultiStagePipeline(
         },
       });
       stageMetas.push({ stage: "strategy", model: "google/gemini-2.5-flash", latency_ms: Date.now() - t2 });
-      const strategy = String(strategyOut.strategy ?? "");
+      const strategy = unwrapStrategy(strategyOut.strategy);
       await onStageComplete?.({ stage: "strategy", data: { strategy } });
 
       const s3 = getStage(config, "draft");
@@ -209,7 +233,7 @@ export async function runMultiStagePipeline(
     throw stageError("strategy", ["analysis"], e);
   }
   const lat2 = Date.now() - t2;
-  const strategy = String(strategyOut.strategy ?? "");
+  const strategy = unwrapStrategy(strategyOut.strategy);
   stageMetas.push({ stage: "strategy", model: s2.model, latency_ms: lat2 });
   await onStageComplete?.({ stage: "strategy", data: { strategy } });
 
