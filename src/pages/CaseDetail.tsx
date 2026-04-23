@@ -1,13 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AlertCircle, Bot, ChevronDown, Copy, Diamond, Loader2, RefreshCcw, Send, Sparkles, Star, Upload } from "lucide-react";
+import { Bot, Check, ChevronDown, ChevronsUpDown, Copy, Diamond, Loader2, Send, Sparkles, Star, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+import { LANGUAGES, MEDIUMS } from "@/lib/languages";
 import { supabase } from "@/integrations/supabase/client";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCase, useCaseRealtime, useCreateCase, useUpdateCase } from "@/hooks/useCases";
+import {
+  useCaseAttachments,
+  useDeleteAttachment,
+  useUploadAttachment,
+  type CaseAttachment,
+} from "@/hooks/useCaseAttachments";
 
 type StageState = "pending" | "running" | "complete" | "failed";
 type Tier = "free" | "pro" | "elite";
