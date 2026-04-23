@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, ChevronDown, Copy, Diamond, History, Loader2, MessageSquare, Send, Sparkles, User } from "lucide-react";
+import { Bot, ChevronDown, Copy, Diamond, History, Loader2, MessageSquare, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
