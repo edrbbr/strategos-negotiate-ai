@@ -2,3 +2,6 @@ project_id = "wdvtnqxtsnpgylnvqcfv"
 
 [functions.strategos-ai-router]
 verify_jwt = false
+
+[functions.strategos-refinement]
+verify_jwt = false
