@@ -1,8 +1,11 @@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Hexagon, Diamond } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Hexagon, Diamond, Loader2 } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useStripeCheckout } from "@/hooks/useStripeCheckout";
 import {
   formatPrice,
   getPriceForCycle,
@@ -77,11 +80,33 @@ const SkeletonTierCard = () => (
 
 export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
   const { data: plans, isLoading, isError, refetch } = usePlans();
+  const { user, profile } = useAuth();
+  const navigate = useNavigate();
+  const { openCheckout, closeCheckout, isOpen, checkoutElement } =
+    useStripeCheckout();
+  const [pending, setPending] = useState(false);
   const upgradePlans = (plans ?? []).filter(
     (p) => p.id === "pro" || p.id === "elite",
   );
 
+  const handleUpgrade = () => {
+    const priceId = "pro_monthly";
+    if (!user) {
+      onOpenChange(false);
+      navigate(`/register?intent=checkout&price_id=${priceId}`);
+      return;
+    }
+    setPending(true);
+    openCheckout({
+      priceId,
+      customerEmail: user.email ?? undefined,
+      userId: user.id,
+      returnUrl: `${window.location.origin}/app/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+    });
+  };
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl bg-card border border-primary/30 rounded-sm p-12">
         <div className="text-center mb-10">
@@ -141,11 +166,22 @@ export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
           </div>
         )}
 
-        <Link to="/register?plan=pro" onClick={() => onOpenChange(false)}>
-          <Button variant="gold" size="xl" className="w-full mb-3">
-            PRO WERDEN
-          </Button>
-        </Link>
+        <Button
+          variant="gold"
+          size="xl"
+          className="w-full mb-3"
+          onClick={handleUpgrade}
+          disabled={pending}
+        >
+          {pending ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              CHECKOUT WIRD GEÖFFNET…
+            </>
+          ) : (
+            "PRO WERDEN"
+          )}
+        </Button>
         <button
           onClick={() => onOpenChange(false)}
           className="block mx-auto font-serif italic text-sm text-muted-foreground hover:text-primary"
@@ -154,5 +190,19 @@ export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
         </button>
       </DialogContent>
     </Dialog>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(o) => {
+        if (!o) {
+          closeCheckout();
+          setPending(false);
+        }
+      }}
+    >
+      <DialogContent className="max-w-2xl bg-background border border-primary/30 p-6">
+        {checkoutElement}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 };

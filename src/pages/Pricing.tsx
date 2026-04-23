@@ -1,9 +1,13 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useStripeCheckout } from "@/hooks/useStripeCheckout";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   formatPrice,
   getPriceForCycle,
@@ -12,16 +16,17 @@ import {
   type PlanWithDetails,
 } from "@/hooks/usePlans";
 
-const ctaForPlan = (planId: string): { label: string; to: string } => {
-  switch (planId) {
-    case "free":
-      return { label: "STARTEN", to: "/register" };
-    case "elite":
-      return { label: "KONTAKTIEREN", to: "/register?plan=elite" };
-    case "pro":
-    default:
-      return { label: "JETZT SICHERN", to: "/register?plan=pro" };
-  }
+const lookupKeyFor = (planId: string, cycle: BillingCycle): string | null => {
+  if (planId === "pro") return cycle === "yearly" ? "pro_yearly" : "pro_monthly";
+  if (planId === "elite")
+    return cycle === "yearly" ? "elite_yearly" : "elite_monthly";
+  return null;
+};
+
+const ctaLabelFor = (planId: string): string => {
+  if (planId === "free") return "STARTEN";
+  if (planId === "elite") return "ELITE WERDEN";
+  return "JETZT SICHERN";
 };
 
 const calcYearlyDiscount = (plans: PlanWithDetails[]): number | null => {
@@ -38,14 +43,20 @@ const calcYearlyDiscount = (plans: PlanWithDetails[]): number | null => {
 const PlanCard = ({
   plan,
   cycle,
+  onCheckout,
+  pendingPriceId,
 }: {
   plan: PlanWithDetails;
   cycle: BillingCycle;
+  onCheckout: (planId: string, cycle: BillingCycle) => void;
+  pendingPriceId: string | null;
 }) => {
   const price = getPriceForCycle(plan, cycle);
   const monthly = getPriceForCycle(plan, "monthly");
-  const cta = ctaForPlan(plan.id);
   const featured = plan.is_recommended;
+  const lookupKey = lookupKeyFor(plan.id, cycle);
+  const isFree = plan.id === "free";
+  const isPending = lookupKey !== null && pendingPriceId === lookupKey;
 
   const showEffective =
     cycle === "yearly" && price && price.amount_cents > 0;
@@ -102,15 +113,34 @@ const PlanCard = ({
           </li>
         ))}
       </ul>
-      <Link to={cta.to}>
+      {isFree ? (
+        <Link to="/register">
+          <Button
+            variant={featured ? "gold" : "gold-outline"}
+            className="w-full"
+            size="lg"
+          >
+            {ctaLabelFor(plan.id)}
+          </Button>
+        </Link>
+      ) : (
         <Button
           variant={featured ? "gold" : "gold-outline"}
           className="w-full"
           size="lg"
+          disabled={isPending || !lookupKey}
+          onClick={() => onCheckout(plan.id, cycle)}
         >
-          {cta.label}
+          {isPending ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              LADEN…
+            </>
+          ) : (
+            ctaLabelFor(plan.id)
+          )}
         </Button>
-      </Link>
+      )}
       {monthly && cycle === "yearly" && monthly.amount_cents > 0 && (
         <p className="mt-3 text-[10px] text-muted-foreground/60 text-center font-sans uppercase tracking-[0.18em]">
           Statt {formatPrice(monthly.amount_cents, monthly.currency)} / Monat
@@ -146,8 +176,31 @@ const ErrorState = ({ onRetry }: { onRetry: () => void }) => (
 const Pricing = () => {
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const { data: plans, isLoading, isError, refetch } = usePlans();
+  const navigate = useNavigate();
+  const { user, profile } = useAuth();
+  const { openCheckout, closeCheckout, isOpen, checkoutElement } =
+    useStripeCheckout();
+  const [pendingPriceId, setPendingPriceId] = useState<string | null>(null);
 
   const discount = plans ? calcYearlyDiscount(plans) : null;
+
+  const handleCheckout = (planId: string, c: BillingCycle) => {
+    const priceId = lookupKeyFor(planId, c);
+    if (!priceId) return;
+    if (!user) {
+      navigate(
+        `/register?intent=checkout&price_id=${encodeURIComponent(priceId)}`,
+      );
+      return;
+    }
+    setPendingPriceId(priceId);
+    openCheckout({
+      priceId,
+      customerEmail: user.email ?? profile?.full_name ?? undefined,
+      userId: user.id,
+      returnUrl: `${window.location.origin}/app/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -230,11 +283,31 @@ const Pricing = () => {
         {!isLoading && !isError && plans && plans.length > 0 && (
           <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {plans.map((plan) => (
-              <PlanCard key={plan.id} plan={plan} cycle={cycle} />
+              <PlanCard
+                key={plan.id}
+                plan={plan}
+                cycle={cycle}
+                onCheckout={handleCheckout}
+                pendingPriceId={pendingPriceId}
+              />
             ))}
           </div>
         )}
       </section>
+
+      <Dialog
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeCheckout();
+            setPendingPriceId(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl bg-background border border-primary/30 p-6">
+          {checkoutElement}
+        </DialogContent>
+      </Dialog>
 
       <footer className="container py-10 border-t border-border/40 flex flex-col md:flex-row gap-4 justify-between items-center text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
         <Logo />
