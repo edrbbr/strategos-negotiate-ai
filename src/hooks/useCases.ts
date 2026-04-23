@@ -1,0 +1,100 @@
+import { useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+
+export type CaseIcon = "car" | "home" | "cash" | "document" | "briefcase" | "handshake";
+export type CaseStatus = "draft" | "active" | "archived";
+
+export interface CaseRow {
+  id: string;
+  user_id: string;
+  title: string;
+  icon_hint: CaseIcon;
+  situation_text: string | null;
+  analysis: string[] | null;
+  strategy: string | null;
+  draft: string | null;
+  model_used: string | null;
+  status: CaseStatus;
+  last_analyzed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function useCase(caseId: string | undefined) {
+  return useQuery({
+    queryKey: ["case", caseId],
+    enabled: !!caseId && caseId !== "new",
+    queryFn: async (): Promise<CaseRow | null> => {
+      const { data, error } = await supabase
+        .from("cases")
+        .select("*")
+        .eq("id", caseId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as CaseRow | null;
+    },
+  });
+}
+
+/** Subscribe to realtime UPDATEs on a single case while `enabled` is true. */
+export function useCaseRealtime(caseId: string | undefined, enabled: boolean) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!enabled || !caseId || caseId === "new") return;
+    const channel = supabase
+      .channel(`case:${caseId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "cases",
+          filter: `id=eq.${caseId}`,
+        },
+        (payload) => {
+          qc.setQueryData(["case", caseId], payload.new as CaseRow);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [caseId, enabled, qc]);
+}
+
+export function useCreateCase() {
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (): Promise<CaseRow> => {
+      if (!user) throw new Error("Not authenticated");
+      const { data, error } = await supabase
+        .from("cases")
+        .insert({ user_id: user.id })
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data as CaseRow;
+    },
+  });
+}
+
+export function useUpdateCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { id: string; patch: Partial<CaseRow> }) => {
+      const { data, error } = await supabase
+        .from("cases")
+        .update(params.patch)
+        .eq("id", params.id)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data as CaseRow;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(["case", data.id], data);
+    },
+  });
+}
