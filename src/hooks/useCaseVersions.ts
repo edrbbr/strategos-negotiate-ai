@@ -39,7 +39,7 @@ export function useCaseVersions(caseId: string | undefined) {
   useEffect(() => {
     if (!caseId || caseId === "new") return;
     const channel = supabase
-      .channel(`case-versions:${caseId}`)
+      .channel(`case-versions:${caseId}:${Math.random().toString(36).slice(2)}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "case_versions", filter: `case_id=eq.${caseId}` },
