@@ -176,8 +176,31 @@ const ErrorState = ({ onRetry }: { onRetry: () => void }) => (
 const Pricing = () => {
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const { data: plans, isLoading, isError, refetch } = usePlans();
+  const navigate = useNavigate();
+  const { user, profile } = useAuth();
+  const { openCheckout, closeCheckout, isOpen, checkoutElement } =
+    useStripeCheckout();
+  const [pendingPriceId, setPendingPriceId] = useState<string | null>(null);
 
   const discount = plans ? calcYearlyDiscount(plans) : null;
+
+  const handleCheckout = (planId: string, c: BillingCycle) => {
+    const priceId = lookupKeyFor(planId, c);
+    if (!priceId) return;
+    if (!user) {
+      navigate(
+        `/register?intent=checkout&price_id=${encodeURIComponent(priceId)}`,
+      );
+      return;
+    }
+    setPendingPriceId(priceId);
+    openCheckout({
+      priceId,
+      customerEmail: user.email ?? profile?.full_name ?? undefined,
+      userId: user.id,
+      returnUrl: `${window.location.origin}/app/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -260,11 +283,31 @@ const Pricing = () => {
         {!isLoading && !isError && plans && plans.length > 0 && (
           <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {plans.map((plan) => (
-              <PlanCard key={plan.id} plan={plan} cycle={cycle} />
+              <PlanCard
+                key={plan.id}
+                plan={plan}
+                cycle={cycle}
+                onCheckout={handleCheckout}
+                pendingPriceId={pendingPriceId}
+              />
             ))}
           </div>
         )}
       </section>
+
+      <Dialog
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeCheckout();
+            setPendingPriceId(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl bg-background border border-primary/30 p-6">
+          {checkoutElement}
+        </DialogContent>
+      </Dialog>
 
       <footer className="container py-10 border-t border-border/40 flex flex-col md:flex-row gap-4 justify-between items-center text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
         <Logo />
