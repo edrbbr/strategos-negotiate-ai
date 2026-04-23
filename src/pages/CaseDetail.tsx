@@ -331,6 +331,10 @@ const CaseDetail = () => {
 
   const analysisItems = useMemo(() => caseRow?.analysis ?? [], [caseRow?.analysis]);
 
+  // Versions drive whether we show the input form or the chat view.
+  const { data: versions = [] } = useCaseVersions(caseId);
+  const hasVersions = versions.length > 0;
+
   return (
     <div className="animate-fade-in">
       {/* Header bar */}
@@ -357,12 +361,17 @@ const CaseDetail = () => {
       </div>
 
       {/* Progress phases — colored by stage state */}
-      <div className="grid grid-cols-3 gap-2 mb-10">
+      {!hasVersions && (
+        <div className="grid grid-cols-3 gap-2 mb-10">
         <div className={segmentClass(stageState.analysis, "secondary")} />
         <div className={segmentClass(stageState.strategy, "primary")} />
         <div className={segmentClass(stageState.draft, "tertiary")} />
-      </div>
+        </div>
+      )}
 
+      {hasVersions && caseRow ? (
+        <CaseChatView caseRow={caseRow as Parameters<typeof CaseChatView>[0]["caseRow"]} />
+      ) : (
       <div className="grid lg:grid-cols-2 gap-10">
         {/* Left column */}
         <div className="space-y-8">
