@@ -99,7 +99,10 @@ export async function callOpenAI(
       console.error("OpenAI JSON parse failed", argsStr, e);
       throw new ProviderError("Bad JSON in tool_call", 500, "PARSE_ERROR", "openai");
     }
-  } finally {
-    clearTimeout(timer);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new ProviderError("OpenAI request timed out", 504, "TIMEOUT", "openai");
+    }
+    throw e;
   }
 }
