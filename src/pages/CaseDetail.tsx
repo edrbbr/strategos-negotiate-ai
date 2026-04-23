@@ -53,41 +53,25 @@ const CaseDetail = () => {
   const { user, profile, refreshProfile } = useAuth();
   const tier = tierFromPlanId(profile?.plan_id);
   const isMultiStage = tier === "elite";
+  const maxAttachments = tier === "free" ? 1 : 10;
 
-  // ---- Resolve / create case ----
+  // ---- Case id / loaders ----
   const createMut = useCreateCase();
-  const hasAttemptedCreate = useRef(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-
-  const triggerCreate = () => {
-    setCreateError(null);
-    hasAttemptedCreate.current = true;
-    createMut.mutate(undefined, {
-      onSuccess: (c) => navigate(`/app/case/${c.id}`, { replace: true }),
-      onError: (e) => {
-        const msg = (e as Error).message ?? "Unbekannter Fehler";
-        setCreateError(msg);
-        toast.error(`Fall konnte nicht angelegt werden: ${msg}`);
-        // Allow retry on next render
-        hasAttemptedCreate.current = false;
-      },
-    });
-  };
-
-  useEffect(() => {
-    if (routeId !== "new") return;
-    if (!user) return; // wait for auth rehydration
-    if (hasAttemptedCreate.current) return; // strict-mode guard
-    triggerCreate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeId, user?.id]);
-
+  const uploadMut = useUploadAttachment();
+  const deleteAttMut = useDeleteAttachment();
   const caseId = routeId !== "new" ? routeId : undefined;
   const { data: caseRow } = useCase(caseId);
   const updateMut = useUpdateCase();
+  const { data: serverAttachments } = useCaseAttachments(caseId);
 
   // ---- Local state ----
   const [situation, setSituation] = useState("");
+  const [medium, setMedium] = useState<string>("email");
+  const [languageCode, setLanguageCode] = useState<string>("de");
+  const [languageLabel, setLanguageLabel] = useState<string>("Deutsch");
+  const [langOpen, setLangOpen] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [refinement, setRefinement] = useState("");
   const [refining, setRefining] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -99,9 +83,16 @@ const CaseDetail = () => {
   });
   const [stageMeta, setStageMeta] = useState<{ failed_at?: "analysis"|"strategy"|"draft"; error?: string }>({});
 
-  // Hydrate situation textarea once when case loads
+  // Hydrate form once when case loads
   useEffect(() => {
-    if (caseRow?.situation_text && situation === "") setSituation(caseRow.situation_text);
+    if (!caseRow) return;
+    if (caseRow.situation_text && situation === "") setSituation(caseRow.situation_text);
+    const mediumVal = (caseRow as unknown as { medium?: string }).medium;
+    const langCode = (caseRow as unknown as { language_code?: string }).language_code;
+    const langLabel = (caseRow as unknown as { language_label?: string }).language_label;
+    if (mediumVal) setMedium(mediumVal);
+    if (langCode) setLanguageCode(langCode);
+    if (langLabel) setLanguageLabel(langLabel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseRow?.id]);
 
