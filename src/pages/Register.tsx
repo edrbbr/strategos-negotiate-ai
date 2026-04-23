@@ -1,8 +1,9 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Logo } from "@/components/Logo";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -54,17 +55,29 @@ const Register = () => {
 
   const handleGoogle = async () => {
     setLoading(true);
-    const { error: err } = await signInWithGoogle();
+    setError(null);
+    const { error: err, redirected } = await signInWithGoogle();
+    if (redirected) {
+      // Browser is navigating away — keep spinner until unload.
+      return;
+    }
     if (err) {
       setError(err);
       setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       <div className="hidden lg:flex flex-col justify-between p-12 border-r border-border/40 scanline-bg">
-        <span className="font-mono-label text-muted-foreground">Elite Verhandlungs-System // V.6.0</span>
+        <div className="flex items-center justify-between">
+          <Link to="/" aria-label="Zur Startseite">
+            <Logo />
+          </Link>
+          <span className="font-mono-label text-muted-foreground">V.6.0</span>
+        </div>
         <div>
           <p className="font-mono-label text-primary mb-6">Sovereign Intelligence</p>
           <h1 className="font-serif italic text-primary text-7xl xl:text-8xl font-semibold tracking-tight mb-10">
@@ -83,6 +96,13 @@ const Register = () => {
 
       <div className="flex items-center justify-center p-8 lg:p-12">
         <div className="w-full max-w-md">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 font-mono-label text-muted-foreground hover:text-primary mb-6 transition-colors lg:hidden"
+          >
+            <ArrowLeft className="w-3 h-3" />
+            Zurück zur Startseite
+          </Link>
           <h1 className="font-serif text-5xl mb-2">Create Account</h1>
           <p className="font-serif italic text-muted-foreground mb-10">Initialize your sovereign profile</p>
 
