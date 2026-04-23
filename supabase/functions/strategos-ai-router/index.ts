@@ -280,6 +280,12 @@ Deno.serve(async (req: Request) => {
         data: { title: m.title, icon_hint: m.icon_hint, draft: m.draft, model_used: "mock" },
       });
       const cases_used = await incrementCounter();
+      await persistInitialVersion({
+        analysis: m.analysis,
+        strategy: m.strategy,
+        draft: m.draft,
+        model_used: "mock",
+      });
       return json({
         ...m,
         model: "mock",
@@ -310,6 +316,12 @@ Deno.serve(async (req: Request) => {
         });
         const total = Date.now() - t0;
         const cases_used = await incrementCounter();
+        await persistInitialVersion({
+          analysis: result.analysis,
+          strategy: result.strategy,
+          draft: result.draft,
+          model_used: "multi_stage_elite",
+        });
         return json({
           ...result,
           model: "multi_stage_elite",
@@ -373,6 +385,12 @@ Deno.serve(async (req: Request) => {
       const stageMetas: StageMeta[] = [
         { stage: "analysis", model: plan.model_id, latency_ms: total },
       ];
+      await persistInitialVersion({
+        analysis: result.analysis,
+        strategy: result.strategy,
+        draft: result.draft,
+        model_used: plan.model_id,
+      });
       return json({
         ...result,
         model: plan.model_id,
