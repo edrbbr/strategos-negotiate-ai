@@ -1,4 +1,5 @@
 import { callAnthropic } from "../providers/anthropic.ts";
+import { callGemini } from "../providers/gemini.ts";
 import { callOpenAI } from "../providers/openai.ts";
 import {
   PROMPT_ANALYSIS,
@@ -62,6 +63,7 @@ export interface MultiStageParams {
   situationText: string;
   anthropicKey: string | null;
   openaiKey: string | null;
+  lovableKey?: string | null;
   onStageComplete?: (p: StageCompletePayload) => Promise<void>;
   medium?: string;
   languageLabel?: string;
@@ -82,7 +84,7 @@ function getStage(cfg: PipelineConfig, name: string) {
 export async function runMultiStagePipeline(
   params: MultiStageParams,
 ): Promise<MultiStageResult> {
-  const { config, situationText, anthropicKey, openaiKey, onStageComplete, medium, languageLabel, attachmentsContext } = params;
+  const { config, situationText, anthropicKey, openaiKey, lovableKey, onStageComplete, medium, languageLabel, attachmentsContext } = params;
   const langLine = `Target language: ${languageLabel ?? "Deutsch"}`;
   const mediumLine = `Medium: ${medium ?? "email"}`;
   const attachLine = attachmentsContext ? `\n\nReference documents:\n"""\n${attachmentsContext}\n"""` : "";
