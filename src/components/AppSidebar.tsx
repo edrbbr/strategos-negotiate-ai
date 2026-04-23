@@ -60,7 +60,7 @@ export const AppSidebar = () => {
           {navItems.map((item) => {
             const isActive = location.pathname === item.to || (item.to.includes('/case/') && location.pathname.includes('/case/'));
             return (
-              <li key={item.to} className="relative">
+              <li key={item.label} className="relative">
                 {isActive && <span className="absolute -left-6 top-0 bottom-0 w-0.5 bg-primary" />}
                 <NavLink
                   to={item.to}

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Bot, ChevronDown, Copy, Diamond, Loader2, Send, Sparkles, Star, Upload } from "lucide-react";
+import { AlertCircle, Bot, ChevronDown, Copy, Diamond, Loader2, RefreshCcw, Send, Sparkles, Star, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -33,21 +33,37 @@ const STAGE_LABELS = {
 const CaseDetail = () => {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
-  const { profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const tier = tierFromPlanId(profile?.plan_id);
   const isMultiStage = tier === "elite";
 
   // ---- Resolve / create case ----
   const createMut = useCreateCase();
+  const hasAttemptedCreate = useRef(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const triggerCreate = () => {
+    setCreateError(null);
+    hasAttemptedCreate.current = true;
+    createMut.mutate(undefined, {
+      onSuccess: (c) => navigate(`/app/case/${c.id}`, { replace: true }),
+      onError: (e) => {
+        const msg = (e as Error).message ?? "Unbekannter Fehler";
+        setCreateError(msg);
+        toast.error(`Fall konnte nicht angelegt werden: ${msg}`);
+        // Allow retry on next render
+        hasAttemptedCreate.current = false;
+      },
+    });
+  };
+
   useEffect(() => {
-    if (routeId === "new") {
-      createMut.mutate(undefined, {
-        onSuccess: (c) => navigate(`/app/case/${c.id}`, { replace: true }),
-        onError: (e) => toast.error(`Fall konnte nicht angelegt werden: ${(e as Error).message}`),
-      });
-    }
+    if (routeId !== "new") return;
+    if (!user) return; // wait for auth rehydration
+    if (hasAttemptedCreate.current) return; // strict-mode guard
+    triggerCreate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeId]);
+  }, [routeId, user?.id]);
 
   const caseId = routeId !== "new" ? routeId : undefined;
   const { data: caseRow } = useCase(caseId);
@@ -286,26 +302,68 @@ const CaseDetail = () => {
             </div>
           </div>
 
-          <Button
-            variant="gold"
-            size="xl"
-            className="w-full"
-            onClick={runPipeline}
-            disabled={loading || !caseId}
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                {isMultiStage ? "Multi-Stage Pipeline läuft…" : "Analyzing power dynamics…"}
-              </span>
-            ) : (
-              <>▸ Pipeline Starten</>
-            )}
-          </Button>
+          {(() => {
+            const isCreating = routeId === "new" && !caseId && !createError;
+            const tooShort = situation.trim().length < 10;
+            const disabled = loading || !caseId || isCreating || tooShort;
+            const reason = createError
+              ? null
+              : isCreating
+                ? "Fall wird vorbereitet…"
+                : !caseId
+                  ? "Fall wird vorbereitet…"
+                  : tooShort
+                    ? `Bitte mindestens 10 Zeichen eingeben (${situation.trim().length}/10).`
+                    : null;
+            return (
+              <>
+                <Button
+                  variant="gold"
+                  size="xl"
+                  className="w-full"
+                  onClick={runPipeline}
+                  disabled={disabled}
+                >
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {isMultiStage ? "Multi-Stage Pipeline läuft…" : "Analyzing power dynamics…"}
+                    </span>
+                  ) : isCreating ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Fall wird angelegt…
+                    </span>
+                  ) : (
+                    <>▸ Pipeline Starten</>
+                  )}
+                </Button>
 
-          {loading && !isMultiStage && (
-            <p className="text-center font-mono-label text-muted-foreground/70">Analyse wird durchgeführt…</p>
-          )}
+                {reason && !loading && (
+                  <p className="text-center font-mono-label text-muted-foreground/70 mt-2">
+                    {reason}
+                  </p>
+                )}
+
+                {createError && (
+                  <div className="mt-3 border border-destructive/40 bg-destructive/5 rounded-sm p-4 flex items-start gap-3">
+                    <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-mono-label text-destructive mb-1">Fall konnte nicht angelegt werden</p>
+                      <p className="text-sm text-muted-foreground mb-3">{createError}</p>
+                      <Button variant="gold-outline" size="sm" onClick={triggerCreate}>
+                        <RefreshCcw className="w-3.5 h-3.5" /> Erneut versuchen
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {loading && !isMultiStage && (
+                  <p className="text-center font-mono-label text-muted-foreground/70 mt-2">Analyse wird durchgeführt…</p>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* Right column */}
