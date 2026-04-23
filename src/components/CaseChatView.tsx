@@ -38,6 +38,29 @@ function useStrategyLabels() {
   });
 }
 
+/**
+ * Defensive renderer for strategy text — unwraps any historical
+ * `{"strategy":"..."}` JSON wrappers so users always see plain text.
+ */
+function renderStrategy(raw: string | null | undefined): string {
+  let s = (raw ?? "").trim();
+  if (!s) return "—";
+  for (let i = 0; i < 3; i++) {
+    if (!s.startsWith("{")) break;
+    try {
+      const parsed = JSON.parse(s);
+      if (parsed && typeof parsed === "object" && typeof parsed.strategy === "string") {
+        s = parsed.strategy.trim();
+        continue;
+      }
+      break;
+    } catch {
+      break;
+    }
+  }
+  return s || "—";
+}
+
 interface Props {
   caseRow: CaseRow & {
     medium?: string;
@@ -257,7 +280,7 @@ function VersionBlock({
           <div className="bg-background/50 border-l border-primary/60 rounded-sm p-3">
             <p className="font-mono-label text-primary text-[10px] mb-2">STRATEGIE</p>
             <p className="text-xs text-foreground/85 leading-relaxed whitespace-pre-line">
-              {version.strategy ?? "—"}
+              {renderStrategy(version.strategy)}
             </p>
           </div>
           {/* Draft */}

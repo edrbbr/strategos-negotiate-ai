@@ -31,6 +31,28 @@ Hard rules:
 - Output ONLY the rewritten draft text. No preamble, no labels, no explanation, no markdown fences.`;
 
 const MODEL = "google/gemini-2.5-flash";
+const CLASSIFIER_MODEL = "google/gemini-2.5-flash-lite";
+const STRATEGY_MODEL = "google/gemini-2.5-flash";
+
+const STRATEGY_CLASSIFIER_PROMPT = `You decide whether a user's refinement instruction
+requires a NEW negotiation strategy or only changes draft style/tone/length.
+
+Return regenerate_strategy=true ONLY if the instruction asks for a different
+negotiation approach, framework, tactic, or fundamentally different angle
+(e.g. "use Harvard method", "be more aggressive negotiator", "try Chris Voss style",
+"different strategy", "anchor higher", "use BATNA", "win-win approach").
+
+Return regenerate_strategy=false for pure draft edits like
+"shorter", "friendlier", "more formal", "fix typo", "translate", "add greeting",
+"remove paragraph X", "change deadline date".
+
+strategy_labels: pick 1-3 from [harvard, chris_voss, ackerman, batna, win_win, hard_bargaining]
+that match the NEW strategy if regenerate_strategy=true, otherwise return [].`;
+
+const STRATEGY_REGEN_PROMPT = `You are STRATEGOS strategist. Produce a CONCISE negotiation strategy
+(2-4 sentences) reflecting the user's instruction, grounded in the provided analysis.
+Reply ONLY in the requested language.
+Output ONLY the strategy text — no JSON, no labels, no markdown fences, no preamble.`;
 
 // Rough token-overlap heuristic to detect "the model basically copied the old draft"
 function similarityRatio(a: string, b: string): number {
@@ -81,6 +103,104 @@ async function callGateway(
   return { ok: true, text };
 }
 
+async function callPlainGateway(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  userContent: string,
+  temperature = 0.5,
+): Promise<{ ok: true; text: string } | { ok: false; status: number }> {
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        temperature,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+      }),
+    });
+    if (!res.ok) return { ok: false, status: res.status };
+    const data = await res.json();
+    const text: string = (data?.choices?.[0]?.message?.content ?? "").trim();
+    return { ok: true, text };
+  } catch (e) {
+    console.error("plain gateway error", e);
+    return { ok: false, status: 0 };
+  }
+}
+
+const VALID_STRATEGY_LABELS = new Set([
+  "harvard", "chris_voss", "ackerman", "batna", "win_win", "hard_bargaining",
+]);
+
+async function classifyInstruction(
+  apiKey: string,
+  instruction: string,
+  currentStrategy: string,
+): Promise<{ regenerate_strategy: boolean; strategy_labels: string[] }> {
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: CLASSIFIER_MODEL,
+        temperature: 0,
+        messages: [
+          { role: "system", content: STRATEGY_CLASSIFIER_PROMPT },
+          {
+            role: "user",
+            content:
+              `Current strategy:\n"""\n${currentStrategy.slice(0, 600)}\n"""\n\n` +
+              `User instruction:\n"""\n${instruction}\n"""`,
+          },
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "classify",
+            description: "Classify whether the instruction requires regenerating the negotiation strategy.",
+            parameters: {
+              type: "object",
+              properties: {
+                regenerate_strategy: { type: "boolean" },
+                strategy_labels: {
+                  type: "array",
+                  items: { type: "string", enum: [...VALID_STRATEGY_LABELS] },
+                },
+              },
+              required: ["regenerate_strategy", "strategy_labels"],
+              additionalProperties: false,
+            },
+          },
+        }],
+        tool_choice: { type: "function", function: { name: "classify" } },
+      }),
+    });
+    if (!res.ok) {
+      console.warn("classifier non-OK", res.status);
+      return { regenerate_strategy: false, strategy_labels: [] };
+    }
+    const data = await res.json();
+    const argsStr = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (!argsStr) return { regenerate_strategy: false, strategy_labels: [] };
+    const parsed = JSON.parse(argsStr);
+    const labels: string[] = Array.isArray(parsed.strategy_labels)
+      ? parsed.strategy_labels.filter((l: unknown) => typeof l === "string" && VALID_STRATEGY_LABELS.has(l))
+      : [];
+    return {
+      regenerate_strategy: Boolean(parsed.regenerate_strategy),
+      strategy_labels: labels,
+    };
+  } catch (e) {
+    console.warn("classifier failed, fallback to draft-only", e);
+    return { regenerate_strategy: false, strategy_labels: [] };
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -126,12 +246,63 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (latestErr || !latest) return json({ error: "No prior version" }, 404);
 
+    // Pin analysis to V1 (oldest version) so it stays stable across refinements.
+    const { data: v1 } = await service
+      .from("case_versions")
+      .select("analysis")
+      .eq("case_id", case_id)
+      .order("version_number", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const pinnedAnalysis = v1?.analysis ?? latest.analysis;
+
     const currentDraft: string = latest.draft ?? "";
+    const currentStrategy: string = latest.strategy ?? "";
+    const currentLabels: string[] = Array.isArray(latest.strategy_labels) ? latest.strategy_labels : [];
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       const newDraft = `${currentDraft}\n\n[Refinement (mock): ${instruction}]`;
-      return await persistAndReply(service, caseRow, latest, newDraft, instruction, "mock");
+      return await persistAndReply(service, caseRow, latest, {
+        analysis: pinnedAnalysis,
+        strategy: currentStrategy,
+        strategy_labels: currentLabels,
+        draft: newDraft,
+      }, instruction, "mock");
+    }
+
+    // Smart classifier: does this instruction require a new strategy?
+    const classification = await classifyInstruction(LOVABLE_API_KEY, instruction, currentStrategy);
+    let nextStrategy = currentStrategy;
+    let nextLabels = currentLabels;
+
+    if (classification.regenerate_strategy) {
+      const analysisLines = Array.isArray(pinnedAnalysis)
+        ? (pinnedAnalysis as string[]).map((b) => "- " + String(b)).join("\n")
+        : "";
+      const stratUser =
+        `Language: ${caseRow.language_label}\n` +
+        `Medium: ${caseRow.medium}\n\n` +
+        `Situation:\n"""\n${caseRow.situation_text ?? ""}\n"""\n\n` +
+        `Analysis:\n${analysisLines}\n\n` +
+        `Previous strategy:\n"""\n${currentStrategy}\n"""\n\n` +
+        `User instruction (highest priority — change strategy accordingly):\n${instruction}\n\n` +
+        `Now produce the new strategy text in ${caseRow.language_label}.`;
+      const stratRes = await callPlainGateway(
+        LOVABLE_API_KEY,
+        STRATEGY_MODEL,
+        STRATEGY_REGEN_PROMPT,
+        stratUser,
+        0.5,
+      );
+      if (stratRes.ok && stratRes.text) {
+        nextStrategy = stratRes.text;
+        if (classification.strategy_labels.length > 0) {
+          nextLabels = classification.strategy_labels;
+        }
+      } else {
+        console.warn("Strategy regen failed, keeping previous strategy");
+      }
     }
 
     const buildUserContent = (extraNudge?: string) =>
@@ -139,6 +310,7 @@ Deno.serve(async (req: Request) => {
       `LANGUAGE: ${caseRow.language_label}\n` +
       `MEDIUM: ${caseRow.medium}\n\n` +
       `ORIGINAL SITUATION:\n"""\n${caseRow.situation_text ?? ""}\n"""\n\n` +
+      `STRATEGY TO APPLY:\n"""\n${nextStrategy}\n"""\n\n` +
       `PREVIOUS DRAFT (rewrite this completely according to the instruction above):\n"""\n${currentDraft}\n"""\n\n` +
       `Now return the fully rewritten draft in ${caseRow.language_label}.\n` +
       `Do not start with the same opening as the previous draft unless the instruction explicitly asks for it.` +
@@ -168,7 +340,12 @@ Deno.serve(async (req: Request) => {
       if (retry.ok && retry.text) newDraft = retry.text;
     }
 
-    return await persistAndReply(service, caseRow, latest, newDraft, instruction, MODEL);
+    return await persistAndReply(service, caseRow, latest, {
+      analysis: pinnedAnalysis,
+      strategy: nextStrategy,
+      strategy_labels: nextLabels,
+      draft: newDraft,
+    }, instruction, MODEL);
   } catch (e) {
     console.error("strategos-refinement error", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
@@ -183,11 +360,18 @@ type LatestRow = {
 };
 type CaseRow = { id: string; user_id: string; language_label: string; medium: string; situation_text: string | null };
 
+interface PersistPayload {
+  analysis: unknown;
+  strategy: string;
+  strategy_labels: string[];
+  draft: string;
+}
+
 async function persistAndReply(
   service: ReturnType<typeof createClient>,
   caseRow: CaseRow,
   latest: LatestRow,
-  newDraft: string,
+  payload: PersistPayload,
   instruction: string,
   model: string,
 ) {
@@ -200,10 +384,10 @@ async function persistAndReply(
       version_number: nextNumber,
       kind: "refinement",
       user_prompt: instruction,
-      analysis: latest.analysis,
-      strategy: latest.strategy,
-      draft: newDraft,
-      strategy_labels: latest.strategy_labels,
+      analysis: payload.analysis,
+      strategy: payload.strategy,
+      draft: payload.draft,
+      strategy_labels: payload.strategy_labels,
       model_used: model,
     })
     .select("id")
@@ -216,7 +400,8 @@ async function persistAndReply(
   await service
     .from("cases")
     .update({
-      draft: newDraft,
+      draft: payload.draft,
+      strategy: payload.strategy,
       current_version_id: inserted.id,
       updated_at: new Date().toISOString(),
     })
@@ -232,5 +417,12 @@ async function persistAndReply(
     body: JSON.stringify({ case_id: caseRow.id, _internal: true, _user_id: caseRow.user_id }),
   }).catch(() => undefined);
 
-  return json({ refined_draft: newDraft, version_id: inserted.id, version_number: nextNumber, model });
+  return json({
+    refined_draft: payload.draft,
+    strategy: payload.strategy,
+    strategy_labels: payload.strategy_labels,
+    version_id: inserted.id,
+    version_number: nextNumber,
+    model,
+  });
 }
