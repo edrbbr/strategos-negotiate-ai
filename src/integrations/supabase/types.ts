@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      cases: {
+        Row: {
+          analysis: Json | null
+          created_at: string
+          draft: string | null
+          icon_hint: string
+          id: string
+          last_analyzed_at: string | null
+          model_used: string | null
+          situation_text: string | null
+          status: string
+          strategy: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis?: Json | null
+          created_at?: string
+          draft?: string | null
+          icon_hint?: string
+          id?: string
+          last_analyzed_at?: string | null
+          model_used?: string | null
+          situation_text?: string | null
+          status?: string
+          strategy?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          analysis?: Json | null
+          created_at?: string
+          draft?: string | null
+          icon_hint?: string
+          id?: string
+          last_analyzed_at?: string | null
+          model_used?: string | null
+          situation_text?: string | null
+          status?: string
+          strategy?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       plan_features: {
         Row: {
           created_at: string
@@ -101,6 +149,7 @@ export type Database = {
           is_recommended: boolean
           model_id: string
           name: string
+          pipeline_config: Json | null
           sort_order: number
           tagline: string | null
           tier_label: string
@@ -116,6 +165,7 @@ export type Database = {
           is_recommended?: boolean
           model_id: string
           name: string
+          pipeline_config?: Json | null
           sort_order: number
           tagline?: string | null
           tier_label: string
@@ -131,6 +181,7 @@ export type Database = {
           is_recommended?: boolean
           model_id?: string
           name?: string
+          pipeline_config?: Json | null
           sort_order?: number
           tagline?: string | null
           tier_label?: string
