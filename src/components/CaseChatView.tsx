@@ -106,6 +106,9 @@ export function CaseChatView({ caseRow }: Props) {
         {/* V0 Initial situation */}
         <InitialBlock caseRow={caseRow} />
 
+        {/* Analyse einmalig (V1-fix), standardmäßig zugeklappt */}
+        <AnalysisAccordion caseId={caseRow.id} versions={versions} />
+
         {versionsLoading && versions.length === 0 ? (
           <Skeleton className="h-40 w-full" />
         ) : (
