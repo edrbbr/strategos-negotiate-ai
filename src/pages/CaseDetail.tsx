@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Bot, ChevronDown, Copy, Diamond, Loader2, Send, Sparkles, Star, Upload } from "lucide-react";
+import { AlertCircle, Bot, ChevronDown, Copy, Diamond, Loader2, RefreshCcw, Send, Sparkles, Star, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -33,21 +33,37 @@ const STAGE_LABELS = {
 const CaseDetail = () => {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
-  const { profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const tier = tierFromPlanId(profile?.plan_id);
   const isMultiStage = tier === "elite";
 
   // ---- Resolve / create case ----
   const createMut = useCreateCase();
+  const hasAttemptedCreate = useRef(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const triggerCreate = () => {
+    setCreateError(null);
+    hasAttemptedCreate.current = true;
+    createMut.mutate(undefined, {
+      onSuccess: (c) => navigate(`/app/case/${c.id}`, { replace: true }),
+      onError: (e) => {
+        const msg = (e as Error).message ?? "Unbekannter Fehler";
+        setCreateError(msg);
+        toast.error(`Fall konnte nicht angelegt werden: ${msg}`);
+        // Allow retry on next render
+        hasAttemptedCreate.current = false;
+      },
+    });
+  };
+
   useEffect(() => {
-    if (routeId === "new") {
-      createMut.mutate(undefined, {
-        onSuccess: (c) => navigate(`/app/case/${c.id}`, { replace: true }),
-        onError: (e) => toast.error(`Fall konnte nicht angelegt werden: ${(e as Error).message}`),
-      });
-    }
+    if (routeId !== "new") return;
+    if (!user) return; // wait for auth rehydration
+    if (hasAttemptedCreate.current) return; // strict-mode guard
+    triggerCreate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeId]);
+  }, [routeId, user?.id]);
 
   const caseId = routeId !== "new" ? routeId : undefined;
   const { data: caseRow } = useCase(caseId);
