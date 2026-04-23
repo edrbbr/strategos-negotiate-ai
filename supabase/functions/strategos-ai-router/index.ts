@@ -55,8 +55,17 @@ Deno.serve(async (req: Request) => {
       return json({ error: "situation_text muss mindestens 10 Zeichen enthalten." }, 400);
     }
 
+    // ---- KEYS / SERVICE CLIENT (needed for profile join) ----
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? null;
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? null;
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") ?? null;
+    const allKeysMissing = !ANTHROPIC_API_KEY && !OPENAI_API_KEY && !LOVABLE_API_KEY;
+    const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
     // ---- PROFILE + PLAN ----
-    const { data: profile, error: profileErr } = await userClient
+    // Use service role to avoid RLS/grant edge cases on the joined `plans` table.
+    // We already verified `userId` from the JWT above, so scoping by id is safe.
+    const { data: profile, error: profileErr } = await serviceClient
       .from("profiles")
       .select("plan_id, cases_used, plans!inner(id, model_id, case_limit, case_limit_type, pipeline_config)")
       .eq("id", userId)
@@ -89,15 +98,6 @@ Deno.serve(async (req: Request) => {
         403,
       );
     }
-
-    // ---- KEYS ----
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? null;
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? null;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") ?? null;
-
-    const allKeysMissing = !ANTHROPIC_API_KEY && !OPENAI_API_KEY && !LOVABLE_API_KEY;
-
-    const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // ---- Persist medium/language onto the case row (best effort) ----
     if (case_id) {
