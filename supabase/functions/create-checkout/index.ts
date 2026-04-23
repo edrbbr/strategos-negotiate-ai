@@ -28,14 +28,12 @@ Deno.serve(async (req) => {
       priceId,
       quantity,
       customerEmail,
-      userId,
       returnUrl,
       environment,
     } = body as {
       priceId?: string;
       quantity?: number;
       customerEmail?: string;
-      userId?: string;
       returnUrl?: string;
       environment?: StripeEnv;
     };
@@ -51,8 +49,8 @@ Deno.serve(async (req) => {
     }
 
     // Optional auth: if Authorization header present, verify and use that user
-    let resolvedUserId = userId;
-    let resolvedEmail = customerEmail;
+    let resolvedUserId: string | undefined;
+    let resolvedEmail: string | undefined;
     const authHeader = req.headers.get("Authorization");
     if (authHeader?.startsWith("Bearer ")) {
       const supabase = createClient(
@@ -61,13 +59,18 @@ Deno.serve(async (req) => {
         { global: { headers: { Authorization: authHeader } } },
       );
       const token = authHeader.replace("Bearer ", "");
-      const { data: claims } = await supabase.auth.getClaims(token);
-      if (claims?.claims?.sub) {
-        resolvedUserId = claims.claims.sub;
-        if (!resolvedEmail && claims.claims.email) {
-          resolvedEmail = claims.claims.email as string;
-        }
+      const { data: claims, error: claimsError } =
+        await supabase.auth.getClaims(token);
+      if (claimsError || !claims?.claims?.sub) {
+        return json({ error: "Unauthorized" }, 401);
       }
+      resolvedUserId = claims.claims.sub;
+      if (claims.claims.email) {
+        resolvedEmail = claims.claims.email as string;
+      }
+    } else {
+      // Anonymous checkout: only body-supplied email is allowed; no userId.
+      if (customerEmail) resolvedEmail = customerEmail;
     }
 
     const stripe = createStripeClient(environment);

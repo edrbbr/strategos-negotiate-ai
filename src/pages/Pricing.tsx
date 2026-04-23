@@ -209,7 +209,6 @@ const Pricing = () => {
     openCheckout({
       priceId,
       customerEmail: user.email ?? profile?.full_name ?? undefined,
-      userId: user.id,
       returnUrl: `${window.location.origin}/app/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     });
   };

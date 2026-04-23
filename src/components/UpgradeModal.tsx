@@ -107,7 +107,6 @@ export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
     openCheckout({
       priceId,
       customerEmail: user.email ?? undefined,
-      userId: user.id,
       returnUrl: `${window.location.origin}/app/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     });
   };
