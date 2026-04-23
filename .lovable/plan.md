@@ -1,73 +1,81 @@
 
 
-# Refinement-Chat: Fall-spezifische, KI-generierte Quick-Actions
+# Refinement liefert fast identischen Text — Fix
 
-Anpassung des bereits genehmigten Plans. Alles andere bleibt wie freigegeben — nur **Phase E** wird ersetzt.
+## Problem
+Beim Klick auf "Senden" entsteht zwar eine V2-Version, aber der Entwurf ist visuell zu 95% identisch mit V1. Beleg aus der DB: V1 = 2436 Zeichen, V2 = ein zusätzlicher Absatz, sonst Wort-für-Wort kopiert.
 
-## Phase E (NEU) — Dynamische, fall-spezifische Quick-Action-Prompts
+Drei Ursachen:
 
-### Neue Edge Function `strategos-suggest-refinements`
-Generiert pro Fall 4 maßgeschneiderte Verbesserungs-Vorschläge auf Basis von Situation, Analyse, Strategie und aktuellem Draft.
+1. **Modell zu schwach für Rewriting**: `google/gemini-2.5-flash-lite` neigt dazu, den Originaltext zu kopieren und nur Mini-Patches einzufügen, statt wirklich umzuschreiben.
+2. **System-Prompt sabotiert die Anweisung**: aktuell steht dort *"Keep the strategic intent intact, only modify tone, length, or emphasis as instructed"* — das sagt dem Modell explizit „ändere möglichst wenig".
+3. **User-Prompt ist nicht prominent genug**: Die Instruktion steht am Ende eines langen Kontextes und hat im aktuellen Prompt-Aufbau weniger Gewicht als der mitgeschickte Originaltext.
 
-**Input**: `{ case_id }`
-**Auth**: `auth.getUser(token)` (gleiches Muster wie Refinement)
-**Modell**: `google/gemini-2.5-flash-lite` (billigstes Modell, ~0,003 ¢ pro Aufruf — bewusst klein gehalten)
-**Output via Tool-Call** (strukturiert, kein freier Text):
-```json
-{
-  "suggestions": [
-    { "label": "Frist klarer setzen", "prompt": "Schreibe den Entwurf so um, dass die 14-Tage-Frist als harte Deadline mit konkreter Konsequenz formuliert wird." },
-    { "label": "Chris-Voss-Mirroring", "prompt": "Baue gezielte Mirroring-Fragen ein, die die Position der Gegenseite zurückspiegeln." },
-    { "label": "Empathie für Schaden", "prompt": "Erkenne den finanziellen Druck der Gegenseite an, ohne in der Sache nachzugeben." },
-    { "label": "Eskalationspfad andeuten", "prompt": "Deute den Anwaltsweg an, ohne ihn explizit zu drohen." }
-  ]
-}
+## Lösung
+
+### 1. Modell upgraden
+In `supabase/functions/strategos-refinement/index.ts`:
+- `google/gemini-2.5-flash-lite` → `google/gemini-2.5-flash`
+  - immer noch sehr günstig, aber deutlich besser bei „echtem" Rewriting
+  - flash-lite bleibt nur in der Suggestion-Function (dort macht es Sinn)
+
+### 2. System-Prompt komplett neu
+Der neue Prompt macht klar: **vollständig neu schreiben**, nicht patchen.
+
+```
+You are STRATEGOS in REFINEMENT mode.
+You receive an existing negotiation draft and a user instruction.
+Your job: produce a COMPLETE, FULLY REWRITTEN draft that clearly
+reflects the user instruction. Do NOT copy the previous draft
+sentence by sentence. Restructure freely. Change wording, order,
+and emphasis as needed so the change is unmistakable to a reader
+who compares both versions.
+
+Hard rules:
+- Keep the underlying strategic goal and key facts (numbers, names, deadlines).
+- Reply ONLY in the requested language.
+- Match the requested medium (email/WhatsApp/SMS/letter) — length and tone.
+- Output ONLY the rewritten draft text. No preamble, no labels, no explanation, no markdown fences.
 ```
 
-Das Modell bekommt im System-Prompt:
-- Sprache des Falls (Antwort muss in `language_label` sein)
-- Medium (z. B. WhatsApp → kürzere, lockerere Vorschläge)
-- Hinweis auf bekannte Verhandlungsstrategien aus `negotiation_strategies` als Inspiration
-- Constraint: 4 Vorschläge, jeweils max. 4 Wörter Label, Prompt 1 Satz
+### 3. User-Message umstrukturieren
+Reihenfolge so ändern, dass die Instruktion zuerst und am stärksten gewichtet wird:
 
-### Caching auf `cases`
-Neue Spalte:
-- `quick_suggestions jsonb` (nullable) — zuletzt generiertes Vorschlags-Array
-- `quick_suggestions_version_id uuid` — auf welche `case_versions.id` sie sich beziehen
+```
+INSTRUCTION (highest priority):
+{instruction}
 
-So wird **nicht** bei jedem Öffnen neu generiert. Regeneriert wird nur, wenn:
-- noch keine Vorschläge existieren, oder
-- `cases.current_version_id` ≠ `quick_suggestions_version_id` (also nach Pipeline-Lauf, Refinement oder Restore)
+LANGUAGE: {language_label}
+MEDIUM: {medium}
 
-Damit: pro neuer Version genau **1** zusätzlicher Mini-AI-Call. Das ist günstig und immer aktuell.
+ORIGINAL SITUATION:
+{situation_text}
 
-### Trigger-Punkte
-- Nach `strategos-ai-router` (initialer Lauf): Function feuert `strategos-suggest-refinements` selbst am Ende (fire-and-forget, kein Blocker für die Antwort)
-- Nach `strategos-refinement`: gleiches Muster
-- Nach `strategos-restore-version`: gleiches Muster
-- Frontend-Fallback: wenn Vorschläge fehlen oder veraltet sind, ruft das Frontend `strategos-suggest-refinements` einmalig nach
+PREVIOUS DRAFT (rewrite this completely according to the instruction above):
+{currentDraft}
 
-### Frontend
-Neuer Hook `useQuickSuggestions(caseId)`:
-- Liest `cases.quick_suggestions`
-- Realtime auf `cases`-Update
-- Bei `null` oder veraltet → automatisch Edge-Function aufrufen, Skeleton anzeigen
+Now return the fully rewritten draft in {language_label}.
+Do not start with the same opening as the previous draft unless the instruction explicitly asks for it.
+```
 
-Im Chat-Layout über dem Eingabefeld:
-- 4 Chip-Buttons mit `label`
-- Klick → schreibt `prompt` ins Eingabefeld (kein Auto-Send, wie vom User bestätigt)
-- Während Generierung: 4 Skeleton-Chips statt Text
+### 4. Temperature setzen
+Im Gateway-Call `temperature: 0.7` ergänzen, damit das Modell nicht in den deterministischen "Copy-Modus" verfällt (Default ist je nach Modell zu konservativ für Rewriting).
 
-### Fehlerverhalten
-- 429/402 vom Lovable-Gateway → Vorschläge bleiben weg, Chat funktioniert trotzdem (Eingabefeld bleibt frei nutzbar). Toast nur bei explizitem manuellen Re-Trigger.
+### 5. Sanity-Check serverseitig
+Wenn der zurückgegebene Draft zu >85% Token-Overlap mit dem alten hat, einmal erneut anfragen mit verschärfter Instruktion (`"The previous attempt was too similar to the old draft. Rewrite more boldly: change structure, opening, and wording."`). Maximal 1 Retry — keine Endlosschleife, keine Kostenexplosion.
 
-## Akzeptanzkriterien für Phase E
-- Quick-Actions sind nie statisch, sondern KI-generiert pro Fall
-- Vorschläge passen erkennbar zu Situation, Analyse, Strategie und Medium
-- Sprache der Vorschläge = Sprache des Falls
-- Kein Mehrfach-Aufruf pro Version (Caching greift)
-- Klick auf Vorschlag füllt nur das Input-Feld, sendet nicht
+## Akzeptanzkriterien
+- V2 unterscheidet sich klar erkennbar von V1 (anderer Einstieg, andere Satzstruktur)
+- Strategie-Intention und Fakten (Zahlen, Namen, Fristen) bleiben erhalten
+- Sprache bleibt = `language_label`
+- Maximal 1 zusätzlicher AI-Call pro Refinement (nur wenn Output zu ähnlich)
+- Kosten weiterhin niedrig (flash statt flash-lite ≈ 3–4× Preis, immer noch Cent-Bereich)
 
 ## Was unverändert bleibt
-Phasen A (Auth-Bugfix), B (`case_versions` + `negotiation_strategies` + `current_version_id`), C (Versions-Inserts + Sniper-Refinement) und D (Chat-Layout, Restore, sticky Input, Realtime) bleiben exakt wie zuvor freigegeben.
+- Sniper-Logik: Analyse, Strategie, Strategy-Labels werden weiterhin aus der Vorgängerversion kopiert (kein Extra-AI-Call dafür)
+- Datenmodell, UI, Restore, Realtime, Quick-Suggestions
+
+## Nicht enthalten
+- Diff-Highlighting alt vs. neu (separate Aufgabe)
+- Wechselbare Modelle pro User
 
