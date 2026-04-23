@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Bot, Check, ChevronDown, ChevronsUpDown, Copy, Diamond, Loader2, Send, Sparkles, Star, Upload, X } from "lucide-react";
+import { Check, ChevronsUpDown, Copy, Diamond, Loader2, Sparkles, Star, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCase, useCaseRealtime, useCreateCase, useUpdateCase } from "@/hooks/useCases";
+import { useCaseVersions } from "@/hooks/useCaseVersions";
+import { CaseChatView } from "@/components/CaseChatView";
 import {
   useCaseAttachments,
   useDeleteAttachment,
