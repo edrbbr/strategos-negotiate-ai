@@ -1,7 +1,8 @@
 import { ProviderError } from "../types.ts";
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-const TIMEOUT_MS = 30_000;
+// Per-attempt timeout. Reasoning-capable models (gpt-5*) routinely need >30s.
+const TIMEOUT_MS = 90_000;
 
 export interface OpenAITool {
   type: "function";
@@ -23,11 +24,12 @@ export interface OpenAICallParams {
 export async function callOpenAI(
   params: OpenAICallParams,
 ): Promise<Record<string, unknown>> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  const doFetch = () =>
-    fetch(OPENAI_URL, {
+  // Use a fresh AbortController per attempt so a timed-out attempt
+  // doesn't poison subsequent retries.
+  const doFetch = () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    return fetch(OPENAI_URL, {
       method: "POST",
       signal: controller.signal,
       headers: {
@@ -46,7 +48,8 @@ export async function callOpenAI(
           function: { name: params.tool.function.name },
         },
       }),
-    });
+    }).finally(() => clearTimeout(timer));
+  };
 
   try {
     let response = await doFetch();
@@ -96,7 +99,10 @@ export async function callOpenAI(
       console.error("OpenAI JSON parse failed", argsStr, e);
       throw new ProviderError("Bad JSON in tool_call", 500, "PARSE_ERROR", "openai");
     }
-  } finally {
-    clearTimeout(timer);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new ProviderError("OpenAI request timed out", 504, "TIMEOUT", "openai");
+    }
+    throw e;
   }
 }

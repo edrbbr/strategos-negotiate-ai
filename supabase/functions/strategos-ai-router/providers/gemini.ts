@@ -1,7 +1,7 @@
 import { ProviderError } from "../types.ts";
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 90_000;
 
 export interface GeminiTool {
   type: "function";
@@ -23,10 +23,9 @@ export interface GeminiCallParams {
 export async function callGemini(
   params: GeminiCallParams,
 ): Promise<Record<string, unknown>> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     const response = await fetch(GATEWAY_URL, {
       method: "POST",
       signal: controller.signal,
@@ -46,7 +45,7 @@ export async function callGemini(
           function: { name: params.tool.function.name },
         },
       }),
-    });
+    }).finally(() => clearTimeout(timer));
 
     if (response.status === 429) {
       throw new ProviderError("Gemini rate limit", 429, "RATE_LIMIT", "gemini");
@@ -76,7 +75,10 @@ export async function callGemini(
       console.error("Gemini JSON parse failed", argsStr, e);
       throw new ProviderError("Bad JSON in tool_call", 500, "PARSE_ERROR", "gemini");
     }
-  } finally {
-    clearTimeout(timer);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new ProviderError("Gemini request timed out", 504, "TIMEOUT", "gemini");
+    }
+    throw e;
   }
 }
