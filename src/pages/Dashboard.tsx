@@ -32,21 +32,46 @@ const Dashboard = () => {
 
   // Handle Stripe checkout return
   useEffect(() => {
-    if (searchParams.get("checkout") === "success") {
-      toast.success("Willkommen im Sovereign-System.", {
-        description: "Ihr Plan wird gerade aktiviert.",
-      });
-      // Refresh profile a few times — webhook may take a moment
-      const timers = [500, 1500, 4000].map((ms) =>
-        setTimeout(() => refreshProfile(), ms),
-      );
-      const next = new URLSearchParams(searchParams);
-      next.delete("checkout");
-      next.delete("session_id");
-      setSearchParams(next, { replace: true });
-      return () => timers.forEach(clearTimeout);
-    }
-  }, [searchParams, setSearchParams, refreshProfile]);
+    if (searchParams.get("checkout") !== "success") return;
+
+    toast.success("Willkommen im Sovereign-System.", {
+      description: "Ihr Plan wird gerade aktiviert.",
+    });
+
+    // Clean URL immediately so reloads don't re-trigger the polling
+    const next = new URLSearchParams(searchParams);
+    next.delete("checkout");
+    next.delete("session_id");
+    setSearchParams(next, { replace: true });
+
+    // Poll up to 10 times every 1.5s (max ~15s) until plan_id flips off "free".
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 10;
+    const intervalId = window.setInterval(async () => {
+      if (cancelled) return;
+      attempts += 1;
+      await refreshProfile();
+      const currentPlan = profile?.plan_id;
+      if ((currentPlan && currentPlan !== "free") || attempts >= maxAttempts) {
+        window.clearInterval(intervalId);
+        if (attempts >= maxAttempts && (!currentPlan || currentPlan === "free")) {
+          toast.message("Aktivierung dauert länger als üblich.", {
+            description: "Bitte in einigen Sekunden die Seite neu laden.",
+          });
+        }
+      }
+    }, 1500);
+
+    // Kick off an immediate refresh so the first attempt isn't delayed
+    refreshProfile();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 300);

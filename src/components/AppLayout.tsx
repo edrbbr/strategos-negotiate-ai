@@ -2,6 +2,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { Bell, LogOut, User as UserIcon, Settings as SettingsIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,9 +25,10 @@ const initialsOf = (name: string | null | undefined, email: string | null | unde
 
 export const AppLayout = () => {
   const navigate = useNavigate();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, isLoading, signOut } = useAuth();
   const displayName = profile?.full_name || user?.email || "Operator";
-  const tier = profile?.plan?.tier_label ?? "BASIS";
+  const tier = profile?.plan?.tier_label ?? null;
+  const showTierSkeleton = !tier && (isLoading || !profile);
 
   const handleLogout = async () => {
     await signOut();
@@ -52,9 +54,13 @@ export const AppLayout = () => {
                   <span className="block font-mono-label text-foreground leading-tight">
                     {displayName}
                   </span>
-                  <span className="block font-mono-label text-primary/80 leading-tight">
-                    {tier}
-                  </span>
+                  {showTierSkeleton ? (
+                    <Skeleton className="h-3 w-12 mt-0.5" />
+                  ) : (
+                    <span className="block font-mono-label text-primary/80 leading-tight">
+                      {tier ?? "FREE"}
+                    </span>
+                  )}
                 </span>
               </button>
             </DropdownMenuTrigger>
