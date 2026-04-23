@@ -1,30 +1,16 @@
-// STRATEGOS AI Router — multi-model routing via Lovable AI Gateway
-// Plan & model are resolved server-side from the authenticated user's profile.
+// STRATEGOS AI Router — multi-model entrypoint
+// Single-Call (Free/Pro) or Multi-Stage Pipeline (Elite) routed by plan.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { runSingleCall } from "./pipelines/singleCall.ts";
+import { isStageFailure, runMultiStagePipeline, type StageCompletePayload } from "./pipelines/multiStage.ts";
+import { MOCK_RESPONSE } from "./prompts.ts";
+import { ProviderError, type PipelineConfig, type PlanRow, type StageMeta } from "./types.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-};
-
-const SYSTEM_PROMPT = `You are STRATEGOS, an elite corporate negotiation AI. You utilize principles from game theory, tactical empathy (Chris Voss), and the Harvard Negotiation Project. Your tone is highly professional, sharply analytical, sovereign, and emotionally detached but strategically empathetic. You never sound like a generic AI. You must return a strict JSON object with exactly three keys:
-
-- 'analysis': Brief bullet points of the counterparty's weaknesses and the power dynamic.
-- 'strategy': The name of the tactic applied (e.g., 'Anchoring-Pivot') and a 2-sentence explanation.
-- 'draft': A highly professional, subtly aggressive but bulletproof email/script for the user to copy. It must leave the counterparty no escape while allowing them to save face.`;
-
-const MOCK_RESPONSE = {
-  analysis: [
-    "Ziel-Analyse: Maximierung der kurzfristigen Liquidität bei Erhaltung der langfristigen Lieferantenbeziehung.",
-    "Gegenpartei: Dominantes Verhalten, Fokus auf Standardisierung. Schwachpunkt: Zeitdruck zum Quartalsende.",
-    "Machtdynamik: Asymmetrisch zugunsten der Gegenseite — jedoch fragil durch internen Reporting-Zwang.",
-  ],
-  strategy:
-    "Anchoring-Pivot — Wir akzeptieren die technischen Parameter und verschieben den Verhandlungsanker auf die Revisionsklausel. So entsteht eine zweite Front, die der Gegenseite Konzessionsraum nimmt, ohne ihr Gesicht zu kosten.",
-  draft:
-    "Sehr geehrte Damen und Herren,\n\nwir haben die vorliegenden Parameter sorgfältig geprüft. Während die technische Spezifikation unseren Anforderungen entspricht, ist die aktuelle Zahlungsziel-Regelung in dieser Form für uns nicht abbildbar. Wir schlagen vor, den Fokus auf eine exklusive Revisionsklausel nach 6 Monaten zu legen, um die Partnerschaft agil und für beide Seiten tragfähig zu halten.\n\nWir gehen davon aus, dass Ihnen an einer zügigen Einigung vor Quartalsende gelegen ist und erwarten Ihre Rückmeldung bis Freitag, 17:00 Uhr.\n\nMit freundlichen Grüßen",
 };
 
 const json = (body: unknown, status = 200) =>
@@ -34,16 +20,12 @@ const json = (body: unknown, status = 200) =>
   });
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     // ---- AUTH ----
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return json({ error: "Unauthorized" }, 401);
-    }
+    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -55,15 +37,22 @@ Deno.serve(async (req: Request) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: claims, error: claimsErr } = await userClient.auth.getClaims(token);
-    if (claimsErr || !claims?.claims?.sub) {
-      return json({ error: "Unauthorized" }, 401);
-    }
+    if (claimsErr || !claims?.claims?.sub) return json({ error: "Unauthorized" }, 401);
     const userId = claims.claims.sub as string;
+
+    // ---- INPUT ----
+    const body = await req.json().catch(() => ({}));
+    const situation_text: string = body?.situation_text;
+    const case_id: string | undefined = body?.case_id;
+
+    if (!situation_text || typeof situation_text !== "string" || situation_text.trim().length < 10) {
+      return json({ error: "situation_text muss mindestens 10 Zeichen enthalten." }, 400);
+    }
 
     // ---- PROFILE + PLAN ----
     const { data: profile, error: profileErr } = await userClient
       .from("profiles")
-      .select("plan_id, cases_used, plans!inner(id, model_id, case_limit, case_limit_type)")
+      .select("plan_id, cases_used, plans!inner(id, model_id, case_limit, case_limit_type, pipeline_config)")
       .eq("id", userId)
       .maybeSingle();
 
@@ -72,12 +61,6 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Profile not found" }, 500);
     }
 
-    type PlanRow = {
-      id: string;
-      model_id: string;
-      case_limit: number | null;
-      case_limit_type: string;
-    };
     const planRel = profile.plans as unknown;
     const plan: PlanRow | null = Array.isArray(planRel)
       ? (planRel[0] as PlanRow)
@@ -101,128 +84,154 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // ---- INPUT ----
-    const { situation_text } = await req.json();
-    if (
-      !situation_text ||
-      typeof situation_text !== "string" ||
-      situation_text.trim().length < 10
-    ) {
-      return json(
-        { error: "situation_text muss mindestens 10 Zeichen enthalten." },
-        400,
-      );
-    }
+    // ---- KEYS ----
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? null;
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? null;
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") ?? null;
+
+    const allKeysMissing = !ANTHROPIC_API_KEY && !OPENAI_API_KEY && !LOVABLE_API_KEY;
 
     const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const incrementAndReturn = async (payload: {
-      analysis: string[];
-      strategy: string;
-      draft: string;
-      model: string;
-    }) => {
+    // Helper: writes a stage payload to the case row (only if case_id provided)
+    const writeStage = async (payload: StageCompletePayload) => {
+      if (!case_id) return;
+      const update: Record<string, unknown> = { ...payload.data };
+      if (payload.stage === "analysis") {
+        update.status = "active";
+        update.last_analyzed_at = new Date().toISOString();
+      }
+      const { error } = await serviceClient
+        .from("cases")
+        .update(update)
+        .eq("id", case_id)
+        .eq("user_id", userId);
+      if (error) console.error("Stage DB update failed", payload.stage, error);
+    };
+
+    const incrementCounter = async () => {
       const { data: newCount } = await serviceClient.rpc("increment_cases_used", {
         p_user_id: userId,
       });
-      return json({
-        ...payload,
-        plan: plan.id,
-        cases_used: typeof newCount === "number" ? newCount : profile.cases_used + 1,
-        case_limit: plan.case_limit,
-      });
+      return typeof newCount === "number" ? newCount : profile.cases_used + 1;
     };
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-
-    // ---- MOCK FALLBACK ----
-    if (!LOVABLE_API_KEY) {
-      await new Promise((r) => setTimeout(r, 2000));
-      return await incrementAndReturn({ ...MOCK_RESPONSE, model: "mock" });
+    // ---- MOCK FALLBACK (only if every provider key is missing) ----
+    if (allKeysMissing) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const m = MOCK_RESPONSE;
+      await writeStage({ stage: "analysis", data: { analysis: m.analysis, model_used: "mock" } });
+      await writeStage({ stage: "strategy", data: { strategy: m.strategy } });
+      await writeStage({
+        stage: "draft",
+        data: { title: m.title, icon_hint: m.icon_hint, draft: m.draft, model_used: "mock" },
+      });
+      const cases_used = await incrementCounter();
+      return json({
+        ...m,
+        model: "mock",
+        plan: plan.id,
+        cases_used,
+        case_limit: plan.case_limit,
+        pipeline_meta: null,
+      });
     }
 
-    // ---- AI CALL ----
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: plan.model_id,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `Situation:\n"""\n${situation_text}\n"""\n\nLiefere die strategische Auswertung.`,
-          },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "return_strategos_analysis",
-              description: "Return the elite negotiation analysis as a strict JSON object.",
-              parameters: {
-                type: "object",
-                properties: {
-                  analysis: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "Bullet points: counterparty weaknesses and power dynamic.",
-                  },
-                  strategy: {
-                    type: "string",
-                    description: "Tactic name + 2-sentence explanation.",
-                  },
-                  draft: {
-                    type: "string",
-                    description: "Bulletproof email/script for the user to copy.",
-                  },
-                },
-                required: ["analysis", "strategy", "draft"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "return_strategos_analysis" } },
-      }),
-    });
+    // ---- ROUTE: Multi-Stage vs Single-Call ----
+    const pipelineConfig = plan.pipeline_config as PipelineConfig | null;
 
-    if (response.status === 429) {
-      return json(
-        { error: "Rate limit erreicht. Bitte kurz warten und erneut versuchen." },
-        429,
-      );
-    }
-    if (response.status === 402) {
-      return json(
-        { error: "AI-Guthaben aufgebraucht. Bitte Workspace-Credits aufladen." },
-        402,
-      );
-    }
-    if (!response.ok) {
-      const t = await response.text();
-      console.error("AI gateway error", response.status, t);
-      return json({ error: "AI Gateway Fehler", detail: t }, 500);
-    }
-
-    const data = await response.json();
-    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
-    const argsStr = toolCall?.function?.arguments;
-
-    let parsed: { analysis: string[]; strategy: string; draft: string } | null = null;
-    if (argsStr) {
+    if (pipelineConfig && pipelineConfig.type === "multi_stage") {
+      // ELITE
       try {
-        parsed = JSON.parse(argsStr);
+        const t0 = Date.now();
+        const { result, stageMetas } = await runMultiStagePipeline({
+          config: pipelineConfig,
+          situationText: situation_text,
+          anthropicKey: ANTHROPIC_API_KEY,
+          openaiKey: OPENAI_API_KEY,
+          onStageComplete: writeStage,
+        });
+        const total = Date.now() - t0;
+        const cases_used = await incrementCounter();
+        return json({
+          ...result,
+          model: "multi_stage_elite",
+          plan: plan.id,
+          cases_used,
+          case_limit: plan.case_limit,
+          pipeline_meta: {
+            type: "multi_stage",
+            stages: stageMetas,
+            total_latency_ms: total,
+          },
+        });
       } catch (e) {
-        console.error("Failed to parse tool arguments", e, argsStr);
+        if (isStageFailure(e)) {
+          const cause = e.cause;
+          const code = cause instanceof ProviderError ? cause.code : "STAGE_FAILED";
+          const status = cause instanceof ProviderError && cause.status === 429 ? 429 : 502;
+          return json(
+            {
+              error: "STAGE_FAILED",
+              code,
+              failed_at: e.stage,
+              completed_stages: e.completedStages,
+              message: cause.message,
+            },
+            status,
+          );
+        }
+        throw e;
       }
     }
-    if (!parsed) parsed = MOCK_RESPONSE;
 
-    return await incrementAndReturn({ ...parsed, model: plan.model_id });
+    // FREE / PRO — Single-Call
+    try {
+      const t0 = Date.now();
+      const result = await runSingleCall({
+        modelId: plan.model_id,
+        situationText: situation_text,
+        anthropicKey: ANTHROPIC_API_KEY,
+        lovableKey: LOVABLE_API_KEY,
+      });
+      const total = Date.now() - t0;
+
+      // For single-call we still write the case once, atomically
+      await writeStage({ stage: "analysis", data: { analysis: result.analysis, model_used: plan.model_id } });
+      await writeStage({ stage: "strategy", data: { strategy: result.strategy } });
+      await writeStage({
+        stage: "draft",
+        data: {
+          title: result.title,
+          icon_hint: result.icon_hint,
+          draft: result.draft,
+          model_used: plan.model_id,
+        },
+      });
+
+      const cases_used = await incrementCounter();
+      const stageMetas: StageMeta[] = [
+        { stage: "analysis", model: plan.model_id, latency_ms: total },
+      ];
+      return json({
+        ...result,
+        model: plan.model_id,
+        plan: plan.id,
+        cases_used,
+        case_limit: plan.case_limit,
+        pipeline_meta: {
+          type: "multi_stage",
+          stages: stageMetas,
+          total_latency_ms: total,
+        },
+      });
+    } catch (e) {
+      if (e instanceof ProviderError) {
+        const status = e.status === 429 ? 429 : e.code.startsWith("MISSING_") ? 500 : 502;
+        return json({ error: e.code, message: e.message, provider: e.provider }, status);
+      }
+      throw e;
+    }
   } catch (e) {
     console.error("strategos-ai-router error", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
