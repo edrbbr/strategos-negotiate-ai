@@ -74,8 +74,6 @@ const CaseDetail = () => {
   const [langOpen, setLangOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [refinement, setRefinement] = useState("");
-  const [refining, setRefining] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [stageState, setStageState] = useState<{ analysis: StageState; strategy: StageState; draft: StageState }>({
@@ -286,28 +284,6 @@ const CaseDetail = () => {
       }));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const runRefinement = async () => {
-    const text = caseRow?.draft;
-    if (!text || !refinement.trim() || !caseId) return;
-    setRefining(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("strategos-refinement", {
-        body: { current_draft: text, instruction: refinement.trim() },
-      });
-      if (error) throw error;
-      const next = (data as { refined_draft?: string })?.refined_draft;
-      if (next) {
-        await updateMut.mutateAsync({ id: caseId, patch: { draft: next } });
-        setRefinement("");
-        toast.success("Entwurf angepasst");
-      }
-    } catch (e) {
-      toast.error(`Refinement fehlgeschlagen: ${(e as Error).message}`);
-    } finally {
-      setRefining(false);
     }
   };
 
