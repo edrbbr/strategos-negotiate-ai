@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Bot, Check, ChevronDown, ChevronsUpDown, Copy, Diamond, Loader2, Send, Sparkles, Star, Upload, X } from "lucide-react";
+import { Check, ChevronsUpDown, Copy, Diamond, Loader2, Sparkles, Star, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCase, useCaseRealtime, useCreateCase, useUpdateCase } from "@/hooks/useCases";
+import { useCaseVersions } from "@/hooks/useCaseVersions";
+import { CaseChatView } from "@/components/CaseChatView";
 import {
   useCaseAttachments,
   useDeleteAttachment,
@@ -72,8 +74,6 @@ const CaseDetail = () => {
   const [langOpen, setLangOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [refinement, setRefinement] = useState("");
-  const [refining, setRefining] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [stageState, setStageState] = useState<{ analysis: StageState; strategy: StageState; draft: StageState }>({
@@ -287,28 +287,6 @@ const CaseDetail = () => {
     }
   };
 
-  const runRefinement = async () => {
-    const text = caseRow?.draft;
-    if (!text || !refinement.trim() || !caseId) return;
-    setRefining(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("strategos-refinement", {
-        body: { current_draft: text, instruction: refinement.trim() },
-      });
-      if (error) throw error;
-      const next = (data as { refined_draft?: string })?.refined_draft;
-      if (next) {
-        await updateMut.mutateAsync({ id: caseId, patch: { draft: next } });
-        setRefinement("");
-        toast.success("Entwurf angepasst");
-      }
-    } catch (e) {
-      toast.error(`Refinement fehlgeschlagen: ${(e as Error).message}`);
-    } finally {
-      setRefining(false);
-    }
-  };
-
   // ---- Render helpers ----
   const planBadge = PLAN_BADGE[tier];
   const PlanIcon = planBadge.icon;
@@ -328,6 +306,10 @@ const CaseDetail = () => {
   };
 
   const analysisItems = useMemo(() => caseRow?.analysis ?? [], [caseRow?.analysis]);
+
+  // Versions drive whether we show the input form or the chat view.
+  const { data: versions = [] } = useCaseVersions(caseId);
+  const hasVersions = versions.length > 0;
 
   return (
     <div className="animate-fade-in">
@@ -355,12 +337,17 @@ const CaseDetail = () => {
       </div>
 
       {/* Progress phases — colored by stage state */}
-      <div className="grid grid-cols-3 gap-2 mb-10">
+      {!hasVersions && (
+        <div className="grid grid-cols-3 gap-2 mb-10">
         <div className={segmentClass(stageState.analysis, "secondary")} />
         <div className={segmentClass(stageState.strategy, "primary")} />
         <div className={segmentClass(stageState.draft, "tertiary")} />
-      </div>
+        </div>
+      )}
 
+      {hasVersions && caseRow ? (
+        <CaseChatView caseRow={caseRow as Parameters<typeof CaseChatView>[0]["caseRow"]} />
+      ) : (
       <div className="grid lg:grid-cols-2 gap-10">
         {/* Left column */}
         <div className="space-y-8">
@@ -626,53 +613,9 @@ const CaseDetail = () => {
               <Sparkles className="w-3.5 h-3.5" /> Pipeline erneut starten
             </Button>
           )}
-
-          {/* Refinement chat */}
-          {caseRow?.draft && stageState.draft === "complete" && (
-            <div className="bg-card border border-border/30 rounded-sm p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="w-8 h-8 rounded-full bg-tertiary/20 flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-tertiary" strokeWidth={1.5} />
-                </span>
-                <p className="font-mono-label text-tertiary">Refinement Chat</p>
-              </div>
-              <div className="bg-muted/40 rounded-sm p-4 mb-4">
-                <p className="font-serif italic text-sm text-foreground/80 leading-relaxed">
-                  Möchten Sie den Tonfall anpassen oder die Argumentation verschärfen?
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {["Aggressiver", "Kürzer fassen", "Mehr Empathie"].map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() => setRefinement(tag)}
-                    className="px-3 py-1.5 border border-border/40 rounded-sm font-mono-label text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-              <div className="relative">
-                <input
-                  value={refinement}
-                  onChange={(e) => setRefinement(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && runRefinement()}
-                  disabled={refining}
-                  placeholder="Anweisung zur Anpassung eingeben…"
-                  className="w-full bg-transparent border-b border-border/40 focus:border-primary/40 focus:outline-none py-3 pr-10 font-serif italic text-sm placeholder:text-muted-foreground/60 disabled:opacity-50"
-                />
-                <button
-                  onClick={runRefinement}
-                  disabled={refining || refinement.trim().length < 2}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 text-tertiary hover:text-primary disabled:opacity-40"
-                >
-                  {refining ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
+      )}
 
       <UpgradeModal open={showUpgrade} onOpenChange={setShowUpgrade} />
     </div>

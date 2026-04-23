@@ -58,10 +58,56 @@ export type Database = {
           },
         ]
       }
+      case_versions: {
+        Row: {
+          analysis: Json | null
+          case_id: string
+          created_at: string
+          draft: string | null
+          id: string
+          kind: string
+          model_used: string | null
+          strategy: string | null
+          strategy_labels: string[]
+          user_id: string
+          user_prompt: string | null
+          version_number: number
+        }
+        Insert: {
+          analysis?: Json | null
+          case_id: string
+          created_at?: string
+          draft?: string | null
+          id?: string
+          kind: string
+          model_used?: string | null
+          strategy?: string | null
+          strategy_labels?: string[]
+          user_id: string
+          user_prompt?: string | null
+          version_number: number
+        }
+        Update: {
+          analysis?: Json | null
+          case_id?: string
+          created_at?: string
+          draft?: string | null
+          id?: string
+          kind?: string
+          model_used?: string | null
+          strategy?: string | null
+          strategy_labels?: string[]
+          user_id?: string
+          user_prompt?: string | null
+          version_number?: number
+        }
+        Relationships: []
+      }
       cases: {
         Row: {
           analysis: Json | null
           created_at: string
+          current_version_id: string | null
           draft: string | null
           icon_hint: string
           id: string
@@ -70,6 +116,8 @@ export type Database = {
           last_analyzed_at: string | null
           medium: string
           model_used: string | null
+          quick_suggestions: Json | null
+          quick_suggestions_version_id: string | null
           situation_text: string | null
           status: string
           strategy: string | null
@@ -80,6 +128,7 @@ export type Database = {
         Insert: {
           analysis?: Json | null
           created_at?: string
+          current_version_id?: string | null
           draft?: string | null
           icon_hint?: string
           id?: string
@@ -88,6 +137,8 @@ export type Database = {
           last_analyzed_at?: string | null
           medium?: string
           model_used?: string | null
+          quick_suggestions?: Json | null
+          quick_suggestions_version_id?: string | null
           situation_text?: string | null
           status?: string
           strategy?: string | null
@@ -98,6 +149,7 @@ export type Database = {
         Update: {
           analysis?: Json | null
           created_at?: string
+          current_version_id?: string | null
           draft?: string | null
           icon_hint?: string
           id?: string
@@ -106,12 +158,44 @@ export type Database = {
           last_analyzed_at?: string | null
           medium?: string
           model_used?: string | null
+          quick_suggestions?: Json | null
+          quick_suggestions_version_id?: string | null
           situation_text?: string | null
           status?: string
           strategy?: string | null
           title?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      negotiation_strategies: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          key: string
+          label: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key: string
+          label: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key?: string
+          label?: string
+          sort_order?: number
         }
         Relationships: []
       }

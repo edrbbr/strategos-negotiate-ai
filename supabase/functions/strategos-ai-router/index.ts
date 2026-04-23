@@ -207,6 +207,68 @@ Deno.serve(async (req: Request) => {
       return typeof newCount === "number" ? newCount : profile.cases_used + 1;
     };
 
+    // Detect strategy keys mentioned in the strategy text, against the lookup table.
+    const detectStrategyLabels = async (strategyText: string): Promise<string[]> => {
+      if (!strategyText) return [];
+      const { data: strategies } = await serviceClient
+        .from("negotiation_strategies")
+        .select("key, label")
+        .eq("is_active", true);
+      if (!strategies) return [];
+      const t = strategyText.toLowerCase();
+      const found = strategies.filter((s) => {
+        const labelHit = t.includes(s.label.toLowerCase());
+        const keyHit = t.includes(s.key.replace("_", " "));
+        return labelHit || keyHit;
+      });
+      return found.map((s) => s.key);
+    };
+
+    // Persist a v1 (or vN+1) initial snapshot in case_versions and update cases.current_version_id.
+    const persistInitialVersion = async (data: {
+      analysis: unknown; strategy: string; draft: string; model_used: string;
+    }) => {
+      if (!case_id) return;
+      const { data: latest } = await serviceClient
+        .from("case_versions")
+        .select("version_number")
+        .eq("case_id", case_id)
+        .order("version_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const nextNumber = (latest?.version_number ?? 0) + 1;
+      const labels = await detectStrategyLabels(data.strategy ?? "");
+      const { data: inserted, error: insErr } = await serviceClient
+        .from("case_versions")
+        .insert({
+          case_id,
+          user_id: userId,
+          version_number: nextNumber,
+          kind: "initial",
+          analysis: data.analysis,
+          strategy: data.strategy,
+          draft: data.draft,
+          strategy_labels: labels,
+          model_used: data.model_used,
+        })
+        .select("id")
+        .single();
+      if (insErr) {
+        console.error("initial version insert failed", insErr);
+        return;
+      }
+      await serviceClient.from("cases").update({ current_version_id: inserted.id }).eq("id", case_id);
+      // Fire-and-forget: generate quick suggestions
+      fetch(`${SUPABASE_URL}/functions/v1/strategos-suggest-refinements`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({ case_id, _internal: true, _user_id: userId }),
+      }).catch(() => undefined);
+    };
+
     // ---- MOCK FALLBACK (only if every provider key is missing) ----
     if (allKeysMissing) {
       await new Promise((r) => setTimeout(r, 1500));
@@ -218,6 +280,12 @@ Deno.serve(async (req: Request) => {
         data: { title: m.title, icon_hint: m.icon_hint, draft: m.draft, model_used: "mock" },
       });
       const cases_used = await incrementCounter();
+      await persistInitialVersion({
+        analysis: m.analysis,
+        strategy: m.strategy,
+        draft: m.draft,
+        model_used: "mock",
+      });
       return json({
         ...m,
         model: "mock",
@@ -248,6 +316,12 @@ Deno.serve(async (req: Request) => {
         });
         const total = Date.now() - t0;
         const cases_used = await incrementCounter();
+        await persistInitialVersion({
+          analysis: result.analysis,
+          strategy: result.strategy,
+          draft: result.draft,
+          model_used: "multi_stage_elite",
+        });
         return json({
           ...result,
           model: "multi_stage_elite",
@@ -311,6 +385,12 @@ Deno.serve(async (req: Request) => {
       const stageMetas: StageMeta[] = [
         { stage: "analysis", model: plan.model_id, latency_ms: total },
       ];
+      await persistInitialVersion({
+        analysis: result.analysis,
+        strategy: result.strategy,
+        draft: result.draft,
+        model_used: plan.model_id,
+      });
       return json({
         ...result,
         model: plan.model_id,

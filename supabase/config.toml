@@ -6,6 +6,12 @@ verify_jwt = false
 [functions.strategos-refinement]
 verify_jwt = false
 
+[functions.strategos-restore-version]
+verify_jwt = false
+
+[functions.strategos-suggest-refinements]
+verify_jwt = false
+
 [functions.create-checkout]
 verify_jwt = false
 
