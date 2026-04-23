@@ -31,6 +31,28 @@ Hard rules:
 - Output ONLY the rewritten draft text. No preamble, no labels, no explanation, no markdown fences.`;
 
 const MODEL = "google/gemini-2.5-flash";
+const CLASSIFIER_MODEL = "google/gemini-2.5-flash-lite";
+const STRATEGY_MODEL = "google/gemini-2.5-flash";
+
+const STRATEGY_CLASSIFIER_PROMPT = `You decide whether a user's refinement instruction
+requires a NEW negotiation strategy or only changes draft style/tone/length.
+
+Return regenerate_strategy=true ONLY if the instruction asks for a different
+negotiation approach, framework, tactic, or fundamentally different angle
+(e.g. "use Harvard method", "be more aggressive negotiator", "try Chris Voss style",
+"different strategy", "anchor higher", "use BATNA", "win-win approach").
+
+Return regenerate_strategy=false for pure draft edits like
+"shorter", "friendlier", "more formal", "fix typo", "translate", "add greeting",
+"remove paragraph X", "change deadline date".
+
+strategy_labels: pick 1-3 from [harvard, chris_voss, ackerman, batna, win_win, hard_bargaining]
+that match the NEW strategy if regenerate_strategy=true, otherwise return [].`;
+
+const STRATEGY_REGEN_PROMPT = `You are STRATEGOS strategist. Produce a CONCISE negotiation strategy
+(2-4 sentences) reflecting the user's instruction, grounded in the provided analysis.
+Reply ONLY in the requested language.
+Output ONLY the strategy text — no JSON, no labels, no markdown fences, no preamble.`;
 
 // Rough token-overlap heuristic to detect "the model basically copied the old draft"
 function similarityRatio(a: string, b: string): number {
@@ -79,6 +101,104 @@ async function callGateway(
   const data = await res.json();
   const text: string = (data?.choices?.[0]?.message?.content ?? "").trim();
   return { ok: true, text };
+}
+
+async function callPlainGateway(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  userContent: string,
+  temperature = 0.5,
+): Promise<{ ok: true; text: string } | { ok: false; status: number }> {
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        temperature,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+      }),
+    });
+    if (!res.ok) return { ok: false, status: res.status };
+    const data = await res.json();
+    const text: string = (data?.choices?.[0]?.message?.content ?? "").trim();
+    return { ok: true, text };
+  } catch (e) {
+    console.error("plain gateway error", e);
+    return { ok: false, status: 0 };
+  }
+}
+
+const VALID_STRATEGY_LABELS = new Set([
+  "harvard", "chris_voss", "ackerman", "batna", "win_win", "hard_bargaining",
+]);
+
+async function classifyInstruction(
+  apiKey: string,
+  instruction: string,
+  currentStrategy: string,
+): Promise<{ regenerate_strategy: boolean; strategy_labels: string[] }> {
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: CLASSIFIER_MODEL,
+        temperature: 0,
+        messages: [
+          { role: "system", content: STRATEGY_CLASSIFIER_PROMPT },
+          {
+            role: "user",
+            content:
+              `Current strategy:\n"""\n${currentStrategy.slice(0, 600)}\n"""\n\n` +
+              `User instruction:\n"""\n${instruction}\n"""`,
+          },
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "classify",
+            description: "Classify whether the instruction requires regenerating the negotiation strategy.",
+            parameters: {
+              type: "object",
+              properties: {
+                regenerate_strategy: { type: "boolean" },
+                strategy_labels: {
+                  type: "array",
+                  items: { type: "string", enum: [...VALID_STRATEGY_LABELS] },
+                },
+              },
+              required: ["regenerate_strategy", "strategy_labels"],
+              additionalProperties: false,
+            },
+          },
+        }],
+        tool_choice: { type: "function", function: { name: "classify" } },
+      }),
+    });
+    if (!res.ok) {
+      console.warn("classifier non-OK", res.status);
+      return { regenerate_strategy: false, strategy_labels: [] };
+    }
+    const data = await res.json();
+    const argsStr = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (!argsStr) return { regenerate_strategy: false, strategy_labels: [] };
+    const parsed = JSON.parse(argsStr);
+    const labels: string[] = Array.isArray(parsed.strategy_labels)
+      ? parsed.strategy_labels.filter((l: unknown) => typeof l === "string" && VALID_STRATEGY_LABELS.has(l))
+      : [];
+    return {
+      regenerate_strategy: Boolean(parsed.regenerate_strategy),
+      strategy_labels: labels,
+    };
+  } catch (e) {
+    console.warn("classifier failed, fallback to draft-only", e);
+    return { regenerate_strategy: false, strategy_labels: [] };
+  }
 }
 
 Deno.serve(async (req: Request) => {
