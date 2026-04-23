@@ -1,15 +1,12 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Award, Gavel, ScrollText, Settings, Plus, LogOut, User } from "lucide-react";
+import { BarChart3, Settings, Plus, LogOut, User } from "lucide-react";
 import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAllCases } from "@/hooks/useCases";
 
 const navItems = [
-  { label: "Analyse", to: "/app/dashboard", icon: BarChart3 },
-  { label: "Strategie", to: "/app/dashboard", icon: Award },
-  { label: "Execution", to: "/app/execution", icon: Gavel },
-  { label: "History", to: "/app/history", icon: ScrollText },
+  { label: "Dashboard", to: "/app/dashboard", icon: BarChart3 },
   { label: "Settings", to: "/app/settings", icon: Settings },
 ];
 
