@@ -1,7 +1,7 @@
 import { ProviderError } from "../types.ts";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 90_000;
 
 export interface AnthropicTool {
   name: string;
@@ -25,11 +25,11 @@ export interface AnthropicCallParams {
 export async function callAnthropic(
   params: AnthropicCallParams,
 ): Promise<Record<string, unknown>> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  const doFetch = () =>
-    fetch(ANTHROPIC_URL, {
+  // Fresh controller per attempt so retries aren't poisoned by a prior abort.
+  const doFetch = () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    return fetch(ANTHROPIC_URL, {
       method: "POST",
       signal: controller.signal,
       headers: {
@@ -45,7 +45,8 @@ export async function callAnthropic(
         tool_choice: { type: "tool", name: params.tool.name },
         messages: [{ role: "user", content: params.userMessage }],
       }),
-    });
+    }).finally(() => clearTimeout(timer));
+  };
 
   try {
     let response = await doFetch();
@@ -84,7 +85,10 @@ export async function callAnthropic(
       throw new ProviderError("No tool_use in response", 500, "PARSE_ERROR", "anthropic");
     }
     return block.input as Record<string, unknown>;
-  } finally {
-    clearTimeout(timer);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new ProviderError("Anthropic request timed out", 504, "TIMEOUT", "anthropic");
+    }
+    throw e;
   }
 }
