@@ -50,8 +50,16 @@ export async function callOpenAI(
 
   try {
     let response = await doFetch();
-    if (response.status === 429 || response.status >= 500) {
-      await new Promise((r) => setTimeout(r, 800));
+    // Retry on 429/5xx with exponential backoff + jitter, honoring Retry-After
+    const maxRetries = 4;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      if (response.status !== 429 && response.status < 500) break;
+      const retryAfter = Number(response.headers.get("retry-after"));
+      const base = Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : 800 * Math.pow(2, attempt);
+      const jitter = Math.floor(Math.random() * 400);
+      await new Promise((r) => setTimeout(r, base + jitter));
       response = await doFetch();
     }
 
