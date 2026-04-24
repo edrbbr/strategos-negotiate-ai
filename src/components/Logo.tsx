@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils";
 import pallanxLogo from "@/assets/pallanx-logo.png";
+import pallanxLogoLight from "@/assets/pallanx-logo-light.png";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export const Logo = ({
   className,
@@ -7,11 +9,14 @@ export const Logo = ({
 }: {
   className?: string;
   subtitle?: boolean | string;
-}) => (
+}) => {
+  const { theme } = useTheme();
+  const src = theme === "light" ? pallanxLogoLight : pallanxLogo;
+  return (
   <div className={cn("flex flex-col", className)}>
     <div className="flex items-center gap-3">
       <img
-        src={pallanxLogo}
+        src={src}
         alt="PALLANX"
         className="h-9 w-9 shrink-0 object-contain"
       />
@@ -25,4 +30,5 @@ export const Logo = ({
       </span>
     )}
   </div>
-);
+  );
+};
