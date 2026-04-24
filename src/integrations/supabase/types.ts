@@ -23,6 +23,7 @@ export type Database = {
           file_path: string
           id: string
           mime_type: string | null
+          refinement_for_version_id: string | null
           size_bytes: number | null
           user_id: string
         }
@@ -34,6 +35,7 @@ export type Database = {
           file_path: string
           id?: string
           mime_type?: string | null
+          refinement_for_version_id?: string | null
           size_bytes?: number | null
           user_id: string
         }
@@ -45,6 +47,7 @@ export type Database = {
           file_path?: string
           id?: string
           mime_type?: string | null
+          refinement_for_version_id?: string | null
           size_bytes?: number | null
           user_id?: string
         }
