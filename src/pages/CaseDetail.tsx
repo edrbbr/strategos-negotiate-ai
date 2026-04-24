@@ -726,10 +726,6 @@ function ShimmerLines({ lines }: { lines: number }) {
     </div>
   );
 }
-      ))}
-    </div>
-  );
-}
 
 function PendingNote({ text }: { text: string }) {
   return <p className="font-mono-label text-muted-foreground/50">{text}</p>;
