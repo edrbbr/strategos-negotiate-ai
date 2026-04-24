@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
+import { PublicHeader } from "@/components/PublicHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,7 +32,7 @@ const lookupKeyFor = (planId: string, cycle: BillingCycle): string | null => {
 
 const ctaLabelFor = (planId: string, opts?: { isAuthed?: boolean }): string => {
   if (planId === "free") {
-    return opts?.isAuthed ? "FALL STARTEN" : "KOSTENLOS STARTEN";
+    return opts?.isAuthed ? "DOSSIER STARTEN" : "KOSTENLOS STARTEN";
   }
   if (planId === "elite") return "ELITE FREISCHALTEN";
   return "JETZT SICHERN";
@@ -218,32 +219,7 @@ const Pricing = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="container flex items-center justify-between py-6">
-        <Link to="/">
-          <Logo />
-        </Link>
-        <nav className="hidden md:flex items-center gap-10 font-sans uppercase tracking-[0.18em] text-xs text-muted-foreground">
-          <Link to="/" className="hover:text-primary">
-            Home
-          </Link>
-          <Link to="/preise" className="text-primary">
-            Preise
-          </Link>
-        </nav>
-        <div className="flex items-center gap-4">
-          <Link
-            to="/login"
-            className="font-sans uppercase tracking-[0.2em] text-xs text-muted-foreground hover:text-primary"
-          >
-            Login
-          </Link>
-          <Link to="/register">
-            <Button variant="gold-outline" size="sm">
-              Start Negotiation
-            </Button>
-          </Link>
-        </div>
-      </header>
+      <PublicHeader active="preise" />
 
       <section className="container py-20 text-center">
         <p className="font-mono-label text-primary mb-6">◆ Preise</p>
@@ -333,7 +309,7 @@ const Pricing = () => {
 
       <footer className="container py-10 border-t border-border/40 flex flex-col md:flex-row gap-4 justify-between items-center text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
         <Logo />
-        <span>© 2024 Strategos Elite System</span>
+        <span>© 2026 PALLANX Elite System</span>
       </footer>
     </div>
   );
