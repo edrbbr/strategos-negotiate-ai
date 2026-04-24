@@ -376,6 +376,9 @@ Deno.serve(async (req: Request) => {
           medium,
           languageLabel: language_label,
           attachmentsContext,
+          allowedStrategies,
+          tonalityInstruction,
+          enableDeepDocAnalysis,
         });
         const total = Date.now() - t0;
         const cases_used = await incrementCounter();
@@ -428,6 +431,9 @@ Deno.serve(async (req: Request) => {
         medium,
         languageLabel: language_label,
         attachmentsContext,
+        allowedStrategies,
+        tonalityInstruction,
+        enableDeepDocAnalysis,
       });
       const total = Date.now() - t0;
 
@@ -454,6 +460,24 @@ Deno.serve(async (req: Request) => {
         draft: result.draft,
         model_used: plan.model_id,
       });
+
+      // Fire-and-forget: generate Pro upgrade preview for Free users
+      if (tierKey === "free" && case_id) {
+        fetch(`${SUPABASE_URL}/functions/v1/strategos-upgrade-preview`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            case_id,
+            _internal: true,
+            _user_id: userId,
+            free_strategy: result.strategy,
+          }),
+        }).catch(() => undefined);
+      }
+
       return json({
         ...result,
         model: plan.model_id,
