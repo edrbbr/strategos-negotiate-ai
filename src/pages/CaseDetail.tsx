@@ -233,6 +233,18 @@ const CaseDetail = () => {
       });
 
       if (error) {
+        // "Failed to fetch" / network drop / edge timeout — server may still complete.
+        // Verify via case_versions polling before showing an error.
+        const noContext = !(error as { context?: Response }).context;
+        if (noContext && activeCaseId) {
+          const recovered = await waitForVersionRecovery(activeCaseId);
+          if (recovered) {
+            setStageState({ analysis: "complete", strategy: "complete", draft: "complete" });
+            refreshProfile();
+            toast.success("Pipeline abgeschlossen");
+            return;
+          }
+        }
         const ctx = (error as { context?: Response }).context;
         if (ctx?.status === 401) { toast.error("Sitzung abgelaufen."); navigate("/login"); return; }
         if (ctx?.status === 403) {
