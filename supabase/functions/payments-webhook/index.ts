@@ -16,6 +16,74 @@ function readableId(item: any): string {
   return item?.price?.metadata?.lovable_external_id || item?.price?.id;
 }
 
+async function handleCheckoutCompleted(session: any, env: StripeEnv) {
+  // Only handle one-time payment (mode === "payment"); subscriptions are covered separately.
+  if (session.mode !== "payment") return;
+  if (session.payment_status !== "paid") return;
+
+  const userId = session.metadata?.userId;
+  const lookupKey = session.metadata?.lookupKey;
+  if (!userId || lookupKey !== "extra_dossier_single") return;
+
+  // Quantity from line items (managed-payments stores it on the session line items).
+  // We stored the quantity in metadata for safety.
+  const qty = Math.max(1, Math.min(10, parseInt(session.metadata?.quantity ?? "1", 10) || 1));
+  const amountCents = session.amount_total ?? qty * 499;
+  const currency = (session.currency ?? "eur").toUpperCase();
+
+  // Get the user's current period_end so credits expire with the period
+  const { data: profile } = await getSupabase()
+    .from("profiles")
+    .select("id, extra_credits")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const { data: sub } = await getSupabase()
+    .from("subscriptions")
+    .select("current_period_end")
+    .eq("user_id", userId)
+    .eq("environment", env)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!profile) {
+    console.warn("Extra-dossier purchase without profile", userId);
+    return;
+  }
+
+  // Idempotency: skip if we already booked this session
+  const { data: existing } = await getSupabase()
+    .from("extra_credit_purchases")
+    .select("id")
+    .eq("stripe_session_id", session.id)
+    .maybeSingle();
+  if (existing) {
+    console.log("Extra-dossier session already booked", session.id);
+    return;
+  }
+
+  await getSupabase().from("extra_credit_purchases").insert({
+    user_id: userId,
+    quantity: qty,
+    amount_cents: amountCents,
+    currency,
+    status: "completed",
+    stripe_session_id: session.id,
+    expires_at: sub?.current_period_end ?? null,
+  });
+
+  await getSupabase()
+    .from("profiles")
+    .update({
+      extra_credits: (profile.extra_credits ?? 0) + qty,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId);
+
+  console.log(`Booked ${qty} extra dossiers for user ${userId}`);
+}
+
 async function handleSubscriptionCreated(subscription: any, env: StripeEnv) {
   const userId = subscription.metadata?.userId;
   if (!userId) {
