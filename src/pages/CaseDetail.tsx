@@ -482,6 +482,31 @@ const CaseDetail = () => {
 
           <div>
             <div className="flex items-baseline justify-between mb-2">
+              <p className="font-mono-label text-muted-foreground">Tonalität</p>
+              {!limits.allowsTonality && (
+                <span className="font-mono-label text-muted-foreground/60 text-[10px]">
+                  Pro · Diplomatisch · Juristisch · Sales
+                </span>
+              )}
+            </div>
+            <TonalitySelect
+              value={tonalityKey}
+              onChange={(k) => {
+                setTonalityKey(k);
+                if (caseId) {
+                  updateMut.mutate({
+                    id: caseId,
+                    patch: { tonality_profile_key: k } as Partial<typeof caseRow> as never,
+                  });
+                }
+              }}
+              onLockedClick={() => setShowUpgrade(true)}
+              disabled={loading}
+            />
+          </div>
+
+          <div>
+            <div className="flex items-baseline justify-between mb-2">
               <p className="font-mono-label text-muted-foreground">Referenz-Dokumente</p>
               <p className="font-mono-label text-muted-foreground/60 text-[10px]">
                 {(serverAttachments?.length ?? 0) + pendingFiles.length}/{maxAttachments}
