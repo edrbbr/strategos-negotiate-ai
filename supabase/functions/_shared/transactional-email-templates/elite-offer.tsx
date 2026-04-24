@@ -7,6 +7,7 @@ import {
   Heading,
   Hr,
   Html,
+  Img,
   Preview,
   Section,
   Text,
@@ -31,7 +32,16 @@ const EliteOfferEmail = ({
     <Preview>{fullName}, Ihr persönlicher Imperialer Zugang ist freigegeben</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Heading style={brand}>PALLANX</Heading>
+        <Section style={brandRow}>
+          <Img
+            src="https://pallanx.com/pallanx-logo-light.png"
+            alt="PALLANX"
+            width="48"
+            height="48"
+            style={logoImg}
+          />
+          <Heading style={brand}>PALLANX</Heading>
+        </Section>
         <Text style={kicker}>Imperialer Zugang — Persönliche Einladung</Text>
 
         <Text style={greet}>{fullName},</Text>
@@ -135,8 +145,20 @@ const brand = {
   fontWeight: 300,
   fontStyle: 'italic' as const,
   fontSize: '32px',
-  margin: '0 0 6px',
+  margin: 0,
   letterSpacing: '1px',
+  display: 'inline-block' as const,
+  verticalAlign: 'middle' as const,
+}
+const brandRow = {
+  display: 'flex' as const,
+  alignItems: 'center' as const,
+  gap: '12px',
+  margin: '0 0 6px',
+}
+const logoImg = {
+  display: 'inline-block' as const,
+  verticalAlign: 'middle' as const,
 }
 const kicker = {
   color: '#999999',

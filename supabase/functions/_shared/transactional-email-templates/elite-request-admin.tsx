@@ -7,6 +7,7 @@ import {
   Heading,
   Hr,
   Html,
+  Img,
   Preview,
   Section,
   Text,
@@ -37,7 +38,16 @@ const EliteRequestAdminEmail = ({
     <Preview>Neue Elite-Anfrage von {fullName}</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Heading style={h1}>Neue Elite-Anfrage</Heading>
+        <Section style={brandRow}>
+          <Img
+            src="https://pallanx.com/pallanx-logo-light.png"
+            alt="PALLANX"
+            width="40"
+            height="40"
+            style={logoImg}
+          />
+          <Heading style={h1}>Neue Elite-Anfrage</Heading>
+        </Section>
         <Text style={lead}>
           Eine neue Anfrage wurde im Imperialen System eingereicht.
         </Text>
@@ -109,7 +119,19 @@ const h1 = {
   color: '#a4863e',
   fontWeight: 400,
   fontSize: '26px',
+  margin: 0,
+  display: 'inline-block' as const,
+  verticalAlign: 'middle' as const,
+}
+const brandRow = {
+  display: 'flex' as const,
+  alignItems: 'center' as const,
+  gap: '12px',
   margin: '0 0 12px',
+}
+const logoImg = {
+  display: 'inline-block' as const,
+  verticalAlign: 'middle' as const,
 }
 const lead = { fontSize: '15px', lineHeight: '1.6', margin: '0 0 24px' }
 const card = {
