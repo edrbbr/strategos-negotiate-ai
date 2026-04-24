@@ -39,14 +39,26 @@ export const EliteRequestModal = ({ open, onOpenChange }: Props) => {
   const [useCase, setUseCase] = useState("");
   const [volume, setVolume] = useState("");
   const [pain, setPain] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+
+  // Prefill from auth profile whenever the modal opens
+  useEffect(() => {
+    if (open) {
+      setContactEmail(user?.email ?? "");
+      setFullName(profile?.full_name ?? "");
+    }
+  }, [open, user?.email, profile?.full_name]);
 
   const reset = () => {
     setProfession("");
     setUseCase("");
     setVolume("");
     setPain("");
+    setContactEmail("");
+    setFullName("");
     setDone(false);
   };
 
@@ -57,15 +69,27 @@ export const EliteRequestModal = ({ open, onOpenChange }: Props) => {
 
   const submit = async () => {
     if (!user) return;
-    if (!profession.trim() || !useCase || !volume || !pain.trim()) {
+    if (
+      !fullName.trim() ||
+      !contactEmail.trim() ||
+      !profession.trim() ||
+      !useCase ||
+      !volume ||
+      !pain.trim()
+    ) {
       toast.error("Bitte alle Felder ausfüllen.");
+      return;
+    }
+    // basic email sanity
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
+      toast.error("Bitte eine gültige E-Mail-Adresse angeben.");
       return;
     }
     setSubmitting(true);
     const { error } = await supabase.from("elite_requests").insert({
       user_id: user.id,
-      full_name: profile?.full_name ?? user.email ?? "Unbekannt",
-      email: user.email ?? "",
+      full_name: fullName.trim(),
+      email: contactEmail.trim(),
       profession: profession.trim(),
       primary_use_case: useCase,
       monthly_negotiation_volume: volume,
@@ -81,7 +105,7 @@ export const EliteRequestModal = ({ open, onOpenChange }: Props) => {
 
     // Fire-and-forget: notify admin
     supabase.functions.invoke("notify-elite-request-admin", {
-      body: { user_email: user.email, full_name: profile?.full_name },
+      body: { user_email: contactEmail.trim(), full_name: fullName.trim() },
     }).catch(() => undefined);
 
     setSubmitting(false);
