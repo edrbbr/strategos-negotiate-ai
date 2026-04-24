@@ -6,6 +6,7 @@ interface CheckoutOptions {
   quantity?: number;
   customerEmail?: string;
   returnUrl: string;
+  discountCode?: string;
 }
 
 export function useStripeCheckout() {
