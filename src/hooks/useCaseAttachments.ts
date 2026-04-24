@@ -12,6 +12,7 @@ export interface CaseAttachment {
   size_bytes: number | null;
   extracted_text: string | null;
   created_at: string;
+  refinement_for_version_id: string | null;
 }
 
 export function useCaseAttachments(caseId: string | undefined) {
@@ -34,9 +35,13 @@ export function useUploadAttachment() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { caseId: string; file: File }): Promise<CaseAttachment> => {
+    mutationFn: async (params: {
+      caseId: string;
+      file: File;
+      forRefinement?: boolean;
+    }): Promise<CaseAttachment> => {
       if (!user) throw new Error("Not authenticated");
-      const { caseId, file } = params;
+      const { caseId, file, forRefinement } = params;
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${user.id}/${caseId}/${Date.now()}_${safeName}`;
       const { error: upErr } = await supabase.storage
@@ -53,6 +58,11 @@ export function useUploadAttachment() {
           file_name: file.name,
           mime_type: file.type || null,
           size_bytes: file.size,
+          // Tag uploads attached to a refinement turn so they're visually
+          // separable from initial-context attachments. The edge function
+          // will overwrite this with the actual version id once the
+          // refinement is persisted.
+          ...(forRefinement ? { refinement_for_version_id: null } : {}),
         })
         .select("*")
         .single();

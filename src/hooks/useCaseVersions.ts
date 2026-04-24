@@ -60,9 +60,13 @@ export function useCaseVersions(caseId: string | undefined) {
 export function useRefineVersion() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { case_id: string; instruction: string }) => {
+    mutationFn: async (params: { case_id: string; instruction: string; attachment_ids?: string[] }) => {
       const { data, error } = await supabase.functions.invoke("strategos-refinement", {
-        body: { case_id: params.case_id, instruction: params.instruction },
+        body: {
+          case_id: params.case_id,
+          instruction: params.instruction,
+          attachment_ids: params.attachment_ids ?? [],
+        },
       });
       if (error) throw error;
       return data as { refined_draft: string; version_id: string; version_number: number };
@@ -70,6 +74,7 @@ export function useRefineVersion() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["case-versions", vars.case_id] });
       qc.invalidateQueries({ queryKey: ["case", vars.case_id] });
+      qc.invalidateQueries({ queryKey: ["case_attachments", vars.case_id] });
     },
   });
 }

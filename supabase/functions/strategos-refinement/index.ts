@@ -33,6 +33,7 @@ Hard rules:
 const MODEL = "google/gemini-2.5-flash";
 const CLASSIFIER_MODEL = "google/gemini-2.5-flash-lite";
 const STRATEGY_MODEL = "google/gemini-2.5-flash";
+const EXTRACTION_MODEL = "google/gemini-2.5-flash-lite";
 
 const STRATEGY_CLASSIFIER_PROMPT = `You decide whether a user's refinement instruction
 requires a NEW negotiation strategy or only changes draft style/tone/length.
@@ -220,13 +221,51 @@ Deno.serve(async (req: Request) => {
     if (userErr || !userData?.user?.id) return json({ error: "Unauthorized" }, 401);
     const userId = userData.user.id;
 
-    const { case_id, instruction } = await req.json().catch(() => ({}));
+    const { case_id, instruction, attachment_ids: attRaw } = await req
+      .json()
+      .catch(() => ({}));
     if (!case_id || typeof case_id !== "string") return json({ error: "case_id missing" }, 400);
     if (!instruction || typeof instruction !== "string" || instruction.trim().length < 2) {
       return json({ error: "instruction missing" }, 400);
     }
+    const attachment_ids: string[] = Array.isArray(attRaw)
+      ? attRaw.filter((x): x is string => typeof x === "string").slice(0, 20)
+      : [];
 
     const service = createClient<any>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // ---- TIER-AWARE ATTACHMENT LIMIT ENFORCEMENT ----
+    // Look up the user's plan to know how many refinement-time attachments
+    // are allowed. Free = 0 by default; Pro/Elite typically allow several.
+    let refinementAttachmentsLimit = 0;
+    if (attachment_ids.length > 0) {
+      const { data: profileRow, error: profileErr } = await service
+        .from("profiles")
+        .select("plan_id, plans:plans!profiles_plan_id_fkey(refinement_attachments_limit)")
+        .eq("id", userId)
+        .maybeSingle();
+      if (profileErr) {
+        console.error("plan lookup failed", profileErr);
+        return json({ error: "Internal error" }, 500);
+      }
+      refinementAttachmentsLimit =
+        (profileRow as unknown as { plans?: { refinement_attachments_limit?: number } | null })
+          ?.plans?.refinement_attachments_limit ?? 0;
+      if (attachment_ids.length > refinementAttachmentsLimit) {
+        return json(
+          {
+            error: "REFINEMENT_ATTACHMENT_LIMIT",
+            code: "refinement_attachment_limit",
+            message:
+              refinementAttachmentsLimit === 0
+                ? "Anhänge in Refinements sind in deinem Tarif nicht enthalten. Upgrade auf Pro oder Elite."
+                : `Maximal ${refinementAttachmentsLimit} Anhänge pro Refinement erlaubt.`,
+            limit: refinementAttachmentsLimit,
+          },
+          403,
+        );
+      }
+    }
 
     // ---- TIER-AWARE LIMIT ENFORCEMENT ----
     // Use the RPC to atomically validate per-case + monthly refinement quotas
@@ -299,6 +338,84 @@ Deno.serve(async (req: Request) => {
     const currentLabels: string[] = Array.isArray(latest.strategy_labels) ? latest.strategy_labels : [];
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+
+    // ---- EXTRACT REFINEMENT ATTACHMENTS (cost-optimized: gemini-flash-lite) ----
+    let attachmentsContext = "";
+    const usedAttachmentIds: string[] = [];
+    if (attachment_ids.length > 0 && LOVABLE_API_KEY) {
+      try {
+        const { data: atts } = await service
+          .from("case_attachments")
+          .select("id, file_path, file_name, mime_type, extracted_text")
+          .eq("case_id", case_id)
+          .eq("user_id", userId)
+          .in("id", attachment_ids);
+        if (atts && atts.length > 0) {
+          const parts: string[] = [];
+          for (const a of atts) {
+            usedAttachmentIds.push(a.id);
+            if (a.extracted_text && a.extracted_text.length > 20) {
+              parts.push(`[${a.file_name}]\n${a.extracted_text.slice(0, 4000)}`);
+              continue;
+            }
+            try {
+              const { data: blob } = await service.storage
+                .from("case-attachments")
+                .download(a.file_path);
+              if (!blob) continue;
+              const buf = new Uint8Array(await blob.arrayBuffer());
+              let bin = "";
+              for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+              const b64 = btoa(bin);
+              const mime = a.mime_type || "application/octet-stream";
+              const geminiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: EXTRACTION_MODEL,
+                  messages: [
+                    {
+                      role: "user",
+                      content: [
+                        {
+                          type: "text",
+                          text:
+                            "Extract all relevant text content from this document. Keep it concise, no commentary. Reproduce factual content (names, dates, amounts, clauses) verbatim where possible. Max ~1500 words.",
+                        },
+                        { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
+                      ],
+                    },
+                  ],
+                }),
+              });
+              if (geminiResp.ok) {
+                const gj = await geminiResp.json();
+                const extracted = gj?.choices?.[0]?.message?.content;
+                if (typeof extracted === "string" && extracted.trim().length > 10) {
+                  const trimmed = extracted.slice(0, 4000);
+                  parts.push(`[${a.file_name}]\n${trimmed}`);
+                  await service
+                    .from("case_attachments")
+                    .update({ extracted_text: trimmed })
+                    .eq("id", a.id);
+                }
+              } else {
+                console.warn("Refinement attachment extract failed", geminiResp.status);
+              }
+            } catch (e) {
+              console.warn("refinement attachment extract error", a.file_name, e);
+            }
+          }
+          attachmentsContext = parts.join("\n\n---\n\n");
+        }
+      } catch (e) {
+        console.warn("refinement attachments load failed", e);
+      }
+    }
+
     if (!LOVABLE_API_KEY) {
       const newDraft = `${currentDraft}\n\n[Refinement (mock): ${instruction}]`;
       return await persistAndReply(service, caseRow, latest, {
@@ -306,7 +423,7 @@ Deno.serve(async (req: Request) => {
         strategy: currentStrategy,
         strategy_labels: currentLabels,
         draft: newDraft,
-      }, instruction, "mock", softWarning);
+      }, instruction, "mock", softWarning, usedAttachmentIds);
     }
 
     // Load tonality instruction if applicable
@@ -362,6 +479,9 @@ Deno.serve(async (req: Request) => {
       `LANGUAGE: ${caseRow.language_label}\n` +
       `MEDIUM: ${caseRow.medium}\n\n` +
       `ORIGINAL SITUATION:\n"""\n${caseRow.situation_text ?? ""}\n"""\n\n` +
+      (attachmentsContext
+        ? `NEW ATTACHMENTS PROVIDED FOR THIS REFINEMENT (treat as authoritative new context):\n"""\n${attachmentsContext}\n"""\n\n`
+        : "") +
       `STRATEGY TO APPLY:\n"""\n${nextStrategy}\n"""\n\n` +
       `PREVIOUS DRAFT (rewrite this completely according to the instruction above):\n"""\n${currentDraft}\n"""\n\n` +
       `Now return the fully rewritten draft in ${caseRow.language_label}.\n` +
@@ -398,7 +518,7 @@ Deno.serve(async (req: Request) => {
       strategy: nextStrategy,
       strategy_labels: nextLabels,
       draft: newDraft,
-    }, instruction, MODEL, softWarning);
+    }, instruction, MODEL, softWarning, usedAttachmentIds);
   } catch (e) {
     console.error("strategos-refinement error", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
@@ -428,6 +548,7 @@ async function persistAndReply(
   instruction: string,
   model: string,
   softWarning: string | null = null,
+  usedAttachmentIds: string[] = [],
 ) {
   const nextNumber = latest.version_number + 1;
   const { data: inserted, error: insErr } = await service
@@ -460,6 +581,19 @@ async function persistAndReply(
       updated_at: new Date().toISOString(),
     })
     .eq("id", caseRow.id);
+
+  // Link refinement-time attachments to the freshly created version row.
+  if (usedAttachmentIds.length > 0) {
+    await service
+      .from("case_attachments")
+      .update({ refinement_for_version_id: inserted.id })
+      .in("id", usedAttachmentIds)
+      .eq("case_id", caseRow.id)
+      .eq("user_id", caseRow.user_id)
+      .then(() => undefined, (e: unknown) =>
+        console.warn("attachment->version link failed", e),
+      );
+  }
 
   // Fire-and-forget: regenerate quick suggestions for the new version
   fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/strategos-suggest-refinements`, {

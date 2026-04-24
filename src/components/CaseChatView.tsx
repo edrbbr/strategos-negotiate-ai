@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, ChevronDown, Copy, Diamond, History, Loader2, Maximize2, MessageSquare, Send, Sparkles } from "lucide-react";
+import { Bot, ChevronDown, Copy, Diamond, History, Loader2, Lock, Maximize2, MessageSquare, Paperclip, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
@@ -23,6 +23,12 @@ import {
   useRefineVersion,
   useRestoreVersion,
 } from "@/hooks/useCaseVersions";
+import {
+  type CaseAttachment,
+  useDeleteAttachment,
+  useUploadAttachment,
+} from "@/hooks/useCaseAttachments";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 
 interface NegStrategy {
   key: string;
@@ -83,6 +89,9 @@ export function CaseChatView({ caseRow }: Props) {
   const refineMut = useRefineVersion();
   const restoreMut = useRestoreVersion();
   const { data: strategyLookup = [] } = useStrategyLabels();
+  const planLimits = usePlanLimits();
+  const uploadMut = useUploadAttachment();
+  const deleteMut = useDeleteAttachment();
   const labelMap = useMemo(
     () => Object.fromEntries(strategyLookup.map((s) => [s.key, s.label])),
     [strategyLookup],
@@ -90,6 +99,10 @@ export function CaseChatView({ caseRow }: Props) {
 
   const [input, setInput] = useState("");
   const [expanded, setExpanded] = useState(false);
+  // Locally-tracked pending attachments for the next refinement turn.
+  // We store full rows so we can also delete them on cancel/remove.
+  const [pendingAtts, setPendingAtts] = useState<CaseAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const currentVersionId = caseRow.current_version_id ?? versions[versions.length - 1]?.id ?? null;
@@ -110,9 +123,15 @@ export function CaseChatView({ caseRow }: Props) {
   const send = async () => {
     const instruction = input.trim();
     if (instruction.length < 2) return;
+    const attachmentIds = pendingAtts.map((a) => a.id);
     try {
-      const res = await refineMut.mutateAsync({ case_id: caseRow.id, instruction });
+      const res = await refineMut.mutateAsync({
+        case_id: caseRow.id,
+        instruction,
+        attachment_ids: attachmentIds,
+      });
       setInput("");
+      setPendingAtts([]);
       const meta = (res as unknown as { soft_warning?: boolean; warning_message?: string });
       if (meta?.soft_warning) {
         toast.warning(meta.warning_message ?? "Über dem Standard-Volumen — Support kontaktieren bei kontinuierlich hoher Last.");
@@ -122,6 +141,10 @@ export function CaseChatView({ caseRow }: Props) {
       if (ctx?.status === 403 || ctx?.status === 429) {
         try {
           const body = await ctx.json();
+          if (body?.error === "REFINEMENT_ATTACHMENT_LIMIT") {
+            toast.error(body.message ?? "Anhang-Limit für Refinements erreicht.");
+            return;
+          }
           if (body?.error === "REFINEMENT_LIMIT") {
             const reason = (body.code ?? body.reason) as string | undefined;
             if (reason === "per_case_limit") {
@@ -141,6 +164,48 @@ export function CaseChatView({ caseRow }: Props) {
         toast.error(ctx.status === 429 ? "Zu viele Anfragen. Bitte kurz warten." : "Refinement nicht erlaubt.");
       } else if (ctx?.status === 402) toast.error("AI-Guthaben aufgebraucht.");
       else toast.error(`Refinement fehlgeschlagen: ${(e as Error).message}`);
+    }
+  };
+
+  const refinementAttachmentsAllowed = planLimits.refinementAttachmentsLimit > 0;
+
+  const handleFilePick = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    if (!refinementAttachmentsAllowed) {
+      toast.error(
+        "Anhänge in Refinements sind in deinem Tarif nicht enthalten. Upgrade auf Pro oder Elite.",
+      );
+      return;
+    }
+    const remaining = planLimits.refinementAttachmentsLimit - pendingAtts.length;
+    if (remaining <= 0) {
+      toast.error(
+        `Maximal ${planLimits.refinementAttachmentsLimit} Anhänge pro Refinement.`,
+      );
+      return;
+    }
+    const toUpload = Array.from(files).slice(0, remaining);
+    for (const file of toUpload) {
+      try {
+        const att = await uploadMut.mutateAsync({
+          caseId: caseRow.id,
+          file,
+          forRefinement: true,
+        });
+        setPendingAtts((prev) => [...prev, att]);
+      } catch (e) {
+        toast.error(`Upload fehlgeschlagen: ${(e as Error).message}`);
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removePending = async (att: CaseAttachment) => {
+    setPendingAtts((prev) => prev.filter((a) => a.id !== att.id));
+    try {
+      await deleteMut.mutateAsync(att);
+    } catch (e) {
+      toast.error(`Löschen fehlgeschlagen: ${(e as Error).message}`);
     }
   };
 
@@ -188,6 +253,21 @@ export function CaseChatView({ caseRow }: Props) {
           suggestions={suggestions}
           loading={suggestionsLoading}
           onPick={(p) => setInput(p)}
+        />
+        <RefinementAttachments
+          attachments={pendingAtts}
+          limit={planLimits.refinementAttachmentsLimit}
+          allowed={refinementAttachmentsAllowed}
+          onAdd={() => fileInputRef.current?.click()}
+          onRemove={removePending}
+          uploading={uploadMut.isPending}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFilePick(e.target.files)}
         />
         <div className="relative bg-card border border-border/30 rounded-sm p-3 mt-3">
           <div className="flex items-center justify-between gap-2 mb-2">
@@ -504,6 +584,75 @@ function SuggestionChips({
         >
           {s.label}
         </button>
+      ))}
+    </div>
+  );
+}
+
+function RefinementAttachments({
+  attachments,
+  limit,
+  allowed,
+  onAdd,
+  onRemove,
+  uploading,
+}: {
+  attachments: CaseAttachment[];
+  limit: number;
+  allowed: boolean;
+  onAdd: () => void;
+  onRemove: (att: CaseAttachment) => void;
+  uploading: boolean;
+}) {
+  if (!allowed) {
+    return (
+      <div className="mt-3 flex items-center gap-2 text-[11px] font-mono-label text-muted-foreground/70">
+        <Lock className="w-3 h-3" />
+        <span>
+          Anhänge in Refinements ab Pro verfügbar.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={onAdd}
+        disabled={uploading || attachments.length >= limit}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-border/40 rounded-sm font-mono-label text-[11px] text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        title={
+          attachments.length >= limit
+            ? `Maximal ${limit} Anhänge pro Refinement`
+            : "Datei anhängen"
+        }
+      >
+        {uploading ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <Paperclip className="w-3 h-3" />
+        )}
+        <span>
+          Anhang ({attachments.length}/{limit})
+        </span>
+      </button>
+      {attachments.map((a) => (
+        <span
+          key={a.id}
+          className="inline-flex items-center gap-1.5 px-2 py-1 bg-card border border-border/40 rounded-sm font-mono-label text-[10px] text-foreground/80 max-w-[220px]"
+          title={a.file_name}
+        >
+          <Paperclip className="w-2.5 h-2.5 text-tertiary shrink-0" />
+          <span className="truncate">{a.file_name}</span>
+          <button
+            type="button"
+            onClick={() => onRemove(a)}
+            className="text-muted-foreground/70 hover:text-destructive transition-colors"
+            aria-label={`${a.file_name} entfernen`}
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+        </span>
       ))}
     </div>
   );
