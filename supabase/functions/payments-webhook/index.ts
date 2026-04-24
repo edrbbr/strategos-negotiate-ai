@@ -118,6 +118,38 @@ async function handleSubscriptionCreated(subscription: any, env: StripeEnv) {
     },
     { onConflict: "stripe_subscription_id" },
   );
+
+  // Record discount redemption (idempotent on subscription id)
+  const discountCodeId = subscription.metadata?.discountCodeId;
+  if (discountCodeId) {
+    const { data: existing } = await getSupabase()
+      .from("discount_redemptions")
+      .select("id")
+      .eq("stripe_subscription_id", subscription.id)
+      .maybeSingle();
+    if (!existing) {
+      await getSupabase().from("discount_redemptions").insert({
+        user_id: userId,
+        discount_code_id: discountCodeId,
+        stripe_subscription_id: subscription.id,
+      });
+      // Increment redemption counter
+      const { data: dc } = await getSupabase()
+        .from("discount_codes")
+        .select("total_redemptions")
+        .eq("id", discountCodeId)
+        .maybeSingle();
+      if (dc) {
+        await getSupabase()
+          .from("discount_codes")
+          .update({
+            total_redemptions: (dc.total_redemptions ?? 0) + 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", discountCodeId);
+      }
+    }
+  }
 }
 
 async function handleSubscriptionUpdated(subscription: any, env: StripeEnv) {
