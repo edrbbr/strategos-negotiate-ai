@@ -263,7 +263,7 @@ function InitialBlock({ caseRow }: { caseRow: Props["caseRow"] }) {
           <span>Format: {caseRow.medium ?? "—"}</span>
         </div>
       </div>
-      <p className="font-serif italic text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
+      <p className="font-sans text-[15px] leading-7 text-foreground/90 whitespace-pre-line">
         {caseRow.situation_text || "—"}
       </p>
     </div>
@@ -328,21 +328,21 @@ function VersionBlock({
             <p className="font-mono-label text-tertiary text-[10px] mb-2 flex items-center gap-1.5">
               <MessageSquare className="w-2.5 h-2.5" /> {promptLabel}
             </p>
-            <p className="font-serif italic text-xs text-foreground/85 leading-relaxed whitespace-pre-line">
+            <p className="font-sans text-[14px] leading-6 text-foreground/85 whitespace-pre-line">
               {promptText}
             </p>
           </div>
           {/* Strategy */}
           <div className="bg-background/50 border-l border-primary/60 rounded-sm p-3">
             <p className="font-mono-label text-primary text-[10px] mb-2">STRATEGIE</p>
-            <p className="text-xs text-foreground/85 leading-relaxed whitespace-pre-line">
+            <p className="font-sans text-[14px] leading-6 text-foreground/85 whitespace-pre-line">
               {renderStrategy(version.strategy)}
             </p>
           </div>
           {/* Draft */}
           <div className="bg-background/50 border-l border-secondary/60 rounded-sm p-3">
             <p className="font-mono-label text-secondary text-[10px] mb-2">ENTWURF</p>
-            <p className="font-serif italic text-xs text-foreground/90 leading-relaxed whitespace-pre-line">
+            <p className="font-sans text-[14px] leading-6 text-foreground/90 whitespace-pre-line">
               {version.draft ?? "—"}
             </p>
           </div>
