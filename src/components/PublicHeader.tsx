@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/contexts/AuthContext";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const initialsOf = (name: string | null | undefined, email: string | null | undefined) => {
   const src = name?.trim() || email?.split("@")[0] || "U";
@@ -43,6 +44,7 @@ export const PublicHeader = ({ active }: PublicHeaderProps) => {
         </Link>
       </nav>
       <div className="flex items-center gap-4">
+        <ThemeToggle />
         {isAuthed ? (
           <>
             <Link
