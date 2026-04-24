@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getStripeEnvironment } from "@/lib/stripe";
 import { toast } from "sonner";
 import { EliteRequestModal } from "@/components/EliteRequestModal";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const PRO_BENEFITS = [
   "Tiefenanalyse jeder Verhandlung in unter 30 Sekunden",
@@ -27,7 +28,7 @@ export const MandateBlock = () => {
   const [openingPortal, setOpeningPortal] = useState(false);
   const [eliteOpen, setEliteOpen] = useState(false);
 
-  const planId = profile?.plan_id ?? "free";
+  const planId = profile?.plan_id;
   const limit = profile?.plan?.case_limit;
   const used = profile?.cases_used ?? 0;
   const extra = profile?.extra_credits ?? 0;
@@ -48,6 +49,19 @@ export const MandateBlock = () => {
     }
     window.open(data.url as string, "_blank");
   };
+
+  // ============ LOADING SKELETON ============
+  if (!profile) {
+    return (
+      <div className="bg-card border border-primary/20 rounded-sm p-8 space-y-4">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-8 w-3/4" />
+        <Skeleton className="h-4 w-2/3" />
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-10 w-48 mt-4" />
+      </div>
+    );
+  }
 
   // ============ FREE PLAN ============
   if (planId === "free") {

@@ -49,6 +49,27 @@ const STAGE_LABELS = {
   draft:    { idle: "Finaler Entwurf",  running: "Formuliere Draft…", done: "Finaler Entwurf", hint: "Verfasse Kommunikation…" },
 } as const;
 
+// Edge-Function timeout / network drop recovery: poll case_versions for ~90s.
+// If a new "initial" version appeared, the pipeline succeeded server-side.
+async function waitForVersionRecovery(caseId: string, timeoutMs = 90_000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const { data } = await supabase
+      .from("case_versions")
+      .select("id, kind, created_at")
+      .eq("case_id", caseId)
+      .eq("kind", "initial")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (data && data.length > 0) {
+      const ageMs = Date.now() - new Date(data[0].created_at).getTime();
+      if (ageMs < 5 * 60_000) return true;
+    }
+    await new Promise((r) => setTimeout(r, 3_000));
+  }
+  return false;
+}
+
 const CaseDetail = () => {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
@@ -102,11 +123,24 @@ const CaseDetail = () => {
   // Derive stage states from realtime case row while running (multi-stage only)
   useEffect(() => {
     if (!loading || !isMultiStage || !caseRow) return;
-    setStageState((prev) => ({
-      analysis: caseRow.analysis && caseRow.analysis.length > 0 ? "complete" : prev.analysis,
-      strategy: caseRow.strategy ? "complete" : prev.strategy,
-      draft: caseRow.draft ? "complete" : prev.draft,
-    }));
+    setStageState((prev) => {
+      const analysisDone = !!(caseRow.analysis && caseRow.analysis.length > 0);
+      const strategyDone = !!caseRow.strategy;
+      const draftDone = !!caseRow.draft;
+      return {
+        analysis: analysisDone ? "complete" : prev.analysis,
+        strategy: strategyDone
+          ? "complete"
+          : analysisDone && prev.strategy === "pending"
+          ? "running"
+          : prev.strategy,
+        draft: draftDone
+          ? "complete"
+          : strategyDone && prev.draft === "pending"
+          ? "running"
+          : prev.draft,
+      };
+    });
   }, [caseRow, loading, isMultiStage]);
 
   // ---- Persist situation_text on blur ----
@@ -233,6 +267,18 @@ const CaseDetail = () => {
       });
 
       if (error) {
+        // "Failed to fetch" / network drop / edge timeout — server may still complete.
+        // Verify via case_versions polling before showing an error.
+        const noContext = !(error as { context?: Response }).context;
+        if (noContext && activeCaseId) {
+          const recovered = await waitForVersionRecovery(activeCaseId);
+          if (recovered) {
+            setStageState({ analysis: "complete", strategy: "complete", draft: "complete" });
+            refreshProfile();
+            toast.success("Pipeline abgeschlossen");
+            return;
+          }
+        }
         const ctx = (error as { context?: Response }).context;
         if (ctx?.status === 401) { toast.error("Sitzung abgelaufen."); navigate("/login"); return; }
         if (ctx?.status === 403) {
@@ -644,12 +690,17 @@ function StageBox({
     state === "failed" ? "UNTERBROCHEN" :
     label.idle;
 
+  const isRunning = state === "running";
+  const borderWidth = isRunning ? "border-l-4" : "border-l-2";
+  const runningRing = isRunning ? "shadow-[0_0_0_1px_hsl(var(--primary)/0.15)] animate-pulse-soft" : "";
+
   return (
-    <div className={`bg-card border-l-2 ${colorClass} rounded-sm p-6`}>
+    <div className={`bg-card ${borderWidth} ${colorClass} rounded-sm p-6 transition-all ${runningRing}`}>
       <div className="flex items-center justify-between mb-4 gap-3">
         <p className={`font-mono-label ${state === "failed" ? "text-destructive" : labelTone} flex items-center gap-2`}>
           <span className={`w-2 h-2 rounded-full ${state === "failed" ? "bg-destructive" : dotClass} ${state === "running" ? "animate-pulse-soft" : ""}`} />
           {labelText}
+          {isRunning && <Loader2 className="w-3 h-3 animate-spin opacity-70" />}
         </p>
         {actionRight ?? (
           <span className="font-mono-label text-muted-foreground/60 truncate max-w-[55%]">
@@ -666,7 +717,11 @@ function ShimmerLines({ lines }: { lines: number }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: lines }).map((_, i) => (
-        <div key={i} className="h-3 rounded-sm bg-muted/40 animate-pulse" style={{ width: `${70 + (i % 3) * 10}%` }} />
+        <div
+          key={i}
+          className="h-3 rounded-sm bg-gradient-to-r from-muted/20 via-muted/70 to-muted/20 bg-[length:200%_100%] animate-shimmer"
+          style={{ width: `${70 + (i % 3) * 10}%`, animationDelay: `${i * 0.15}s` }}
+        />
       ))}
     </div>
   );

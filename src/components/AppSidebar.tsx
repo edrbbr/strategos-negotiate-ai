@@ -1,11 +1,12 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Settings, Plus, LogOut, User, CreditCard, Shield } from "lucide-react";
+import { BarChart3, Settings, Plus, LogOut, User, CreditCard, Shield, Home } from "lucide-react";
 import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAllCases } from "@/hooks/useCases";
 import { useUserRole } from "@/hooks/useUserRole";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const navItems = [
   { label: "Dashboard", to: "/app/dashboard", icon: BarChart3 },
@@ -30,8 +31,12 @@ export const AppSidebar = () => {
   const limit = profile?.plan?.case_limit;
   const used = profile?.cases_used ?? 0;
   const extra = profile?.extra_credits ?? 0;
+  const isUnlimited = profile != null && limit === null;
   const showUsage = limit !== null && limit !== undefined;
-  const usagePct = showUsage ? Math.min(100, Math.round((used / (limit as number)) * 100)) : 0;
+  const totalCapacity = (limit ?? 0) + extra;
+  const usagePct = showUsage && totalCapacity > 0
+    ? Math.min(100, Math.round((used / totalCapacity) * 100))
+    : 0;
   const limitWarn = showUsage && (limit as number) && used / (limit as number) >= 2 / 3;
 
   const handleLogout = async () => {
@@ -120,7 +125,15 @@ export const AppSidebar = () => {
       </nav>
 
       <div className="p-6 border-t border-sidebar-border space-y-4">
-        {showUsage ? (
+        {!profile ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-12" />
+            </div>
+            <Skeleton className="h-0.5 w-full" />
+          </div>
+        ) : showUsage ? (
           <button
             onClick={() => navigate(planId === "free" ? "/preise" : "/app/billing")}
             className="w-full text-left group"
@@ -128,7 +141,7 @@ export const AppSidebar = () => {
           >
             <div className="flex items-center justify-between mb-2">
               <span className="font-mono-label text-muted-foreground group-hover:text-primary transition-colors">
-                {tierLabel} Plan
+                {tierLabel}
               </span>
               <span
                 className={cn(
@@ -150,17 +163,28 @@ export const AppSidebar = () => {
             </div>
           </button>
         ) : (
-          <div className="flex items-center justify-between">
-            <span className="font-mono-label text-muted-foreground">
-              {tierLabel} Plan
+          <button
+            onClick={() => navigate("/app/billing")}
+            className="w-full text-left flex items-center justify-between group"
+            aria-label="Mandat verwalten"
+          >
+            <span className="font-mono-label text-muted-foreground group-hover:text-primary transition-colors">
+              {tierLabel}
             </span>
-            <span className="font-sans text-xs text-primary">Unlimited</span>
-          </div>
+            <span className="font-sans text-xs text-primary">Unbegrenzt</span>
+          </button>
         )}
         <div className="space-y-1">
           <NavLink to="/app/settings" className="flex items-center gap-3 py-2 text-sidebar-foreground/70 hover:text-primary font-sans uppercase tracking-[0.18em] text-xs">
             <User className="w-4 h-4" strokeWidth={1.5} />
             Profile
+          </NavLink>
+          <NavLink
+            to="/"
+            className="flex items-center gap-3 py-2 text-sidebar-foreground/70 hover:text-primary font-sans uppercase tracking-[0.18em] text-xs"
+          >
+            <Home className="w-4 h-4" strokeWidth={1.5} />
+            Home
           </NavLink>
           <button
             onClick={handleLogout}
