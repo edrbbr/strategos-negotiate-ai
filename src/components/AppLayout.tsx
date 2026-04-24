@@ -23,12 +23,33 @@ const initialsOf = (name: string | null | undefined, email: string | null | unde
     .toUpperCase();
 };
 
+const tierStatusText = (
+  tierLabel: string | null | undefined,
+  limit: number | null | undefined,
+  used: number,
+  extra: number,
+) => {
+  const label = (tierLabel ?? "FREE").toUpperCase();
+  if (limit === null || limit === undefined) return `${label} · UNBEGRENZT`;
+  const remaining = Math.max(0, limit - used);
+  const extraSuffix = extra > 0 ? ` +${extra}` : "";
+  return `${label} · ${remaining}/${limit} frei${extraSuffix}`;
+};
+
 export const AppLayout = () => {
   const navigate = useNavigate();
   const { user, profile, isLoading, signOut } = useAuth();
   const displayName = profile?.full_name || user?.email || "Operator";
-  const tier = profile?.plan?.tier_label ?? null;
-  const showTierSkeleton = !tier && (isLoading || !profile);
+  const tierLabel = profile?.plan?.tier_label ?? null;
+  const showTierSkeleton = !profile && (isLoading || !profile);
+  const statusText = profile
+    ? tierStatusText(
+        tierLabel,
+        profile?.plan?.case_limit,
+        profile?.cases_used ?? 0,
+        profile?.extra_credits ?? 0,
+      )
+    : null;
 
   const handleLogout = async () => {
     await signOut();
@@ -55,10 +76,10 @@ export const AppLayout = () => {
                     {displayName}
                   </span>
                   {showTierSkeleton ? (
-                    <Skeleton className="h-3 w-12 mt-0.5" />
+                    <Skeleton className="h-3 w-32 mt-0.5" />
                   ) : (
                     <span className="block font-mono-label text-primary/80 leading-tight">
-                      {tier ?? "FREE"}
+                      {statusText ?? "FREE"}
                     </span>
                   )}
                 </span>
