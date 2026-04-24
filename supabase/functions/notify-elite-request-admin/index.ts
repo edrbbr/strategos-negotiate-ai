@@ -43,7 +43,18 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    // Gateway requires a real JWT. service-role is NOT a JWT under the new
+    // signing-keys model and gets rejected with UNAUTHORIZED_INVALID_JWT_FORMAT.
+    // The legacy anon key (a real signed JWT) is the only thing the gateway
+    // accepts for unauthenticated server-to-server calls. Hardcode it here
+    // because edge runtimes don't always inject SUPABASE_ANON_KEY.
+    const ANON_JWT =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkdnRucXh0c25wZ3lsbnZxY2Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MjIwMjIsImV4cCI6MjA5MjE5ODAyMn0.0LDUt5cuktSfvflcXDTSTCLHx8bRPJI4Ysq4nrUSDyc";
+    console.log("env keys present:", {
+      anon: !!Deno.env.get("SUPABASE_ANON_KEY"),
+      pub: !!Deno.env.get("SUPABASE_PUBLISHABLE_KEY"),
+      service: !!serviceKey,
+    });
 
     const { user_email, full_name } = (await req.json().catch(() => ({}))) as {
       user_email?: string;
@@ -67,12 +78,8 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // Gateway requires a valid JWT (anon or user). The service-role key
-        // is NOT a JWT in the new signing-keys model and gets rejected with
-        // UNAUTHORIZED_INVALID_JWT_FORMAT. Use the anon key for the gateway
-        // and pass the service role separately if needed.
-        Authorization: `Bearer ${anonKey}`,
-        apikey: anonKey,
+        Authorization: `Bearer ${ANON_JWT}`,
+        apikey: ANON_JWT,
       },
       body: JSON.stringify({
         templateName: "elite-request-admin",
