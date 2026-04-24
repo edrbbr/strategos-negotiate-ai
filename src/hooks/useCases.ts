@@ -18,6 +18,7 @@ export interface CaseRow {
   model_used: string | null;
   status: CaseStatus;
   last_analyzed_at: string | null;
+  tonality_profile_key?: string;
   created_at: string;
   updated_at: string;
 }
@@ -106,6 +107,7 @@ export function useCreateCase() {
       medium?: string;
       language_code?: string;
       language_label?: string;
+      tonality_profile_key?: string;
     }): Promise<CaseRow> => {
       if (!user) throw new Error("Not authenticated");
       const { data, error } = await supabase
@@ -116,6 +118,9 @@ export function useCreateCase() {
           ...(input?.medium ? { medium: input.medium } : {}),
           ...(input?.language_code ? { language_code: input.language_code } : {}),
           ...(input?.language_label ? { language_label: input.language_label } : {}),
+          ...(input?.tonality_profile_key
+            ? { tonality_profile_key: input.tonality_profile_key }
+            : {}),
         })
         .select("*")
         .single();
