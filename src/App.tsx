@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Landing from "./pages/Landing";
 import Pricing from "./pages/Pricing";
@@ -32,8 +33,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <PaymentTestModeBanner />
-          <Routes>
+          <ThemeProvider>
+            <PaymentTestModeBanner />
+            <Routes>
             {/* Public */}
             <Route path="/" element={<Landing />} />
             <Route path="/preise" element={<Pricing />} />
@@ -71,8 +73,9 @@ const App = () => (
               }
             />
 
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </ThemeProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
