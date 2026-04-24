@@ -150,6 +150,35 @@ export const EliteRequestModal = ({ open, onOpenChange }: Props) => {
             </ul>
 
             <div className="space-y-5 mt-4">
+              <div className="grid sm:grid-cols-2 gap-5">
+                <div>
+                  <label className="font-mono-label text-muted-foreground">
+                    Vollständiger Name
+                  </label>
+                  <input
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="z.B. Maria Schmidt"
+                    className="w-full bg-transparent border-0 border-b border-border/40 py-2 text-base focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-mono-label text-muted-foreground">
+                    Kontakt-E-Mail
+                  </label>
+                  <input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    placeholder="name@firma.com"
+                    className="w-full bg-transparent border-0 border-b border-border/40 py-2 text-base focus:border-primary focus:outline-none"
+                  />
+                  <p className="font-mono-label text-muted-foreground/60 text-[10px] mt-1">
+                    Antwort & Einladung gehen an diese Adresse.
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <label className="font-mono-label text-muted-foreground">
                   Beruf / Position
