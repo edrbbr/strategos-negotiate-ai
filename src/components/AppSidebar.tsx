@@ -47,7 +47,7 @@ export const AppSidebar = () => {
           className="w-full border border-primary/60 text-primary py-3 px-4 font-sans uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors rounded-sm"
         >
           <Plus className="w-4 h-4" />
-          Neuer Fall
+          Neues Dossier
         </button>
       </div>
 
@@ -78,7 +78,7 @@ export const AppSidebar = () => {
 
         {activeCases.length > 0 && (
           <>
-            <p className="font-mono-label text-muted-foreground/60 mt-8 mb-3">Aktive Fälle</p>
+            <p className="font-mono-label text-muted-foreground/60 mt-8 mb-3">Aktive Dossiers</p>
             <ul className="space-y-2">
               {activeCases.map((c) => {
                 const isCurrent = location.pathname === `/app/case/${c.id}`;
@@ -121,7 +121,7 @@ export const AppSidebar = () => {
                   limitWarn ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                {used}/{limit} Fälle
+                {used}/{limit} Dossiers
               </span>
             </div>
             <div className="h-0.5 bg-muted overflow-hidden">

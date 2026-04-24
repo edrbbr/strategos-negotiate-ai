@@ -86,7 +86,7 @@ export const AppLayout = () => {
           <Outlet />
         </div>
         <footer className="px-10 py-6 flex items-center justify-between text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground/50 border-t border-border/20">
-          <span>Strategos Internal // V.2.0.4-Gold</span>
+          <span>PALLANX Internal // V.3.0.0-Imperial</span>
           <span>Encrypted Status: Active · System: Optimized</span>
         </footer>
       </main>
