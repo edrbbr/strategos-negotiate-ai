@@ -1,6 +1,6 @@
 import { callAnthropic } from "../providers/anthropic.ts";
 import { callGemini } from "../providers/gemini.ts";
-import { SYSTEM_PROMPT } from "../prompts.ts";
+import { SYSTEM_PROMPT, buildTierAddendum } from "../prompts.ts";
 import { ProviderError, type IconHint, type StrategosResult } from "../types.ts";
 
 const FULL_TOOL_PARAMS = {
@@ -68,10 +68,20 @@ export interface SingleCallParams {
   medium?: string;
   languageLabel?: string;
   attachmentsContext?: string;
+  allowedStrategies?: { key: string; label: string; prompt_hint: string | null }[];
+  tonalityInstruction?: string | null;
+  enableDeepDocAnalysis?: boolean;
 }
 
 export async function runSingleCall(params: SingleCallParams): Promise<StrategosResult> {
   const { modelId, situationText, medium, languageLabel, attachmentsContext } = params;
+  const addendum = buildTierAddendum({
+    allowedStrategies: params.allowedStrategies ?? [],
+    tonalityInstruction: params.tonalityInstruction ?? null,
+    enableDeepDocAnalysis: !!params.enableDeepDocAnalysis,
+    hasAttachments: !!attachmentsContext && attachmentsContext.length > 0,
+  });
+  const systemPrompt = `${SYSTEM_PROMPT}${addendum}`;
   const userMessage = [
     `Target language: ${languageLabel ?? "Deutsch"}`,
     `Medium: ${medium ?? "email"}`,
@@ -88,7 +98,7 @@ export async function runSingleCall(params: SingleCallParams): Promise<Strategos
     const out = await callAnthropic({
       apiKey: params.anthropicKey,
       model: modelId,
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt,
       userMessage,
       tool: {
         name: "return_strategos_analysis",
@@ -106,7 +116,7 @@ export async function runSingleCall(params: SingleCallParams): Promise<Strategos
     const out = await callGemini({
       apiKey: params.lovableKey,
       model: modelId,
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt,
       userMessage,
       tool: {
         type: "function",
