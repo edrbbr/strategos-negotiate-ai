@@ -9,7 +9,66 @@
 
 @layer base {
   :root {
-    /* Neutral / Background — #080909 */
+    /* ============================================
+       LIGHT MODE (default) — based on Elite-Email palette
+       Bg #ffffff / surface #fafafa / text #1a1a1a
+       Gold #a4863e (HSL 41 45% 44%)
+       ============================================ */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    /* Primary — Gold #a4863e */
+    --primary: 41 45% 44%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary — softer blue for light bg */
+    --secondary: 202 56% 44%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Tertiary — softer green for light bg */
+    --tertiary: 145 35% 44%;
+    --tertiary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 41 45% 44%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 92%;
+    --ring: 41 45% 44%;
+
+    --radius: 0.25rem;
+
+    /* Surfaces */
+    --surface: 0 0% 98%;
+    --surface-elevated: 0 0% 100%;
+
+    /* Sidebar — warm off-white */
+    --sidebar-background: 40 25% 97%;
+    --sidebar-foreground: 0 0% 25%;
+    --sidebar-primary: 41 45% 44%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 40 30% 94%;
+    --sidebar-accent-foreground: 41 45% 38%;
+    --sidebar-border: 41 25% 86%;
+    --sidebar-ring: 41 45% 44%;
+  }
+
+  .dark {
+    /* ============================================
+       DARK MODE — original Strategos premium dark
+       ============================================ */
     --background: 180 6% 3%;
     --foreground: 40 30% 92%;
 
@@ -19,15 +78,12 @@
     --popover: 180 5% 5%;
     --popover-foreground: 40 30% 92%;
 
-    /* Primary — Gold #C9A84C */
     --primary: 44 56% 54%;
     --primary-foreground: 180 6% 3%;
 
-    /* Secondary — Blue #4A9ECA (analysis) */
     --secondary: 202 56% 54%;
     --secondary-foreground: 180 6% 3%;
 
-    /* Tertiary — Green #7EC8A0 (success/execution) */
     --tertiary: 145 39% 64%;
     --tertiary-foreground: 180 6% 3%;
 
@@ -44,13 +100,9 @@
     --input: 44 20% 18%;
     --ring: 44 56% 54%;
 
-    --radius: 0.25rem;
-
-    /* Surfaces */
     --surface: 180 5% 7%;
     --surface-elevated: 180 5% 9%;
 
-    /* Sidebar */
     --sidebar-background: 180 6% 4%;
     --sidebar-foreground: 40 20% 75%;
     --sidebar-primary: 44 56% 54%;
@@ -59,12 +111,6 @@
     --sidebar-accent-foreground: 44 56% 54%;
     --sidebar-border: 44 30% 15%;
     --sidebar-ring: 44 56% 54%;
-  }
-
-  .dark {
-    /* Same as :root — app is dark by default */
-    --background: 180 6% 3%;
-    --foreground: 40 30% 92%;
   }
 }
 
