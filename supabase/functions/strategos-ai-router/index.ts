@@ -82,22 +82,40 @@ Deno.serve(async (req: Request) => {
       : (planRel as PlanRow);
     if (!plan) return json({ error: "Plan not found" }, 500);
 
-    // ---- LIMIT ENFORCEMENT ----
-    if (
-      plan.case_limit !== null &&
-      plan.case_limit_type === "lifetime" &&
-      profile.cases_used >= plan.case_limit
-    ) {
+    // ---- LIMIT ENFORCEMENT (consume_dossier handles counter + extra credits) ----
+    type ConsumeResult = {
+      allowed: boolean;
+      reason?: string;
+      purchasable?: boolean;
+      remaining_quota?: number | null;
+      remaining_extra?: number;
+      unlimited?: boolean;
+      consumed_extra?: boolean;
+    };
+    const { data: consume, error: consumeErr } = await serviceClient.rpc(
+      "consume_dossier",
+      { p_user_id: userId },
+    );
+    if (consumeErr) {
+      console.error("consume_dossier failed", consumeErr);
+      return json({ error: "Internal error" }, 500);
+    }
+    const consumed = consume as ConsumeResult;
+    if (!consumed?.allowed) {
       return json(
         {
-          error: "CASE_LIMIT_REACHED",
-          message: "Du hast dein Free-Tier-Limit erreicht. Upgrade erforderlich.",
-          cases_used: profile.cases_used,
-          case_limit: plan.case_limit,
+          error: "QUOTA_EXHAUSTED",
+          code: "QUOTA_EXHAUSTED",
+          message: consumed?.purchasable
+            ? "Mandat vollständig genutzt. Zusatz-Dossiers sind erwerbbar."
+            : "Free-Kontingent ausgeschöpft. Upgrade auf Pro erforderlich.",
+          purchasable: !!consumed?.purchasable,
+          plan: plan.id,
         },
         403,
       );
     }
+    const cases_used_after = (plan.case_limit ?? 0) - (consumed.remaining_quota ?? 0);
 
     // ---- Persist medium/language onto the case row (best effort) ----
     if (case_id) {
@@ -200,12 +218,8 @@ Deno.serve(async (req: Request) => {
       if (error) console.error("Stage DB update failed", payload.stage, error);
     };
 
-    const incrementCounter = async () => {
-      const { data: newCount } = await serviceClient.rpc("increment_cases_used", {
-        p_user_id: userId,
-      });
-      return typeof newCount === "number" ? newCount : profile.cases_used + 1;
-    };
+    // Counter already incremented by consume_dossier — return the post-state.
+    const incrementCounter = async () => cases_used_after;
 
     // Detect strategy keys mentioned in the strategy text, against the lookup table.
     const detectStrategyLabels = async (strategyText: string): Promise<string[]> => {
