@@ -27,6 +27,9 @@ import {
   useUploadAttachment,
   type CaseAttachment,
 } from "@/hooks/useCaseAttachments";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { TonalitySelect } from "@/components/TonalitySelect";
+import { UpgradePreviewPanel } from "@/components/UpgradePreviewPanel";
 
 type StageState = "pending" | "running" | "complete" | "failed";
 type Tier = "free" | "pro" | "elite";
@@ -74,9 +77,10 @@ const CaseDetail = () => {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
   const { user, profile, refreshProfile } = useAuth();
-  const tier = tierFromPlanId(profile?.plan_id);
+  const limits = usePlanLimits();
+  const tier = limits.tier;
   const isMultiStage = tier === "elite";
-  const maxAttachments = tier === "free" ? 1 : 10;
+  const maxAttachments = limits.initialAttachmentsLimit;
 
   // ---- Case id / loaders ----
   const createMut = useCreateCase();
@@ -97,6 +101,7 @@ const CaseDetail = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [loading, setLoading] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [tonalityKey, setTonalityKey] = useState<string>("standard");
   const [stageState, setStageState] = useState<{ analysis: StageState; strategy: StageState; draft: StageState }>({
     analysis: "pending",
     strategy: "pending",
@@ -111,9 +116,11 @@ const CaseDetail = () => {
     const mediumVal = (caseRow as unknown as { medium?: string }).medium;
     const langCode = (caseRow as unknown as { language_code?: string }).language_code;
     const langLabel = (caseRow as unknown as { language_label?: string }).language_label;
+    const tonality = (caseRow as unknown as { tonality_profile_key?: string }).tonality_profile_key;
     if (mediumVal) setMedium(mediumVal);
     if (langCode) setLanguageCode(langCode);
     if (langLabel) setLanguageLabel(langLabel);
+    if (tonality) setTonalityKey(tonality);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseRow?.id]);
 
@@ -157,8 +164,8 @@ const CaseDetail = () => {
     if (capacity === 0) {
       toast.error(
         tier === "free"
-          ? "Free-Plan erlaubt maximal 1 Referenz-Dokument. Upgrade für mehr."
-          : `Maximal ${maxAttachments} Anhänge.`,
+          ? `Free-Plan erlaubt maximal ${maxAttachments} Referenz-Dokument${maxAttachments === 1 ? "" : "e"}. Pro schaltet bis zu ${10} Anlagen mit Tiefenanalyse frei.`
+          : `Maximal ${maxAttachments} Anhänge in Ihrem Plan.`,
       );
       return;
     }
@@ -208,6 +215,7 @@ const CaseDetail = () => {
           medium,
           language_code: languageCode,
           language_label: languageLabel,
+          tonality_profile_key: tonalityKey,
         });
         activeCaseId = created.id;
         navigate(`/app/case/${created.id}`, { replace: true });
@@ -225,6 +233,7 @@ const CaseDetail = () => {
             medium,
             language_code: languageCode,
             language_label: languageLabel,
+            tonality_profile_key: tonalityKey,
           } as Partial<typeof caseRow> as never,
         })
         .catch(() => {});
