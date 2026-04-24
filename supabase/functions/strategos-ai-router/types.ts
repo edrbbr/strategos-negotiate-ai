@@ -40,6 +40,10 @@ export interface PlanRow {
   case_limit: number | null;
   case_limit_type: string;
   pipeline_config: PipelineConfig | null;
+  tier_key?: string;
+  initial_attachments_limit?: number;
+  allows_tonality?: boolean;
+  allows_deep_doc_analysis?: boolean;
 }
 
 export class ProviderError extends Error {
@@ -51,4 +55,16 @@ export class ProviderError extends Error {
   ) {
     super(message);
   }
+}
+
+export interface StrategyOption {
+  key: string;
+  label: string;
+  prompt_hint: string | null;
+}
+
+export interface TonalityProfileRow {
+  key: string;
+  label: string;
+  prompt_instruction: string;
 }
