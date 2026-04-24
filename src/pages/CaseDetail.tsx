@@ -358,7 +358,7 @@ const CaseDetail = () => {
               onChange={(e) => setSituation(e.target.value)}
               onBlur={persistSituation}
               placeholder="Beschreiben Sie hier die aktuelle Verhandlungssituation, die Beteiligten und Ihre bisherigen Schritte…"
-              className="w-full min-h-[280px] bg-card border border-border/30 rounded-sm p-5 font-serif italic text-lg text-foreground placeholder:text-muted-foreground/50 focus:border-primary/40 focus:outline-none resize-none"
+              className="w-full min-h-[280px] bg-card border border-border/30 rounded-sm p-5 font-sans text-[15px] leading-7 text-foreground placeholder:text-muted-foreground/50 focus:border-primary/40 focus:outline-none resize-none"
             />
           </div>
 
