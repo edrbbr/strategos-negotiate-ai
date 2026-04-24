@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
+import { PublicHeader } from "@/components/PublicHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Brain, Target, MessageSquare, Car, FileWarning, Briefcase, Home, ShoppingBag, Diamond, Check, Plus } from "lucide-react";
 import { useState } from "react";
@@ -10,31 +11,14 @@ const Landing = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   const faqs = [
-    { q: "Ist die KI wirklich so gut wie ein menschlicher Coach?", a: "Strategos basiert auf den Verhandlungstaktiken des FBI sowie spieltheoretischen Modellen der Harvard Business School. Die KI analysiert Muster, die selbst erfahrenen Profis entgehen." },
+    { q: "Ist die KI wirklich so gut wie ein menschlicher Coach?", a: "PALLANX basiert auf den Verhandlungstaktiken des FBI sowie spieltheoretischen Modellen der Harvard Business School. Die KI analysiert Muster, die selbst erfahrenen Profis entgehen." },
     { q: "Funktioniert das auch bei emotionalen Konflikten?", a: "Ja. Unser psychologisches Profiling-Modul ist speziell für hoch-emotionale Szenarien wie Mietstreit, Trennung oder Familienkonflikte trainiert." },
-    { q: "Sind meine Daten sicher?", a: "Alle Falldaten werden Ende-zu-Ende verschlüsselt. Im Diplomat-Plan werden Daten auf Wunsch nach 30 Tagen automatisch gelöscht." },
+    { q: "Sind meine Daten sicher?", a: "Alle Dossier-Daten werden Ende-zu-Ende verschlüsselt. Im Elite-Plan werden Daten auf Wunsch nach 30 Tagen automatisch gelöscht." },
   ];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <header className="container flex items-center justify-between py-6">
-        <Logo />
-        <nav className="hidden md:flex items-center gap-10 font-sans uppercase tracking-[0.18em] text-xs text-muted-foreground">
-          <a href="#process" className="hover:text-primary transition-colors">Process</a>
-          <a href="#capabilities" className="hover:text-primary transition-colors">Capabilities</a>
-          <a href="#intelligence" className="hover:text-primary transition-colors">Intelligence</a>
-          <Link to="/preise" className="hover:text-primary transition-colors">Preise</Link>
-        </nav>
-        <div className="flex items-center gap-4">
-          <Link to="/login" className="font-sans uppercase tracking-[0.2em] text-xs text-muted-foreground hover:text-primary">
-            Login
-          </Link>
-          <Link to="/register">
-            <Button variant="gold-outline" size="sm">Start Negotiation</Button>
-          </Link>
-        </div>
-      </header>
+      <PublicHeader active="home" />
 
       {/* Hero */}
       <section className="container py-24 md:py-32 text-center">
@@ -47,7 +31,7 @@ const Landing = () => {
           <span className="italic text-primary">Immer.</span>
         </h1>
         <p className="max-w-2xl mx-auto text-muted-foreground text-lg leading-relaxed mb-12">
-          Strategos ist die erste Intelligence-Plattform, die taktische Empathie und
+          PALLANX ist die erste Intelligence-Plattform, die taktische Empathie und
           spieltheoretische Präzision für Ihre täglichen Verhandlungen automatisiert.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -62,7 +46,7 @@ const Landing = () => {
       <section id="process" className="bg-card/40 py-24">
         <div className="container">
           <p className="text-center font-mono-label text-primary mb-4">◆ So es Funktioniert</p>
-          <h2 className="text-center font-serif text-4xl md:text-5xl mb-16">Der Strategos-Protokoll</h2>
+          <h2 className="text-center font-serif text-4xl md:text-5xl mb-16">Das PALLANX-Protokoll</h2>
           <div className="grid md:grid-cols-3 gap-px bg-border/40">
             {[
               { num: "01", title: "Situation", icon: Brain, iconClass: "text-secondary", text: "Beschreiben Sie die Rahmenbedingungen. Wer sind die Akteure? Was sind die harten Fakten? Unsere KI erkennt sofort die Machtdynamik." },
@@ -150,7 +134,7 @@ const Landing = () => {
           <a href="#" className="hover:text-primary">Datenschutz</a>
           <a href="#" className="hover:text-primary">AGB</a>
         </div>
-        <span>© 2024 Strategos Elite System</span>
+        <span>© 2026 PALLANX Elite System</span>
       </footer>
     </div>
   );

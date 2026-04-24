@@ -109,8 +109,8 @@ const Dashboard = () => {
   const isEmptyAccount = !isLoading && (cases?.length ?? 0) === 0;
 
   const statTiles = [
-    { label: "Fälle Gesamt", value: pad3(stats.total), border: "border-primary", text: "text-primary", icon: Folder },
-    { label: "Offene Fälle", value: pad3(stats.open), border: "border-secondary", text: "text-secondary", icon: Mail },
+    { label: "Dossiers Gesamt", value: pad3(stats.total), border: "border-primary", text: "text-primary", icon: Folder },
+    { label: "Offene Dossiers", value: pad3(stats.open), border: "border-secondary", text: "text-secondary", icon: Mail },
     { label: "Neue Nachrichten", value: pad3(stats.messages), border: "border-tertiary", text: "text-tertiary", icon: MessageCircle },
   ];
 
@@ -118,8 +118,8 @@ const Dashboard = () => {
     <div className="animate-fade-in">
       {/* Title */}
       <div className="mb-10">
-        <p className="font-mono-label text-muted-foreground mb-3">◆ Deine Fälle</p>
-        <h1 className="font-serif italic text-5xl">Verhandlungs-Protokoll</h1>
+        <p className="font-mono-label text-muted-foreground mb-3">◆ Deine Dossiers</p>
+        <h1 className="font-serif text-5xl">Verhandlungs-Protokoll</h1>
       </div>
 
       {/* Stats */}
@@ -183,7 +183,7 @@ const Dashboard = () => {
         </div>
       ) : isError ? (
         <div className="bg-card border border-destructive/40 rounded-sm p-10 text-center">
-          <p className="font-mono-label text-destructive mb-4">Fälle konnten nicht geladen werden</p>
+          <p className="font-mono-label text-destructive mb-4">Dossiers konnten nicht geladen werden</p>
           <button
             onClick={() => refetch()}
             className="font-mono-label text-primary border border-primary/40 px-4 py-2 rounded-sm hover:bg-primary/10"
@@ -201,10 +201,10 @@ const Dashboard = () => {
               <Plus className="w-5 h-5 text-muted-foreground group-hover:text-primary" />
             </div>
             <p className="font-mono-label text-muted-foreground group-hover:text-primary">
-              Erstelle einen neuen Fall
+              Erstelle ein neues Dossier
             </p>
           </Link>
-          <p className="text-sm text-muted-foreground/70 font-serif italic mt-6 max-w-md text-center">
+          <p className="text-[15px] text-muted-foreground/80 leading-7 mt-6 max-w-md text-center">
             Starte deine erste Verhandlungs-Analyse, um das System zu aktivieren.
           </p>
         </div>
@@ -222,7 +222,7 @@ const Dashboard = () => {
           {filtered.length === 0 && (
             <div className="md:col-span-2 bg-card border border-border/30 rounded-sm p-10 text-center">
               <p className="font-mono-label text-muted-foreground">
-                Keine Fälle in dieser Ansicht.
+                Keine Dossiers in dieser Ansicht.
               </p>
             </div>
           )}
@@ -237,7 +237,7 @@ const Dashboard = () => {
                 <Plus className="w-5 h-5 text-muted-foreground group-hover:text-primary" />
               </div>
               <p className="font-mono-label text-muted-foreground group-hover:text-primary">
-                Erstelle einen neuen Fall
+                Erstelle ein neues Dossier
               </p>
             </button>
           )}

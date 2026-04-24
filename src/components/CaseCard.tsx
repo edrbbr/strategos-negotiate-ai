@@ -81,7 +81,7 @@ export const CaseCard = ({ caseRow, ownerName, isArchived }: Props) => {
     archiveMut.mutate(
       { id: caseRow.id, archived: !isArchived },
       {
-        onSuccess: () => toast.success(isArchived ? "Fall reaktiviert" : "Fall archiviert"),
+        onSuccess: () => toast.success(isArchived ? "Dossier reaktiviert" : "Dossier archiviert"),
         onError: (err) => toast.error(`Fehler: ${(err as Error).message}`),
       },
     );
@@ -90,7 +90,7 @@ export const CaseCard = ({ caseRow, ownerName, isArchived }: Props) => {
   const handleDelete = () => {
     deleteMut.mutate(caseRow.id, {
       onSuccess: () => {
-        toast.success("Fall gelöscht");
+        toast.success("Dossier gelöscht");
         setConfirmOpen(false);
       },
       onError: (err) => toast.error(`Löschen fehlgeschlagen: ${(err as Error).message}`),
@@ -129,7 +129,7 @@ export const CaseCard = ({ caseRow, ownerName, isArchived }: Props) => {
                   }}
                   className="text-destructive focus:text-destructive"
                 >
-                  Fall löschen
+                  Dossier löschen
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -138,7 +138,7 @@ export const CaseCard = ({ caseRow, ownerName, isArchived }: Props) => {
 
         <Link to={`/app/case/${caseRow.id}`} className="flex-1 flex flex-col">
           <h3 className="font-serif text-2xl mb-3 leading-snug line-clamp-2">{caseRow.title}</h3>
-          <p className="text-sm text-muted-foreground leading-relaxed mb-8 flex-1 line-clamp-2">
+          <p className="text-[15px] text-foreground/80 leading-7 mb-8 flex-1 line-clamp-3">
             {preview}
           </p>
           <div className="flex items-center justify-between pt-6 border-t border-border/20">
@@ -158,7 +158,7 @@ export const CaseCard = ({ caseRow, ownerName, isArchived }: Props) => {
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Fall unwiderruflich löschen?</AlertDialogTitle>
+            <AlertDialogTitle>Dossier unwiderruflich löschen?</AlertDialogTitle>
             <AlertDialogDescription>
               Dieser Schritt ist endgültig. Alle Analyse-Ergebnisse, Strategie- und Draft-Inhalte
               werden vollständig gelöscht.

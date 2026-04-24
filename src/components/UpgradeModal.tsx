@@ -8,7 +8,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Diamond, Loader2 } from "lucide-react";
-import strategosLogo from "@/assets/strategos-logo.svg";
+import pallanxLogo from "@/assets/pallanx-logo.png";
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -117,12 +117,12 @@ export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
       <DialogContent className="max-w-3xl bg-card border border-primary/30 rounded-sm p-12">
         <div className="text-center mb-10">
           <img
-            src={strategosLogo}
-            alt="Strategos"
-            className="w-12 h-12 mx-auto mb-6 rounded-sm"
+            src={pallanxLogo}
+            alt="PALLANX"
+            className="w-14 h-14 mx-auto mb-6 object-contain"
           />
           <h2 className="font-serif italic text-3xl mb-4">
-            Limit erreicht. Du hast deine 3 kostenlosen Fälle verwendet.
+            Mandat vollständig genutzt. Ihr Free-Kontingent ist aufgebraucht.
           </h2>
           <p className="font-serif italic text-muted-foreground max-w-lg mx-auto">
             Setzen Sie Ihre strategische Überlegenheit fort. Wählen Sie einen
