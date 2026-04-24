@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Crown, Info, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useStripeCheckout } from "@/hooks/useStripeCheckout";
@@ -16,6 +16,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { EliteRequestModal } from "@/components/EliteRequestModal";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 const lookupKeyFor = (planId: string, cycle: BillingCycle): string | null => {
@@ -25,9 +31,13 @@ const lookupKeyFor = (planId: string, cycle: BillingCycle): string | null => {
   return null;
 };
 
-const ctaLabelFor = (planId: string, isAuthed: boolean): string => {
+const ctaLabelFor = (
+  planId: string,
+  isAuthed: boolean,
+  bookableDirectly: boolean,
+): string => {
   if (planId === "free") return isAuthed ? "DOSSIER STARTEN" : "KOSTENLOS STARTEN";
-  if (planId === "elite") return "ELITE FREISCHALTEN";
+  if (planId === "elite" || !bookableDirectly) return "ZUGANG ANFRAGEN";
   return "JETZT SICHERN";
 };
 
@@ -35,6 +45,7 @@ export interface PlanCardProps {
   plan: PlanWithDetails;
   cycle: BillingCycle;
   onCheckout: (planId: string, cycle: BillingCycle) => void;
+  onRequestElite: () => void;
   pendingPriceId: string | null;
   isAuthed: boolean;
   freeCtaTo: string;
@@ -44,6 +55,7 @@ export const PlanCard = ({
   plan,
   cycle,
   onCheckout,
+  onRequestElite,
   pendingPriceId,
   isAuthed,
   freeCtaTo,
@@ -54,6 +66,8 @@ export const PlanCard = ({
   const lookupKey = lookupKeyFor(plan.id, cycle);
   const isFree = plan.id === "free";
   const isPending = lookupKey !== null && pendingPriceId === lookupKey;
+  const bookableDirectly = plan.bookable_directly ?? true;
+  const isOnRequest = !isFree && !bookableDirectly;
 
   const showEffective = cycle === "yearly" && price && price.amount_cents > 0;
   const effectivePerMonth = showEffective
@@ -105,7 +119,29 @@ export const PlanCard = ({
               className="w-4 h-4 text-primary shrink-0 mt-0.5"
               strokeWidth={2}
             />
-            {f.feature_text}
+            <span className="flex-1 flex items-start gap-1.5">
+              <span>{f.feature_text}</span>
+              {f.help_text ? (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Mehr Info zu ${f.feature_text}`}
+                      className="inline-flex shrink-0 mt-0.5 text-muted-foreground/60 hover:text-primary transition-colors"
+                    >
+                      <Info className="w-3.5 h-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    side="top"
+                    className="max-w-[280px] text-xs leading-relaxed font-sans bg-card border border-border/60 p-3 text-foreground/85"
+                  >
+                    {f.help_text}
+                  </PopoverContent>
+                </Popover>
+              ) : null}
+            </span>
           </li>
         ))}
       </ul>
@@ -116,9 +152,19 @@ export const PlanCard = ({
             className="w-full"
             size="lg"
           >
-            {ctaLabelFor(plan.id, isAuthed)}
+            {ctaLabelFor(plan.id, isAuthed, bookableDirectly)}
           </Button>
         </Link>
+      ) : isOnRequest ? (
+        <Button
+          variant={featured ? "gold" : "gold-outline"}
+          className="w-full"
+          size="lg"
+          onClick={onRequestElite}
+        >
+          <Crown className="w-4 h-4 mr-2" />
+          {ctaLabelFor(plan.id, isAuthed, bookableDirectly)}
+        </Button>
       ) : (
         <Button
           variant={featured ? "gold" : "gold-outline"}
@@ -133,13 +179,18 @@ export const PlanCard = ({
               LADEN…
             </>
           ) : (
-            ctaLabelFor(plan.id, isAuthed)
+            ctaLabelFor(plan.id, isAuthed, bookableDirectly)
           )}
         </Button>
       )}
-      {monthly && cycle === "yearly" && monthly.amount_cents > 0 && (
+      {!isOnRequest && monthly && cycle === "yearly" && monthly.amount_cents > 0 && (
         <p className="mt-3 text-[10px] text-muted-foreground/60 text-center font-sans uppercase tracking-[0.18em]">
           Statt {formatPrice(monthly.amount_cents, monthly.currency)} / Monat
+        </p>
+      )}
+      {isOnRequest && (
+        <p className="mt-3 text-[10px] text-muted-foreground/60 text-center font-sans uppercase tracking-[0.18em]">
+          Aufnahme nach Eignungsprüfung
         </p>
       )}
     </div>
@@ -174,6 +225,7 @@ export const PlansGrid = ({
   const { openCheckout, closeCheckout, isOpen, checkoutElement } =
     useStripeCheckout();
   const [pendingPriceId, setPendingPriceId] = useState<string | null>(null);
+  const [eliteOpen, setEliteOpen] = useState(false);
 
   const discount = calcYearlyDiscount(plans);
   const isAuthed = !!user;
@@ -194,6 +246,14 @@ export const PlansGrid = ({
       customerEmail: user.email ?? profile?.full_name ?? undefined,
       returnUrl: `${window.location.origin}${successReturnPath}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     });
+  };
+
+  const handleRequestElite = () => {
+    if (!user) {
+      navigate(`/register?intent=elite`);
+      return;
+    }
+    setEliteOpen(true);
   };
 
   return (
@@ -235,6 +295,7 @@ export const PlansGrid = ({
             plan={plan}
             cycle={cycle}
             onCheckout={handleCheckout}
+            onRequestElite={handleRequestElite}
             pendingPriceId={pendingPriceId}
             isAuthed={isAuthed}
             freeCtaTo={freeCtaTo}
@@ -259,6 +320,8 @@ export const PlansGrid = ({
           {checkoutElement}
         </DialogContent>
       </Dialog>
+
+      <EliteRequestModal open={eliteOpen} onOpenChange={setEliteOpen} />
     </>
   );
 };
