@@ -23,6 +23,15 @@ export type AuthProfile = {
     tier_label: string;
     case_limit: number | null;
     case_limit_type: string;
+    tier_key?: string | null;
+    bookable_directly?: boolean | null;
+    initial_attachments_limit?: number | null;
+    refinement_attachments_limit?: number | null;
+    refinements_per_case?: number | null;
+    refinements_per_month?: number | null;
+    allows_tonality?: boolean | null;
+    allows_deep_doc_analysis?: boolean | null;
+    support_sla_hours?: number | null;
   } | null;
   cases_used: number;
   extra_credits: number;
@@ -32,6 +41,8 @@ export type AuthProfile = {
   subscription_status: string | null;
   billing_cycle: string | null;
   theme_preference: "light" | "dark" | null;
+  refinements_used_period?: number;
+  refinements_period_start?: string | null;
 };
 
 type AuthResult = { error: string | null };
@@ -57,7 +68,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const PROFILE_SELECT =
-  "id, full_name, organization, avatar_url, plan_id, cases_used, extra_credits, cases_period_start, aggressive_mode, archive_mode, subscription_status, billing_cycle, theme_preference, plan:plans!inner(id, name, tier_label, case_limit, case_limit_type)";
+  "id, full_name, organization, avatar_url, plan_id, cases_used, extra_credits, cases_period_start, refinements_used_period, refinements_period_start, aggressive_mode, archive_mode, subscription_status, billing_cycle, theme_preference, plan:plans!inner(id, name, tier_label, case_limit, case_limit_type, tier_key, bookable_directly, initial_attachments_limit, refinement_attachments_limit, refinements_per_case, refinements_per_month, allows_tonality, allows_deep_doc_analysis, support_sla_hours)";
 
 const fetchProfile = async (userId: string): Promise<AuthProfile | null> => {
   const { data, error } = await supabase
