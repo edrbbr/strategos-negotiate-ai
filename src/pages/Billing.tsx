@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Minus, Plus, Loader2 } from "lucide-react";
 import { SettingsSideNav } from "@/components/settings/SettingsSideNav";
 import { MandateBlock } from "@/components/settings/MandateBlock";
@@ -18,6 +21,24 @@ const Billing = () => {
   const { user, profile } = useAuth();
   const { openCheckout, closeCheckout, isOpen, checkoutElement } = useStripeCheckout();
   const [qty, setQty] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (searchParams.get("purchase") === "success") {
+      toast.success("Zahlung erhalten — Dossiers werden gutgeschrieben.");
+      // Refetch profile + purchases shortly after to allow webhook to land
+      const t = setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["extra-credit-purchases"] });
+        qc.invalidateQueries({ queryKey: ["profile"] });
+      }, 2500);
+      const params = new URLSearchParams(searchParams);
+      params.delete("purchase");
+      params.delete("session_id");
+      setSearchParams(params, { replace: true });
+      return () => clearTimeout(t);
+    }
+  }, [searchParams, setSearchParams, qc]);
 
   const isPro = profile?.plan_id === "pro";
   const total = (qty * PRICE_PER_DOSSIER_EUR).toFixed(2).replace(".", ",");
