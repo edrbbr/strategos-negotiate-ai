@@ -25,6 +25,8 @@ export type AuthProfile = {
     case_limit_type: string;
   } | null;
   cases_used: number;
+  extra_credits: number;
+  cases_period_start: string | null;
   aggressive_mode: boolean;
   archive_mode: boolean;
   subscription_status: string | null;
@@ -54,7 +56,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const PROFILE_SELECT =
-  "id, full_name, organization, avatar_url, plan_id, cases_used, aggressive_mode, archive_mode, subscription_status, billing_cycle, plan:plans!inner(id, name, tier_label, case_limit, case_limit_type)";
+  "id, full_name, organization, avatar_url, plan_id, cases_used, extra_credits, cases_period_start, aggressive_mode, archive_mode, subscription_status, billing_cycle, plan:plans!inner(id, name, tier_label, case_limit, case_limit_type)";
 
 const fetchProfile = async (userId: string): Promise<AuthProfile | null> => {
   const { data, error } = await supabase

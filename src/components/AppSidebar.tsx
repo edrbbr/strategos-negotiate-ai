@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Settings, Plus, LogOut, User } from "lucide-react";
+import { BarChart3, Settings, Plus, LogOut, User, CreditCard } from "lucide-react";
 import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,6 +7,7 @@ import { useAllCases } from "@/hooks/useCases";
 
 const navItems = [
   { label: "Dashboard", to: "/app/dashboard", icon: BarChart3 },
+  { label: "Billing", to: "/app/billing", icon: CreditCard },
   { label: "Settings", to: "/app/settings", icon: Settings },
 ];
 
