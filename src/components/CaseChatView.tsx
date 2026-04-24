@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, ChevronDown, Copy, Diamond, History, Loader2, MessageSquare, Send, Sparkles } from "lucide-react";
+import { Bot, ChevronDown, Copy, Diamond, History, Loader2, Maximize2, MessageSquare, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import type { CaseRow } from "@/hooks/useCases";
 import {
@@ -82,6 +89,7 @@ export function CaseChatView({ caseRow }: Props) {
   );
 
   const [input, setInput] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const currentVersionId = caseRow.current_version_id ?? versions[versions.length - 1]?.id ?? null;
@@ -159,37 +167,85 @@ export function CaseChatView({ caseRow }: Props) {
           onPick={(p) => setInput(p)}
         />
         <div className="relative bg-card border border-border/30 rounded-sm p-3 mt-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-3.5 h-3.5 text-tertiary" />
-            <span className="font-mono-label text-tertiary">Refinement Chat</span>
-          </div>
-          <div className="flex items-end gap-2">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              disabled={refineMut.isPending}
-              placeholder="Anweisung zur Anpassung eingeben… (Enter = senden, Shift+Enter = Zeilenumbruch)"
-              className="flex-1 bg-transparent focus:outline-none py-2 px-1 font-serif italic text-sm placeholder:text-muted-foreground/60 disabled:opacity-50 resize-none min-h-[44px] max-h-[160px]"
-              rows={1}
-            />
-            <Button
-              variant="gold"
-              size="sm"
-              onClick={send}
-              disabled={refineMut.isPending || input.trim().length < 2}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-tertiary" />
+              <span className="font-mono-label text-tertiary">Refinement Chat</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="text-muted-foreground/70 hover:text-primary transition-colors p-1 -m-1"
+              aria-label="Eingabefeld vergrößern"
+              title="Eingabefeld vergrößern"
             >
-              {refineMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              <span className="ml-1">Senden</span>
-            </Button>
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
           </div>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            disabled={refineMut.isPending}
+            placeholder="Anweisung zur Anpassung eingeben… (Enter = senden, Shift+Enter = Zeilenumbruch)"
+            className="w-full bg-transparent focus:outline-none py-2 px-1 font-sans text-[15px] leading-7 placeholder:text-muted-foreground/60 disabled:opacity-50 resize-none min-h-[80px] max-h-[200px]"
+            rows={3}
+          />
+        </div>
+        <div className="flex justify-end mt-3">
+          <Button
+            variant="gold"
+            size="sm"
+            onClick={send}
+            disabled={refineMut.isPending || input.trim().length < 2}
+          >
+            {refineMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            <span className="ml-1">Senden</span>
+          </Button>
         </div>
       </div>
+
+      {/* Expanded editor modal */}
+      <Dialog open={expanded} onOpenChange={setExpanded}>
+        <DialogContent className="max-w-3xl bg-card border border-primary/30 p-6">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl">Refinement-Anweisung</DialogTitle>
+            <DialogDescription className="font-sans text-sm text-muted-foreground">
+              Verfassen Sie Ihre Anweisung in Ruhe — der Inhalt synchronisiert sich automatisch mit dem Chat.
+            </DialogDescription>
+          </DialogHeader>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={refineMut.isPending}
+            placeholder="Anweisung zur Anpassung eingeben…"
+            className="w-full bg-background/40 border border-border/40 rounded-sm p-4 font-sans text-[15px] leading-7 placeholder:text-muted-foreground/60 focus:border-primary/40 focus:outline-none resize-none"
+            style={{ minHeight: "60vh" }}
+            autoFocus
+          />
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={() => setExpanded(false)}>
+              Schließen
+            </Button>
+            <Button
+              variant="gold"
+              onClick={async () => {
+                await send();
+                setExpanded(false);
+              }}
+              disabled={refineMut.isPending || input.trim().length < 2}
+            >
+              {refineMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+              Senden
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
