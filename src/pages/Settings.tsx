@@ -7,10 +7,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { SettingsSideNav } from "@/components/settings/SettingsSideNav";
 import { MandateBlock } from "@/components/settings/MandateBlock";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const Settings = () => {
   const navigate = useNavigate();
   const { user, profile, refreshProfile } = useAuth();
+  const { theme } = useTheme();
 
   const [fullName, setFullName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -79,6 +82,23 @@ const Settings = () => {
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Änderungen speichern
             </Button>
+          </div>
+
+          <div className="border-t border-border/40 pt-10 mb-12 max-w-2xl">
+            <h2 className="font-serif text-2xl mb-2">Erscheinungsbild</h2>
+            <p className="font-sans text-sm text-muted-foreground mb-6 leading-relaxed">
+              Hell wirkt klassisch wie unsere Einladungen. Dunkel betont das Imperiale.
+              Ihre Wahl wird in Ihrem Profil gespeichert und auf allen Geräten übernommen.
+            </p>
+            <div className="flex items-center justify-between gap-6">
+              <div>
+                <p className="font-mono-label text-muted-foreground mb-1">Aktuelles Theme</p>
+                <p className="font-serif text-lg">
+                  {theme === "dark" ? "Dunkelmodus" : "Hellmodus"}
+                </p>
+              </div>
+              <ThemeToggle variant="full" />
+            </div>
           </div>
 
           <MandateBlock />

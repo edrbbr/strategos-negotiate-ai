@@ -1,11 +1,20 @@
 <!doctype html>
-<html lang="de" class="dark">
+<html lang="de">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PALLANX — Verhandle wie ein Profi. Immer.</title>
     <meta name="description" content="Die erste Intelligence-Plattform für taktische Empathie und spieltheoretische Präzision in Hochstakes-Verhandlungen.">
     <meta name="author" content="PALLANX" />
+    <script>
+      // Anti-flash: apply persisted theme before React mounts
+      (function () {
+        try {
+          var t = localStorage.getItem('pallanx-theme');
+          if (t === 'dark') document.documentElement.classList.add('dark');
+        } catch (e) {}
+      })();
+    </script>
 
     
     

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAllCases } from "@/hooks/useCases";
 import { useUserRole } from "@/hooks/useUserRole";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const navItems = [
   { label: "Dashboard", to: "/app/dashboard", icon: BarChart3 },
@@ -168,6 +169,9 @@ export const AppSidebar = () => {
             <LogOut className="w-4 h-4" strokeWidth={1.5} />
             Logout
           </button>
+          <div className="pt-2">
+            <ThemeToggle />
+          </div>
         </div>
       </div>
     </aside>
