@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, ChevronDown, Copy, Diamond, History, Loader2, Lock, Maximize2, MessageSquare, Paperclip, Send, Sparkles, X } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, Copy, Diamond, History, Info, Loader2, Lock, Maximize2, MessageSquare, Paperclip, Send, Sparkles, Star, X } from "lucide-react";
 import { toast } from "sonner";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,10 +25,12 @@ import {
 } from "@/hooks/useCaseVersions";
 import {
   type CaseAttachment,
+  useCaseAttachments,
   useDeleteAttachment,
   useUploadAttachment,
 } from "@/hooks/useCaseAttachments";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NegStrategy {
   key: string;
@@ -92,10 +94,26 @@ export function CaseChatView({ caseRow }: Props) {
   const planLimits = usePlanLimits();
   const uploadMut = useUploadAttachment();
   const deleteMut = useDeleteAttachment();
+  const { data: allAttachments = [] } = useCaseAttachments(caseRow.id);
+  const { profile } = useAuth();
+  const qc = useQueryClient();
   const labelMap = useMemo(
     () => Object.fromEntries(strategyLookup.map((s) => [s.key, s.label])),
     [strategyLookup],
   );
+
+  // Group attachments by the version they were uploaded for (refinement context).
+  // `refinement_for_version_id === null` => initial-context attachment (V0/V1).
+  const attachmentsByVersion = useMemo(() => {
+    const map = new Map<string | null, CaseAttachment[]>();
+    for (const a of allAttachments) {
+      const key = a.refinement_for_version_id ?? null;
+      const arr = map.get(key) ?? [];
+      arr.push(a);
+      map.set(key, arr);
+    }
+    return map;
+  }, [allAttachments]);
 
   const [input, setInput] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -119,6 +137,35 @@ export function CaseChatView({ caseRow }: Props) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [versions.length, refineMut.isPending]);
+
+  // ---- Refinement counter (per-case + per-month) ----
+  const refinementsForThisCase = versions.filter((v) => v.kind === "refinement").length;
+  const perCaseLimit = planLimits.refinementsPerCase;
+  const perMonthLimit = planLimits.refinementsPerMonth;
+  const usedThisPeriod = profile?.refinements_used_period ?? 0;
+  const perCaseRemaining =
+    perCaseLimit !== null && perCaseLimit !== undefined
+      ? Math.max(0, perCaseLimit - refinementsForThisCase)
+      : null;
+  const perMonthRemaining =
+    perMonthLimit !== null && perMonthLimit !== undefined
+      ? Math.max(0, perMonthLimit - usedThisPeriod)
+      : null;
+
+  // ---- Mark-as-active (sets cases.current_version_id) ----
+  const setActive = async (versionId: string) => {
+    try {
+      const { error } = await supabase
+        .from("cases")
+        .update({ current_version_id: versionId, updated_at: new Date().toISOString() })
+        .eq("id", caseRow.id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ["case", caseRow.id] });
+      toast.success("Als aktiv markiert — nächstes Refinement basiert auf dieser Version.");
+    } catch (e) {
+      toast.error(`Aktiv setzen fehlgeschlagen: ${(e as Error).message}`);
+    }
+  };
 
   const send = async () => {
     const instruction = input.trim();
@@ -237,7 +284,9 @@ export function CaseChatView({ caseRow }: Props) {
               version={v}
               labelMap={labelMap}
               isCurrent={v.id === currentVersionId}
+              attachments={attachmentsByVersion.get(v.id) ?? []}
               onRestore={() => restore(v.id)}
+              onSetActive={() => setActive(v.id)}
               restoring={restoreMut.isPending}
             />
           ))
@@ -249,6 +298,13 @@ export function CaseChatView({ caseRow }: Props) {
 
       {/* Sticky input */}
       <div className="border-t border-border/30 bg-background pt-4">
+        <RefinementCounter
+          perCaseRemaining={perCaseRemaining}
+          perCaseLimit={perCaseLimit}
+          perMonthRemaining={perMonthRemaining}
+          perMonthLimit={perMonthLimit}
+          tier={planLimits.tier}
+        />
         <SuggestionChips
           suggestions={suggestions}
           loading={suggestionsLoading}
