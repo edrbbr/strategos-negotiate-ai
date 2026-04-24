@@ -168,6 +168,9 @@ async function handleWebhook(req: Request, env: StripeEnv) {
   const event = await verifyWebhook(req, env);
 
   switch (event.type) {
+    case "checkout.session.completed":
+      await handleCheckoutCompleted(event.data.object, env);
+      break;
     case "customer.subscription.created":
       await handleSubscriptionCreated(event.data.object, env);
       break;
