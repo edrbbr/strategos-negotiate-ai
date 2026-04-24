@@ -111,12 +111,35 @@ export function CaseChatView({ caseRow }: Props) {
     const instruction = input.trim();
     if (instruction.length < 2) return;
     try {
-      await refineMut.mutateAsync({ case_id: caseRow.id, instruction });
+      const res = await refineMut.mutateAsync({ case_id: caseRow.id, instruction });
       setInput("");
+      const meta = (res as unknown as { soft_warning?: boolean; warning_message?: string });
+      if (meta?.soft_warning) {
+        toast.warning(meta.warning_message ?? "Über dem Standard-Volumen — Support kontaktieren bei kontinuierlich hoher Last.");
+      }
     } catch (e) {
       const ctx = (e as { context?: Response }).context;
-      if (ctx?.status === 429) toast.error("Zu viele Anfragen. Bitte kurz warten.");
-      else if (ctx?.status === 402) toast.error("AI-Guthaben aufgebraucht.");
+      if (ctx?.status === 429) {
+        try {
+          const body = await ctx.json();
+          if (body?.error === "REFINEMENT_LIMIT") {
+            const reason = body.reason as string | undefined;
+            if (reason === "per_case_limit") {
+              toast.error(
+                `Limit für diesen Fall erreicht (${body.limit ?? "?"}/${body.limit ?? "?"}). Pro hebt das Limit pro Fall auf.`,
+              );
+            } else if (reason === "per_month_limit") {
+              toast.error(
+                `Monats-Refinements aufgebraucht (${body.limit ?? "?"}/${body.limit ?? "?"}). Upgrade auf Pro oder Elite für mehr.`,
+              );
+            } else {
+              toast.error("Refinement-Limit erreicht.");
+            }
+            return;
+          }
+        } catch {/* fall through */}
+        toast.error("Zu viele Anfragen. Bitte kurz warten.");
+      } else if (ctx?.status === 402) toast.error("AI-Guthaben aufgebraucht.");
       else toast.error(`Refinement fehlgeschlagen: ${(e as Error).message}`);
     }
   };
