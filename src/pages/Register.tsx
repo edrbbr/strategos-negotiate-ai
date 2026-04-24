@@ -81,14 +81,14 @@ const Register = () => {
         <div>
           <p className="font-mono-label text-primary mb-6">Sovereign Intelligence</p>
           <h1 className="font-serif italic text-primary text-7xl xl:text-8xl font-semibold tracking-tight mb-10">
-            STRATEGOS
+            PALLANX
           </h1>
           <p className="font-serif text-2xl leading-snug max-w-md text-foreground/90">
             The absolute terminal for high-stakes negotiation analysis and strategic execution. Secure your seat at the table.
           </p>
           <div className="flex items-center gap-4 mt-10">
             <span className="w-16 h-px bg-primary" />
-            <span className="font-mono-label text-primary">Est. MMXXIV</span>
+            <span className="font-mono-label text-primary">Est. MMXXVI</span>
           </div>
         </div>
         <span className="font-mono-label text-muted-foreground">◆ Secure_Server_A12 — Timestamp: 12:44:01 GMT</span>
