@@ -102,11 +102,24 @@ const CaseDetail = () => {
   // Derive stage states from realtime case row while running (multi-stage only)
   useEffect(() => {
     if (!loading || !isMultiStage || !caseRow) return;
-    setStageState((prev) => ({
-      analysis: caseRow.analysis && caseRow.analysis.length > 0 ? "complete" : prev.analysis,
-      strategy: caseRow.strategy ? "complete" : prev.strategy,
-      draft: caseRow.draft ? "complete" : prev.draft,
-    }));
+    setStageState((prev) => {
+      const analysisDone = !!(caseRow.analysis && caseRow.analysis.length > 0);
+      const strategyDone = !!caseRow.strategy;
+      const draftDone = !!caseRow.draft;
+      return {
+        analysis: analysisDone ? "complete" : prev.analysis,
+        strategy: strategyDone
+          ? "complete"
+          : analysisDone && prev.strategy === "pending"
+          ? "running"
+          : prev.strategy,
+        draft: draftDone
+          ? "complete"
+          : strategyDone && prev.draft === "pending"
+          ? "running"
+          : prev.draft,
+      };
+    });
   }, [caseRow, loading, isMultiStage]);
 
   // ---- Persist situation_text on blur ----
