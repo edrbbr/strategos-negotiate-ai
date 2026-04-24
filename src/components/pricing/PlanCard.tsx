@@ -23,6 +23,10 @@ import {
 } from "@/components/ui/popover";
 import { EliteRequestModal } from "@/components/EliteRequestModal";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import {
+  DiscountCodeField,
+  type AppliedDiscount,
+} from "@/components/pricing/DiscountCodeField";
 
 const lookupKeyFor = (planId: string, cycle: BillingCycle): string | null => {
   if (planId === "pro") return cycle === "yearly" ? "pro_yearly" : "pro_monthly";
@@ -226,6 +230,13 @@ export const PlansGrid = ({
     useStripeCheckout();
   const [pendingPriceId, setPendingPriceId] = useState<string | null>(null);
   const [eliteOpen, setEliteOpen] = useState(false);
+  const [appliedDiscount, setAppliedDiscount] =
+    useState<AppliedDiscount | null>(null);
+  // Discount applies to a specific plan + cycle combination
+  const [discountTarget, setDiscountTarget] = useState<{
+    planId: string;
+    cycle: BillingCycle;
+  } | null>(null);
 
   const discount = calcYearlyDiscount(plans);
   const isAuthed = !!user;
@@ -240,12 +251,29 @@ export const PlansGrid = ({
       );
       return;
     }
+    const discountValid =
+      appliedDiscount &&
+      discountTarget &&
+      discountTarget.planId === planId &&
+      discountTarget.cycle === c;
     setPendingPriceId(priceId);
     openCheckout({
       priceId,
       customerEmail: user.email ?? profile?.full_name ?? undefined,
       returnUrl: `${window.location.origin}${successReturnPath}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      ...(discountValid
+        ? { discountCode: appliedDiscount!.code }
+        : {}),
     });
+  };
+
+  // Reset discount when cycle changes (re-validation needed)
+  const handleCycleChange = (next: BillingCycle) => {
+    if (next !== cycle) {
+      setAppliedDiscount(null);
+      setDiscountTarget(null);
+    }
+    setCycle(next);
   };
 
   const handleRequestElite = () => {
@@ -262,7 +290,7 @@ export const PlansGrid = ({
         <div className="flex justify-center mb-12">
           <div className="inline-flex items-center gap-3 border border-border/40 p-1">
             <button
-              onClick={() => setCycle("monthly")}
+              onClick={() => handleCycleChange("monthly")}
               className={`px-5 py-2 text-xs font-sans uppercase tracking-[0.2em] transition-colors ${
                 cycle === "monthly"
                   ? "bg-primary text-primary-foreground"
@@ -272,7 +300,7 @@ export const PlansGrid = ({
               Monatlich
             </button>
             <button
-              onClick={() => setCycle("yearly")}
+              onClick={() => handleCycleChange("yearly")}
               className={`px-5 py-2 text-xs font-sans uppercase tracking-[0.2em] transition-colors ${
                 cycle === "yearly"
                   ? "bg-primary text-primary-foreground"
@@ -285,6 +313,25 @@ export const PlansGrid = ({
               )}
             </button>
           </div>
+        </div>
+      )}
+
+      {user && (
+        <div className="max-w-md mx-auto mb-10">
+          <DiscountCodeField
+            planId="pro"
+            cycle={cycle}
+            applied={appliedDiscount}
+            onApplied={(d) => {
+              setAppliedDiscount(d);
+              setDiscountTarget(d ? { planId: "pro", cycle } : null);
+            }}
+          />
+          {appliedDiscount && (
+            <p className="mt-2 text-[10px] text-center text-muted-foreground/70 font-sans uppercase tracking-[0.18em]">
+              Code wird beim Pro-Checkout angewendet
+            </p>
+          )}
         </div>
       )}
 
