@@ -92,7 +92,11 @@ Deno.serve(async (req) => {
       managed_payments: { enabled: true },
       ...(resolvedEmail && { customer_email: resolvedEmail }),
       ...(resolvedUserId && {
-        metadata: { userId: resolvedUserId },
+        metadata: {
+          userId: resolvedUserId,
+          lookupKey: priceId,
+          quantity: String(quantity || 1),
+        },
         ...(isRecurring && {
           subscription_data: { metadata: { userId: resolvedUserId } },
         }),
