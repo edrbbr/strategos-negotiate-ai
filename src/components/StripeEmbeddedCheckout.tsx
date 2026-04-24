@@ -11,13 +11,14 @@ interface StripeEmbeddedCheckoutProps {
   quantity?: number;
   customerEmail?: string;
   returnUrl: string;
+  discountCode?: string;
 }
 
 export const StripeEmbeddedCheckoutComponent = forwardRef<
   HTMLDivElement,
   StripeEmbeddedCheckoutProps
 >(function StripeEmbeddedCheckoutComponent(
-  { priceId, quantity, customerEmail, returnUrl },
+  { priceId, quantity, customerEmail, returnUrl, discountCode },
   ref,
 ) {
   const fetchClientSecret = async (): Promise<string> => {
@@ -28,6 +29,7 @@ export const StripeEmbeddedCheckoutComponent = forwardRef<
         customerEmail,
         returnUrl,
         environment: getStripeEnvironment(),
+        ...(discountCode ? { discountCode } : {}),
       },
     });
     if (error || !data?.clientSecret) {
