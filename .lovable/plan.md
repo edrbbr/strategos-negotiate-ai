@@ -1,51 +1,62 @@
 
+# Fix: Preisinformationen werden auf `/preise` nicht geladen
 
-# Test-User mit Elite-Status anlegen
+## Ursache (verifiziert)
+- Frontend (`src/hooks/usePlans.ts`) liest aus der View `public.plans_public`.
+- Diese View wurde nach dem Sicherheits-Hardening mit `WITH (security_invoker=true)` neu erstellt — sie führt SELECTs **mit den Rechten des aufrufenden Users** aus.
+- Die Basistabelle `public.plans` hat `SELECT` für `anon` **und** `authenticated` revoked (`can_select=false`).
+- Folge: Jeder Aufruf der View läuft in `permission denied for table plans` (PostgREST-Fehler 42501) → React-Query setzt `isError=true` → die Modal/Page zeigt "Preisinformationen vorübergehend nicht verfügbar".
 
-## Ziel
-Einen Test-Account `test-tregos-str@mail.com` mit Passwort `strategos23042026!` erstellen, sofort einsatzbereit (E-Mail-bestätigt) und mit aktivem **Elite**-Plan im Profil.
-
-## Vorgehen
-
-### 1. User in `auth.users` anlegen
-Über eine kurze Edge-Function (einmaliger Aufruf, danach Löschung) mit Service-Role-Key:
-```ts
-await supabaseAdmin.auth.admin.createUser({
-  email: "test-tregos-str@mail.com",
-  password: "strategos23042026!",
-  email_confirm: true,           // sofort verifiziert, kein Bestätigungs-Mail-Klick nötig
-  user_metadata: { full_name: "Strategos Testuser" },
-});
+Die Console-Log-Zeile bestätigt das exakt:
 ```
-Der bestehende `handle_new_user`-Trigger erstellt automatisch den Profile-Eintrag mit `plan_id = 'free'`.
+Failed to load profile {code: "42501", message: "permission denied for table plans"}
+```
+(Der gleiche Fehler trifft auch `usePlans` — der Logger heißt nur "Failed to load profile", weil derselbe Code-Pfad das Profil lädt.)
 
-### 2. Profil auf Elite hochstufen
-Direkt danach via SQL (Migration mit `UPDATE` auf `profiles`, da die RLS-Policy User-seitige Plan-Änderungen blockiert — Service-Role umgeht das):
+## Fix (ein Schritt)
+Migration, die die `plans_public`-View **als `SECURITY DEFINER`** neu definiert (oder alternativ auf `security_invoker=false` umstellt, was äquivalent ist) und SELECT-Rechte sauber an `anon`/`authenticated` vergibt. Damit nutzt die View die Rechte des View-Owners (`postgres`/`supabase_admin`) für die Lesung der Basistabelle, exponiert aber nur die nicht-sensitiven Spalten — `pipeline_config` bleibt verborgen.
+
 ```sql
-UPDATE public.profiles
-SET plan_id = 'elite',
-    billing_cycle = 'yearly',
-    subscription_status = 'active',
-    cases_used = 0,
-    updated_at = now()
-WHERE id = (SELECT id FROM auth.users WHERE email = 'test-tregos-str@mail.com');
+-- Re-create plans_public WITHOUT security_invoker, so it reads `plans`
+-- with the view owner's privileges. The view still hides pipeline_config,
+-- model_id, and other internal columns.
+DROP VIEW IF EXISTS public.plans_public;
+
+CREATE VIEW public.plans_public AS
+SELECT
+  id,
+  tier_label,
+  name,
+  tagline,
+  badge,
+  case_limit,
+  case_limit_type,
+  is_recommended,
+  sort_order,
+  is_active,
+  created_at,
+  updated_at
+FROM public.plans
+WHERE is_active = true;
+
+GRANT SELECT ON public.plans_public TO anon, authenticated;
+
+-- Belt & suspenders: ensure the base table stays locked down to anon/auth
+REVOKE SELECT ON public.plans FROM anon, authenticated;
 ```
 
-### 3. Aufräumen
-Die temporäre Edge-Function nach erfolgreicher Ausführung wieder löschen, damit kein offener Endpoint zur User-Erstellung im Projekt verbleibt.
-
-## Ergebnis
-- Login möglich mit `test-tregos-str@mail.com` / `strategos23042026!`
-- Plan: **Elite**, Status `active`, Abrechnung `yearly`
-- Keine Stripe-Subscription verknüpft (rein manueller Test-Account) — bei späterem Upgrade über Stripe-Portal würde der Webhook `subscriptions` befüllen und das Profil über den vorhandenen `sync_profile_from_subscription`-Trigger neu schreiben.
-
-## Sicherheitshinweis
-Bitte das Passwort nach den Tests rotieren oder den Account löschen. Da es im Klartext in der Konversation steht, ist es nicht mehr vertraulich.
+## Was sich nicht ändert
+- `pipeline_config`, `model_id` bleiben **unsichtbar** für Clients (nicht in der View).
+- Edge Functions (z. B. `strategos-ai-router`) lesen `plans` weiterhin via Service-Role — unverändert funktionsfähig.
+- `plan_prices` und `plan_features` haben bereits korrekte Public-RLS und brauchen nichts.
 
 ## Dateien
 | Datei | Änderung |
 |---|---|
-| `supabase/functions/_temp-create-testuser/index.ts` | neue Einmal-Function, ruft `admin.createUser` |
-| Migration | `UPDATE profiles` für Elite-Hochstufung |
-| `supabase/functions/_temp-create-testuser/` | nach Ausführung wieder gelöscht |
+| Neue SQL-Migration | View `plans_public` als `SECURITY DEFINER` neu anlegen, GRANT SELECT für `anon`/`authenticated` |
 
+## Verifikation nach dem Apply
+1. `/preise` neu laden → Pläne erscheinen.
+2. Console-Errors `permission denied for table plans` verschwinden.
+3. `select * from public.plans` als anon → weiterhin verboten.
+4. `select * from public.plans_public` als anon → liefert die 3 aktiven Pläne ohne `pipeline_config`.
