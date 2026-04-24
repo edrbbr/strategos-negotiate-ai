@@ -486,6 +486,7 @@ const CaseDetail = () => {
               <p className="font-mono-label text-muted-foreground/60 text-[10px]">
                 {(serverAttachments?.length ?? 0) + pendingFiles.length}/{maxAttachments}
                 {tier === "free" && " · Free"}
+                {tier !== "free" && limits.allowsDeepDocAnalysis && " · Tiefenanalyse"}
               </p>
             </div>
             <input
@@ -506,7 +507,9 @@ const CaseDetail = () => {
             >
               <Upload className="w-6 h-6 text-muted-foreground mb-3" strokeWidth={1.5} />
               <p className="font-mono-label text-muted-foreground">PDF, JPG oder PNG hochladen</p>
-              <p className="font-mono-label text-muted-foreground/50 text-[10px] mt-1">max. 10 MB pro Datei</p>
+              <p className="font-mono-label text-muted-foreground/50 text-[10px] mt-1">
+                max. 10 MB pro Datei · {limits.allowsDeepDocAnalysis ? "Tiefenanalyse aktiv" : "Wird vom Modell extrahiert"}
+              </p>
             </button>
 
             {(serverAttachments?.length || pendingFiles.length) ? (
