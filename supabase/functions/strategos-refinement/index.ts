@@ -211,7 +211,7 @@ Deno.serve(async (req: Request) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    const userClient = createClient<any>(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
 
@@ -226,7 +226,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: "instruction missing" }, 400);
     }
 
-    const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const service = createClient<any>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Load case + latest version
     const { data: caseRow, error: caseErr } = await service
