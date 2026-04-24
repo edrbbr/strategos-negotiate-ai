@@ -169,6 +169,93 @@ export type Database = {
         }
         Relationships: []
       }
+      elite_requests: {
+        Row: {
+          admin_token: string
+          biggest_pain_point: string
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          monthly_negotiation_volume: string
+          primary_use_case: string
+          profession: string
+          sent_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_token?: string
+          biggest_pain_point: string
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          monthly_negotiation_volume: string
+          primary_use_case: string
+          profession: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_token?: string
+          biggest_pain_point?: string
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          monthly_negotiation_volume?: string
+          primary_use_case?: string
+          profession?: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      extra_credit_purchases: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          expires_at: string | null
+          id: string
+          quantity: number
+          status: string
+          stripe_session_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          currency?: string
+          expires_at?: string | null
+          id?: string
+          quantity: number
+          status?: string
+          stripe_session_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          expires_at?: string | null
+          id?: string
+          quantity?: number
+          status?: string
+          stripe_session_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       negotiation_strategies: {
         Row: {
           created_at: string
@@ -346,8 +433,10 @@ export type Database = {
           archive_mode: boolean
           avatar_url: string | null
           billing_cycle: string | null
+          cases_period_start: string | null
           cases_used: number
           created_at: string
+          extra_credits: number
           full_name: string | null
           id: string
           organization: string | null
@@ -361,8 +450,10 @@ export type Database = {
           archive_mode?: boolean
           avatar_url?: string | null
           billing_cycle?: string | null
+          cases_period_start?: string | null
           cases_used?: number
           created_at?: string
+          extra_credits?: number
           full_name?: string | null
           id: string
           organization?: string | null
@@ -376,8 +467,10 @@ export type Database = {
           archive_mode?: boolean
           avatar_url?: string | null
           billing_cycle?: string | null
+          cases_period_start?: string | null
           cases_used?: number
           created_at?: string
+          extra_credits?: number
           full_name?: string | null
           id?: string
           organization?: string | null
@@ -451,6 +544,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       plans_public: {
@@ -500,10 +614,18 @@ export type Database = {
       }
     }
     Functions: {
+      consume_dossier: { Args: { p_user_id: string }; Returns: Json }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       increment_cases_used: { Args: { p_user_id: string }; Returns: number }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -630,6 +752,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
