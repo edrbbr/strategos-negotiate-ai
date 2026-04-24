@@ -9,6 +9,38 @@ export const SYSTEM_PROMPT = `You are STRATEGOS, an elite corporate negotiation 
 
 The user prompt will specify the target language and medium — you MUST respect both strictly.`;
 
+/**
+ * Build a tier-aware addendum for the system prompt:
+ *  - allowed strategy whitelist (model MUST pick the tactic name from this list)
+ *  - tonality instruction (only injected if the user is on a tier that allows it)
+ *  - cross-document deep-analysis hint (Elite only, applied when attachments exist)
+ */
+export function buildTierAddendum(opts: {
+  allowedStrategies: { key: string; label: string; prompt_hint: string | null }[];
+  tonalityInstruction: string | null;
+  enableDeepDocAnalysis: boolean;
+  hasAttachments: boolean;
+}): string {
+  const lines: string[] = [];
+  if (opts.allowedStrategies.length > 0) {
+    const list = opts.allowedStrategies
+      .map((s) => `- ${s.label}${s.prompt_hint ? ` — ${s.prompt_hint}` : ""}`)
+      .join("\n");
+    lines.push(
+      `STRATEGY WHITELIST — pick the tactic name for the 'strategy' field EXCLUSIVELY from this list. Do NOT invent or use any other framework name:\n${list}`,
+    );
+  }
+  if (opts.tonalityInstruction) {
+    lines.push(`TONALITY DIRECTIVE (mandatory for the draft):\n${opts.tonalityInstruction}`);
+  }
+  if (opts.enableDeepDocAnalysis && opts.hasAttachments) {
+    lines.push(
+      `DEEP DOCUMENT ANALYSIS — multiple reference documents are attached. Cross-reference them: surface contradictions between documents, missing information, and concrete leverage points that only become visible when reading the attachments together. Reflect at least one cross-document insight in 'analysis'.`,
+    );
+  }
+  return lines.length > 0 ? `\n\n${lines.join("\n\n")}` : "";
+}
+
 // Stage 1 — Analyse (Claude)
 export const PROMPT_ANALYSIS = `You are STRATEGOS in ANALYSIS mode. Your single task is to dissect the negotiation situation and extract the following in structured bullet points:
 
