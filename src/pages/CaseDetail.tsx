@@ -178,7 +178,7 @@ const CaseDetail = () => {
         activeCaseId = created.id;
         navigate(`/app/case/${created.id}`, { replace: true });
       } catch (e) {
-        toast.error(`Fall konnte nicht angelegt werden: ${(e as Error).message}`);
+        toast.error(`Dossier konnte nicht angelegt werden: ${(e as Error).message}`);
         return;
       }
     } else {
@@ -271,7 +271,7 @@ const CaseDetail = () => {
           ? (payload.case_limit as number) - (payload.cases_used as number)
           : null;
       if (remaining !== null && remaining <= 1 && remaining >= 0) {
-        toast.message(`Noch ${remaining} Fall übrig in deinem Plan.`);
+        toast.message(`Noch ${remaining} Dossier übrig in Ihrem Plan.`);
       }
       toast.success("Pipeline abgeschlossen");
     } catch (e) {
