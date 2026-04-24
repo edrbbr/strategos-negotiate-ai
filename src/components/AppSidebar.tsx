@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { BarChart3, Settings, Plus, LogOut, User, CreditCard, Shield, Home } from "lucide-react";
 import { Logo } from "./Logo";
@@ -7,6 +8,7 @@ import { useAllCases } from "@/hooks/useCases";
 import { useUserRole } from "@/hooks/useUserRole";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 const navItems = [
   { label: "Dashboard", to: "/app/dashboard", icon: BarChart3 },
@@ -14,7 +16,12 @@ const navItems = [
   { label: "Settings", to: "/app/settings", icon: Settings },
 ];
 
-export const AppSidebar = () => {
+interface AppSidebarProps {
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
+}
+
+export const AppSidebar = ({ mobileOpen, onMobileOpenChange }: AppSidebarProps = {}) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
@@ -44,8 +51,16 @@ export const AppSidebar = () => {
     navigate("/");
   };
 
-  return (
-    <aside className="hidden lg:flex flex-col w-72 shrink-0 bg-sidebar border-r border-sidebar-border min-h-screen">
+  // Auto-close mobile drawer on route change
+  useEffect(() => {
+    if (mobileOpen) {
+      onMobileOpenChange?.(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  const sidebarBody = (
+    <>
       <div className="p-6 border-b border-sidebar-border">
         <Logo subtitle />
       </div>
@@ -198,6 +213,22 @@ export const AppSidebar = () => {
           </div>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      <aside className="hidden lg:flex flex-col w-72 shrink-0 bg-sidebar border-r border-sidebar-border min-h-screen">
+        {sidebarBody}
+      </aside>
+      <Sheet open={!!mobileOpen} onOpenChange={(o) => onMobileOpenChange?.(o)}>
+        <SheetContent
+          side="left"
+          className="w-80 max-w-[85vw] p-0 bg-sidebar border-r border-sidebar-border flex flex-col overflow-y-auto lg:hidden"
+        >
+          {sidebarBody}
+        </SheetContent>
+      </Sheet>
+    </>
   );
 };
