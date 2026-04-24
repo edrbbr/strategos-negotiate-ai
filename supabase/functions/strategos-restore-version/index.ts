@@ -68,6 +68,7 @@ Deno.serve(async (req: Request) => {
         draft: target.draft,
         strategy_labels: target.strategy_labels,
         model_used: target.model_used,
+        change_rationale: `Inhalte aus Version ${target.version_number} wiederhergestellt — keine inhaltliche Neuberechnung.`,
       })
       .select("id")
       .single();
