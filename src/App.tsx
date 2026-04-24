@@ -17,6 +17,8 @@ import Dashboard from "./pages/Dashboard";
 import CaseDetail from "./pages/CaseDetail";
 import Settings from "./pages/Settings";
 import Billing from "./pages/Billing";
+import Admin from "./pages/Admin";
+import { AdminRoute } from "@/components/AdminRoute";
 import NotFound from "./pages/NotFound";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
@@ -57,6 +59,15 @@ const App = () => (
               <Route path="settings" element={<Settings />} />
               <Route path="billing" element={<Billing />} />
             </Route>
+
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <Admin />
+                </AdminRoute>
+              }
+            />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
