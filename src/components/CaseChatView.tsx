@@ -588,3 +588,72 @@ function SuggestionChips({
     </div>
   );
 }
+
+function RefinementAttachments({
+  attachments,
+  limit,
+  allowed,
+  onAdd,
+  onRemove,
+  uploading,
+}: {
+  attachments: CaseAttachment[];
+  limit: number;
+  allowed: boolean;
+  onAdd: () => void;
+  onRemove: (att: CaseAttachment) => void;
+  uploading: boolean;
+}) {
+  if (!allowed) {
+    return (
+      <div className="mt-3 flex items-center gap-2 text-[11px] font-mono-label text-muted-foreground/70">
+        <Lock className="w-3 h-3" />
+        <span>
+          Anhänge in Refinements ab Pro verfügbar.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={onAdd}
+        disabled={uploading || attachments.length >= limit}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-border/40 rounded-sm font-mono-label text-[11px] text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        title={
+          attachments.length >= limit
+            ? `Maximal ${limit} Anhänge pro Refinement`
+            : "Datei anhängen"
+        }
+      >
+        {uploading ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <Paperclip className="w-3 h-3" />
+        )}
+        <span>
+          Anhang ({attachments.length}/{limit})
+        </span>
+      </button>
+      {attachments.map((a) => (
+        <span
+          key={a.id}
+          className="inline-flex items-center gap-1.5 px-2 py-1 bg-card border border-border/40 rounded-sm font-mono-label text-[10px] text-foreground/80 max-w-[220px]"
+          title={a.file_name}
+        >
+          <Paperclip className="w-2.5 h-2.5 text-tertiary shrink-0" />
+          <span className="truncate">{a.file_name}</span>
+          <button
+            type="button"
+            onClick={() => onRemove(a)}
+            className="text-muted-foreground/70 hover:text-destructive transition-colors"
+            aria-label={`${a.file_name} entfernen`}
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
