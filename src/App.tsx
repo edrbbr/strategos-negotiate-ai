@@ -20,6 +20,7 @@ import Billing from "./pages/Billing";
 import Admin from "./pages/Admin";
 import { AdminRoute } from "@/components/AdminRoute";
 import NotFound from "./pages/NotFound";
+import Unsubscribe from "./pages/Unsubscribe";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ const App = () => (
             <Route path="/check-email" element={<CheckEmail />} />
             <Route path="/passwort-vergessen" element={<ForgotPassword />} />
             <Route path="/passwort-neu" element={<ResetPassword />} />
+            <Route path="/unsubscribe" element={<Unsubscribe />} />
 
             {/* Protected */}
             <Route
