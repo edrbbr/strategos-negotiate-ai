@@ -65,6 +65,7 @@ export type Database = {
         Row: {
           analysis: Json | null
           case_id: string
+          change_rationale: string | null
           created_at: string
           draft: string | null
           id: string
@@ -79,6 +80,7 @@ export type Database = {
         Insert: {
           analysis?: Json | null
           case_id: string
+          change_rationale?: string | null
           created_at?: string
           draft?: string | null
           id?: string
@@ -93,6 +95,7 @@ export type Database = {
         Update: {
           analysis?: Json | null
           case_id?: string
+          change_rationale?: string | null
           created_at?: string
           draft?: string | null
           id?: string
