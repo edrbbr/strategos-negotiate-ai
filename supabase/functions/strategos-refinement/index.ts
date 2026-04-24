@@ -55,6 +55,50 @@ const STRATEGY_REGEN_PROMPT = `You are STRATEGOS strategist. Produce a CONCISE n
 Reply ONLY in the requested language.
 Output ONLY the strategy text — no JSON, no labels, no markdown fences, no preamble.`;
 
+const RATIONALE_PROMPT = `You are STRATEGOS in REFINEMENT-LOG mode.
+Write a SHORT explanation (2-4 sentences) that tells the user:
+(1) how the refinement instruction was interpreted,
+(2) whether the underlying negotiation strategy was kept or changed and WHY,
+(3) if attachments were provided, what was taken from them.
+Be concrete, no hedging, no preamble. Reply in the requested language.
+Output ONLY the explanation text — no labels, no markdown fences.`;
+
+async function buildRationale(
+  apiKey: string,
+  ctx: {
+    instruction: string;
+    previousStrategy: string;
+    nextStrategy: string;
+    strategyChanged: boolean;
+    attachmentsContext: string;
+    language: string;
+  },
+): Promise<string | null> {
+  try {
+    const userContent =
+      `Language: ${ctx.language}\n\n` +
+      `User instruction:\n"""\n${ctx.instruction}\n"""\n\n` +
+      `Previous strategy:\n"""\n${ctx.previousStrategy.slice(0, 600)}\n"""\n\n` +
+      `New strategy:\n"""\n${ctx.nextStrategy.slice(0, 600)}\n"""\n\n` +
+      `Strategy was ${ctx.strategyChanged ? "CHANGED" : "KEPT"}.\n` +
+      (ctx.attachmentsContext
+        ? `Refinement attachments excerpt:\n"""\n${ctx.attachmentsContext.slice(0, 1500)}\n"""\n`
+        : "No new attachments.\n");
+    const res = await callPlainGateway(
+      apiKey,
+      CLASSIFIER_MODEL,
+      RATIONALE_PROMPT,
+      userContent,
+      0.4,
+    );
+    if (res.ok && res.text) return res.text.slice(0, 800);
+    return null;
+  } catch (e) {
+    console.warn("buildRationale failed", e);
+    return null;
+  }
+}
+
 // Rough token-overlap heuristic to detect "the model basically copied the old draft"
 function similarityRatio(a: string, b: string): number {
   const tokenize = (s: string) =>
@@ -308,20 +352,49 @@ Deno.serve(async (req: Request) => {
     // Load case + latest version
     const { data: caseRow, error: caseErr } = await service
       .from("cases")
-      .select("id, user_id, language_label, medium, situation_text, tonality_profile_key")
+      .select("id, user_id, language_label, medium, situation_text, tonality_profile_key, current_version_id")
       .eq("id", case_id)
       .eq("user_id", userId)
       .maybeSingle();
     if (caseErr || !caseRow) return json({ error: "Case not found" }, 404);
 
-    const { data: latest, error: latestErr } = await service
+    // Refinement base: prefer the case's `current_version_id` (the user-marked
+    // active version). Fallback to the most recent version. This lets users
+    // branch refinements off any past version they explicitly selected.
+    let baseVersion: any = null;
+    if (caseRow.current_version_id) {
+      const { data } = await service
+        .from("case_versions")
+        .select("*")
+        .eq("id", caseRow.current_version_id)
+        .eq("case_id", case_id)
+        .maybeSingle();
+      baseVersion = data ?? null;
+    }
+    if (!baseVersion) {
+      const { data: latest, error: latestErr } = await service
+        .from("case_versions")
+        .select("*")
+        .eq("case_id", case_id)
+        .order("version_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latestErr || !latest) return json({ error: "No prior version" }, 404);
+      baseVersion = latest;
+    }
+
+    // We still need the *highest* version_number to compute the next one.
+    const { data: maxRow } = await service
       .from("case_versions")
-      .select("*")
+      .select("version_number")
       .eq("case_id", case_id)
       .order("version_number", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (latestErr || !latest) return json({ error: "No prior version" }, 404);
+    const latest = {
+      ...baseVersion,
+      version_number: maxRow?.version_number ?? baseVersion.version_number,
+    };
 
     // Pin analysis to V1 (oldest version) so it stays stable across refinements.
     const { data: v1 } = await service
@@ -423,6 +496,7 @@ Deno.serve(async (req: Request) => {
         strategy: currentStrategy,
         strategy_labels: currentLabels,
         draft: newDraft,
+        change_rationale: `Mock-Modus: Anweisung "${instruction.slice(0, 120)}" wurde am Ende des Entwurfs ergänzt.`,
       }, instruction, "mock", softWarning, usedAttachmentIds);
     }
 
@@ -518,6 +592,14 @@ Deno.serve(async (req: Request) => {
       strategy: nextStrategy,
       strategy_labels: nextLabels,
       draft: newDraft,
+      change_rationale: await buildRationale(LOVABLE_API_KEY, {
+        instruction,
+        previousStrategy: currentStrategy,
+        nextStrategy,
+        strategyChanged: classification.regenerate_strategy && nextStrategy !== currentStrategy,
+        attachmentsContext,
+        language: caseRow.language_label,
+      }),
     }, instruction, MODEL, softWarning, usedAttachmentIds);
   } catch (e) {
     console.error("strategos-refinement error", e);
@@ -538,6 +620,7 @@ interface PersistPayload {
   strategy: string;
   strategy_labels: string[];
   draft: string;
+  change_rationale?: string | null;
 }
 
 async function persistAndReply(
@@ -564,6 +647,7 @@ async function persistAndReply(
       draft: payload.draft,
       strategy_labels: payload.strategy_labels,
       model_used: model,
+      change_rationale: payload.change_rationale ?? null,
     })
     .select("id")
     .single();

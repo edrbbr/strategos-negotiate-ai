@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, ChevronDown, Copy, Diamond, History, Loader2, Lock, Maximize2, MessageSquare, Paperclip, Send, Sparkles, X } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, Copy, Diamond, History, Info, Loader2, Lock, Maximize2, MessageSquare, Paperclip, Send, Sparkles, Star, X } from "lucide-react";
 import { toast } from "sonner";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,10 +25,12 @@ import {
 } from "@/hooks/useCaseVersions";
 import {
   type CaseAttachment,
+  useCaseAttachments,
   useDeleteAttachment,
   useUploadAttachment,
 } from "@/hooks/useCaseAttachments";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NegStrategy {
   key: string;
@@ -92,10 +94,26 @@ export function CaseChatView({ caseRow }: Props) {
   const planLimits = usePlanLimits();
   const uploadMut = useUploadAttachment();
   const deleteMut = useDeleteAttachment();
+  const { data: allAttachments = [] } = useCaseAttachments(caseRow.id);
+  const { profile } = useAuth();
+  const qc = useQueryClient();
   const labelMap = useMemo(
     () => Object.fromEntries(strategyLookup.map((s) => [s.key, s.label])),
     [strategyLookup],
   );
+
+  // Group attachments by the version they were uploaded for (refinement context).
+  // `refinement_for_version_id === null` => initial-context attachment (V0/V1).
+  const attachmentsByVersion = useMemo(() => {
+    const map = new Map<string | null, CaseAttachment[]>();
+    for (const a of allAttachments) {
+      const key = a.refinement_for_version_id ?? null;
+      const arr = map.get(key) ?? [];
+      arr.push(a);
+      map.set(key, arr);
+    }
+    return map;
+  }, [allAttachments]);
 
   const [input, setInput] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -119,6 +137,35 @@ export function CaseChatView({ caseRow }: Props) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [versions.length, refineMut.isPending]);
+
+  // ---- Refinement counter (per-case + per-month) ----
+  const refinementsForThisCase = versions.filter((v) => v.kind === "refinement").length;
+  const perCaseLimit = planLimits.refinementsPerCase;
+  const perMonthLimit = planLimits.refinementsPerMonth;
+  const usedThisPeriod = profile?.refinements_used_period ?? 0;
+  const perCaseRemaining =
+    perCaseLimit !== null && perCaseLimit !== undefined
+      ? Math.max(0, perCaseLimit - refinementsForThisCase)
+      : null;
+  const perMonthRemaining =
+    perMonthLimit !== null && perMonthLimit !== undefined
+      ? Math.max(0, perMonthLimit - usedThisPeriod)
+      : null;
+
+  // ---- Mark-as-active (sets cases.current_version_id) ----
+  const setActive = async (versionId: string) => {
+    try {
+      const { error } = await supabase
+        .from("cases")
+        .update({ current_version_id: versionId, updated_at: new Date().toISOString() })
+        .eq("id", caseRow.id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ["case", caseRow.id] });
+      toast.success("Als aktiv markiert — nächstes Refinement basiert auf dieser Version.");
+    } catch (e) {
+      toast.error(`Aktiv setzen fehlgeschlagen: ${(e as Error).message}`);
+    }
+  };
 
   const send = async () => {
     const instruction = input.trim();
@@ -223,7 +270,10 @@ export function CaseChatView({ caseRow }: Props) {
       {/* Scrollable timeline */}
       <div className="flex-1 overflow-y-auto pr-2 space-y-6 pb-6">
         {/* V0 Initial situation */}
-        <InitialBlock caseRow={caseRow} />
+        <InitialBlockInner
+          caseRow={caseRow}
+          attachments={attachmentsByVersion.get(null) ?? []}
+        />
 
         {/* Analyse einmalig (V1-fix), standardmäßig zugeklappt */}
         <AnalysisAccordion caseId={caseRow.id} versions={versions} />
@@ -237,7 +287,9 @@ export function CaseChatView({ caseRow }: Props) {
               version={v}
               labelMap={labelMap}
               isCurrent={v.id === currentVersionId}
+              attachments={attachmentsByVersion.get(v.id) ?? []}
               onRestore={() => restore(v.id)}
+              onSetActive={() => setActive(v.id)}
               restoring={restoreMut.isPending}
             />
           ))
@@ -249,6 +301,13 @@ export function CaseChatView({ caseRow }: Props) {
 
       {/* Sticky input */}
       <div className="border-t border-border/30 bg-background pt-4">
+        <RefinementCounter
+          perCaseRemaining={perCaseRemaining}
+          perCaseLimit={perCaseLimit}
+          perMonthRemaining={perMonthRemaining}
+          perMonthLimit={perMonthLimit}
+          tier={planLimits.tier}
+        />
         <SuggestionChips
           suggestions={suggestions}
           loading={suggestionsLoading}
@@ -353,7 +412,13 @@ export function CaseChatView({ caseRow }: Props) {
   );
 }
 
-function InitialBlock({ caseRow }: { caseRow: Props["caseRow"] }) {
+function InitialBlockInner({
+  caseRow,
+  attachments,
+}: {
+  caseRow: Props["caseRow"];
+  attachments: CaseAttachment[];
+}) {
   return (
     <div className="bg-card border-l-2 border-secondary rounded-sm p-5">
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
@@ -369,6 +434,9 @@ function InitialBlock({ caseRow }: { caseRow: Props["caseRow"] }) {
       <p className="font-sans text-[15px] leading-7 text-foreground/90 whitespace-pre-line">
         {caseRow.situation_text || "—"}
       </p>
+      {attachments.length > 0 && (
+        <AttachmentsRow attachments={attachments} label="Initial-Anhänge" />
+      )}
     </div>
   );
 }
@@ -377,13 +445,17 @@ function VersionBlock({
   version,
   labelMap,
   isCurrent,
+  attachments,
   onRestore,
+  onSetActive,
   restoring,
 }: {
   version: CaseVersionRow;
   labelMap: Record<string, string>;
   isCurrent: boolean;
+  attachments: CaseAttachment[];
   onRestore: () => void;
+  onSetActive: () => void;
   restoring: boolean;
 }) {
   const promptText =
@@ -413,8 +485,26 @@ function VersionBlock({
                   navigator.clipboard.writeText(version.draft ?? "");
                   toast.success("Entwurf kopiert");
                 }}
+                title="Entwurf kopieren"
               >
                 <Copy className="w-3 h-3" />
+              </Button>
+            )}
+            {isCurrent ? (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-1 border border-tertiary/40 rounded-sm font-mono-label text-tertiary text-[10px]"
+                title="Diese Version ist als aktuell markiert. Refinements basieren auf ihr."
+              >
+                <CheckCircle2 className="w-3 h-3" /> Aktuell
+              </span>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onSetActive}
+                title="Als aktuelle Version markieren — das nächste Refinement basiert dann hierauf."
+              >
+                <Star className="w-3 h-3" /> Als aktuell
               </Button>
             )}
             {!isCurrent && (
@@ -424,6 +514,17 @@ function VersionBlock({
             )}
           </div>
         </div>
+
+        {version.change_rationale && version.kind === "refinement" && (
+          <div className="mb-4 bg-tertiary/5 border-l-2 border-tertiary/50 rounded-sm p-3">
+            <p className="font-mono-label text-tertiary text-[10px] mb-1.5 flex items-center gap-1.5">
+              <Info className="w-2.5 h-2.5" /> ÄNDERUNGS-BEGRÜNDUNG
+            </p>
+            <p className="font-sans text-[13px] leading-6 text-foreground/85 whitespace-pre-line">
+              {version.change_rationale}
+            </p>
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-4">
           {/* Prompt */}
@@ -463,7 +564,91 @@ function VersionBlock({
             ))}
           </div>
         )}
+
+        {attachments.length > 0 && (
+          <AttachmentsRow
+            attachments={attachments}
+            label={`Anhänge zu V${version.version_number}`}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+function AttachmentsRow({
+  attachments,
+  label,
+}: {
+  attachments: CaseAttachment[];
+  label: string;
+}) {
+  return (
+    <div className="mt-4 pt-3 border-t border-border/20">
+      <p className="font-mono-label text-muted-foreground/70 text-[10px] mb-2 flex items-center gap-1.5">
+        <Paperclip className="w-2.5 h-2.5" /> {label.toUpperCase()} · {attachments.length}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {attachments.map((a) => (
+          <span
+            key={a.id}
+            className="inline-flex items-center gap-1.5 px-2 py-1 bg-background/40 border border-border/30 rounded-sm font-mono-label text-[10px] text-foreground/75 max-w-[260px]"
+            title={a.file_name}
+          >
+            <Paperclip className="w-2.5 h-2.5 text-tertiary shrink-0" />
+            <span className="truncate">{a.file_name}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RefinementCounter({
+  perCaseRemaining,
+  perCaseLimit,
+  perMonthRemaining,
+  perMonthLimit,
+  tier,
+}: {
+  perCaseRemaining: number | null;
+  perCaseLimit: number | null | undefined;
+  perMonthRemaining: number | null;
+  perMonthLimit: number | null | undefined;
+  tier: string;
+}) {
+  const parts: string[] = [];
+  if (perCaseLimit !== null && perCaseLimit !== undefined) {
+    parts.push(
+      `${perCaseRemaining ?? 0} / ${perCaseLimit} pro Fall`,
+    );
+  } else {
+    parts.push("∞ pro Fall");
+  }
+  if (perMonthLimit !== null && perMonthLimit !== undefined) {
+    parts.push(
+      `${perMonthRemaining ?? 0} / ${perMonthLimit} pro Monat`,
+    );
+  } else if (tier === "elite") {
+    parts.push("∞ pro Monat (fair use)");
+  }
+
+  const exhausted =
+    (perCaseRemaining !== null && perCaseRemaining <= 0) ||
+    (perMonthRemaining !== null && perMonthRemaining <= 0);
+
+  return (
+    <div
+      className={`mb-3 flex flex-wrap items-center gap-3 font-mono-label text-[10px] ${
+        exhausted ? "text-destructive" : "text-muted-foreground"
+      }`}
+    >
+      <span className="opacity-70">REFINEMENTS:</span>
+      {parts.map((p, i) => (
+        <span key={i} className="px-2 py-0.5 bg-card border border-border/30 rounded-sm">
+          {p}
+        </span>
+      ))}
     </div>
   );
 }

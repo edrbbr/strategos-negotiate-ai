@@ -18,6 +18,7 @@ export interface CaseVersionRow {
   strategy_labels: string[];
   model_used: string | null;
   created_at: string;
+  change_rationale: string | null;
 }
 
 export function useCaseVersions(caseId: string | undefined) {
