@@ -401,7 +401,12 @@ const CaseDetail = () => {
       )}
 
       {hasVersions && caseRow ? (
-        <CaseChatView caseRow={caseRow as Parameters<typeof CaseChatView>[0]["caseRow"]} />
+        <>
+          <CaseChatView caseRow={caseRow as Parameters<typeof CaseChatView>[0]["caseRow"]} />
+          {tier === "free" && caseId && (
+            <UpgradePreviewPanel caseId={caseId} onUpgradeClick={() => setShowUpgrade(true)} />
+          )}
+        </>
       ) : (
       <div className="grid lg:grid-cols-2 gap-10">
         {/* Left column */}
