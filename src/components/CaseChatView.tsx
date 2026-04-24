@@ -410,6 +410,16 @@ export function CaseChatView({ caseRow }: Props) {
 }
 
 function InitialBlock({ caseRow }: { caseRow: Props["caseRow"] }) {
+  return <InitialBlockInner caseRow={caseRow} attachments={[]} />;
+}
+
+function InitialBlockInner({
+  caseRow,
+  attachments,
+}: {
+  caseRow: Props["caseRow"];
+  attachments: CaseAttachment[];
+}) {
   return (
     <div className="bg-card border-l-2 border-secondary rounded-sm p-5">
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
@@ -425,6 +435,9 @@ function InitialBlock({ caseRow }: { caseRow: Props["caseRow"] }) {
       <p className="font-sans text-[15px] leading-7 text-foreground/90 whitespace-pre-line">
         {caseRow.situation_text || "—"}
       </p>
+      {attachments.length > 0 && (
+        <AttachmentsRow attachments={attachments} label="Initial-Anhänge" />
+      )}
     </div>
   );
 }
@@ -433,13 +446,17 @@ function VersionBlock({
   version,
   labelMap,
   isCurrent,
+  attachments,
   onRestore,
+  onSetActive,
   restoring,
 }: {
   version: CaseVersionRow;
   labelMap: Record<string, string>;
   isCurrent: boolean;
+  attachments: CaseAttachment[];
   onRestore: () => void;
+  onSetActive: () => void;
   restoring: boolean;
 }) {
   const promptText =
@@ -469,8 +486,26 @@ function VersionBlock({
                   navigator.clipboard.writeText(version.draft ?? "");
                   toast.success("Entwurf kopiert");
                 }}
+                title="Entwurf kopieren"
               >
                 <Copy className="w-3 h-3" />
+              </Button>
+            )}
+            {isCurrent ? (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-1 border border-tertiary/40 rounded-sm font-mono-label text-tertiary text-[10px]"
+                title="Diese Version ist als aktuell markiert. Refinements basieren auf ihr."
+              >
+                <CheckCircle2 className="w-3 h-3" /> Aktuell
+              </span>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onSetActive}
+                title="Als aktuelle Version markieren — das nächste Refinement basiert dann hierauf."
+              >
+                <Star className="w-3 h-3" /> Als aktuell
               </Button>
             )}
             {!isCurrent && (
@@ -480,6 +515,17 @@ function VersionBlock({
             )}
           </div>
         </div>
+
+        {version.change_rationale && version.kind === "refinement" && (
+          <div className="mb-4 bg-tertiary/5 border-l-2 border-tertiary/50 rounded-sm p-3">
+            <p className="font-mono-label text-tertiary text-[10px] mb-1.5 flex items-center gap-1.5">
+              <Info className="w-2.5 h-2.5" /> ÄNDERUNGS-BEGRÜNDUNG
+            </p>
+            <p className="font-sans text-[13px] leading-6 text-foreground/85 whitespace-pre-line">
+              {version.change_rationale}
+            </p>
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-4">
           {/* Prompt */}
@@ -519,7 +565,91 @@ function VersionBlock({
             ))}
           </div>
         )}
+
+        {attachments.length > 0 && (
+          <AttachmentsRow
+            attachments={attachments}
+            label={`Anhänge zu V${version.version_number}`}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+function AttachmentsRow({
+  attachments,
+  label,
+}: {
+  attachments: CaseAttachment[];
+  label: string;
+}) {
+  return (
+    <div className="mt-4 pt-3 border-t border-border/20">
+      <p className="font-mono-label text-muted-foreground/70 text-[10px] mb-2 flex items-center gap-1.5">
+        <Paperclip className="w-2.5 h-2.5" /> {label.toUpperCase()} · {attachments.length}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {attachments.map((a) => (
+          <span
+            key={a.id}
+            className="inline-flex items-center gap-1.5 px-2 py-1 bg-background/40 border border-border/30 rounded-sm font-mono-label text-[10px] text-foreground/75 max-w-[260px]"
+            title={a.file_name}
+          >
+            <Paperclip className="w-2.5 h-2.5 text-tertiary shrink-0" />
+            <span className="truncate">{a.file_name}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RefinementCounter({
+  perCaseRemaining,
+  perCaseLimit,
+  perMonthRemaining,
+  perMonthLimit,
+  tier,
+}: {
+  perCaseRemaining: number | null;
+  perCaseLimit: number | null | undefined;
+  perMonthRemaining: number | null;
+  perMonthLimit: number | null | undefined;
+  tier: string;
+}) {
+  const parts: string[] = [];
+  if (perCaseLimit !== null && perCaseLimit !== undefined) {
+    parts.push(
+      `${perCaseRemaining ?? 0} / ${perCaseLimit} pro Fall`,
+    );
+  } else {
+    parts.push("∞ pro Fall");
+  }
+  if (perMonthLimit !== null && perMonthLimit !== undefined) {
+    parts.push(
+      `${perMonthRemaining ?? 0} / ${perMonthLimit} pro Monat`,
+    );
+  } else if (tier === "elite") {
+    parts.push("∞ pro Monat (fair use)");
+  }
+
+  const exhausted =
+    (perCaseRemaining !== null && perCaseRemaining <= 0) ||
+    (perMonthRemaining !== null && perMonthRemaining <= 0);
+
+  return (
+    <div
+      className={`mb-3 flex flex-wrap items-center gap-3 font-mono-label text-[10px] ${
+        exhausted ? "text-destructive" : "text-muted-foreground"
+      }`}
+    >
+      <span className="opacity-70">REFINEMENTS:</span>
+      {parts.map((p, i) => (
+        <span key={i} className="px-2 py-0.5 bg-card border border-border/30 rounded-sm">
+          {p}
+        </span>
+      ))}
     </div>
   );
 }
