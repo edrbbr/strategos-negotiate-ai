@@ -49,6 +49,27 @@ const STAGE_LABELS = {
   draft:    { idle: "Finaler Entwurf",  running: "Formuliere Draft…", done: "Finaler Entwurf", hint: "Verfasse Kommunikation…" },
 } as const;
 
+// Edge-Function timeout / network drop recovery: poll case_versions for ~90s.
+// If a new "initial" version appeared, the pipeline succeeded server-side.
+async function waitForVersionRecovery(caseId: string, timeoutMs = 90_000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const { data } = await supabase
+      .from("case_versions")
+      .select("id, kind, created_at")
+      .eq("case_id", caseId)
+      .eq("kind", "initial")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (data && data.length > 0) {
+      const ageMs = Date.now() - new Date(data[0].created_at).getTime();
+      if (ageMs < 5 * 60_000) return true;
+    }
+    await new Promise((r) => setTimeout(r, 3_000));
+  }
+  return false;
+}
+
 const CaseDetail = () => {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
