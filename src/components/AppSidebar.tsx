@@ -46,6 +46,13 @@ export const AppSidebar = ({ mobileOpen, onMobileOpenChange }: AppSidebarProps =
     : 0;
   const limitWarn = showUsage && (limit as number) && used / (limit as number) >= 2 / 3;
 
+  const refinementsUsed = profile?.refinements_used_period ?? 0;
+  const refinementsLimit = profile?.plan?.refinements_per_month ?? null;
+  const showRefinements = refinementsLimit !== null && refinementsLimit !== undefined;
+  const refinementsPct = showRefinements && refinementsLimit
+    ? Math.min(100, Math.round((refinementsUsed / refinementsLimit) * 100))
+    : 0;
+
   const handleLogout = async () => {
     await signOut();
     navigate("/");
@@ -188,6 +195,24 @@ export const AppSidebar = ({ mobileOpen, onMobileOpenChange }: AppSidebarProps =
             </span>
             <span className="font-sans text-xs text-primary">Unbegrenzt</span>
           </button>
+        )}
+        {showRefinements && (
+          <div className="pt-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-mono-label text-muted-foreground/70 text-[10px]">
+                Refinements
+              </span>
+              <span className="font-sans text-[10px] text-muted-foreground">
+                {refinementsUsed}/{refinementsLimit}
+              </span>
+            </div>
+            <div className="h-0.5 bg-muted overflow-hidden">
+              <div
+                className="h-full bg-muted-foreground/40 transition-all"
+                style={{ width: `${refinementsPct}%` }}
+              />
+            </div>
+          </div>
         )}
         <div className="space-y-1">
           <NavLink to="/app/settings" className="flex items-center gap-3 py-2 text-sidebar-foreground/70 hover:text-primary font-sans uppercase tracking-[0.18em] text-xs">
