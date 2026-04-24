@@ -270,7 +270,10 @@ export function CaseChatView({ caseRow }: Props) {
       {/* Scrollable timeline */}
       <div className="flex-1 overflow-y-auto pr-2 space-y-6 pb-6">
         {/* V0 Initial situation */}
-        <InitialBlock caseRow={caseRow} />
+        <InitialBlockInner
+          caseRow={caseRow}
+          attachments={attachmentsByVersion.get(null) ?? []}
+        />
 
         {/* Analyse einmalig (V1-fix), standardmäßig zugeklappt */}
         <AnalysisAccordion caseId={caseRow.id} versions={versions} />
@@ -407,10 +410,6 @@ export function CaseChatView({ caseRow }: Props) {
       </Dialog>
     </div>
   );
-}
-
-function InitialBlock({ caseRow }: { caseRow: Props["caseRow"] }) {
-  return <InitialBlockInner caseRow={caseRow} attachments={[]} />;
 }
 
 function InitialBlockInner({
