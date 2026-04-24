@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Brain, Target, MessageSquare, Car, FileWarning, Briefcase, Home, ShoppingBag, Diamond, Check, Plus } from "lucide-react";
+import { Brain, Target, MessageSquare, Car, FileWarning, Briefcase, Home, ShoppingBag, Diamond, Plus } from "lucide-react";
 import { useState } from "react";
-import { formatPrice, getPriceForCycle, usePlans } from "@/hooks/usePlans";
+import { usePlans } from "@/hooks/usePlans";
+import { PlansGrid } from "@/components/pricing/PlanCard";
 
 const Landing = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -173,45 +174,7 @@ const PricingSection = () => {
       )}
 
       {!isLoading && !isError && plans && plans.length > 0 && (
-        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          {plans.map((plan) => {
-            const price = getPriceForCycle(plan, "monthly");
-            const features = plan.features.slice(0, 4);
-            const featured = plan.is_recommended;
-            return (
-              <div key={plan.id} className={`relative p-8 border ${featured ? "border-primary bg-card" : "border-border/40 bg-card/40"}`}>
-                {plan.badge && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground font-mono-label px-3 py-1">
-                    {plan.badge}
-                  </span>
-                )}
-                <p className="font-mono-label text-muted-foreground mb-6">{plan.name}</p>
-                <div className="flex items-baseline gap-2 mb-8">
-                  <span className="font-serif text-5xl">
-                    {price ? formatPrice(price.amount_cents, price.currency) : "—"}
-                  </span>
-                  <span className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">/ Monat</span>
-                </div>
-                <ul className="space-y-3 mb-8">
-                  {features.map((f) => (
-                    <li
-                      key={f.id}
-                      className={`flex items-center gap-3 text-sm ${f.is_highlight ? "font-semibold text-foreground" : "text-foreground/80"}`}
-                    >
-                      <Check className="w-4 h-4 text-primary shrink-0" strokeWidth={2} />
-                      {f.feature_text}
-                    </li>
-                  ))}
-                </ul>
-                <Link to="/preise">
-                  <Button variant={featured ? "gold" : "gold-outline"} className="w-full" size="lg">
-                    PLAN WÄHLEN
-                  </Button>
-                </Link>
-              </div>
-            );
-          })}
-        </div>
+        <PlansGrid plans={plans} />
       )}
     </section>
   );
