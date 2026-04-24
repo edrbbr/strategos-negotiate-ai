@@ -11,7 +11,7 @@ import { EliteRequestModal } from "@/components/EliteRequestModal";
 const PRO_BENEFITS = [
   "Tiefenanalyse jeder Verhandlung in unter 30 Sekunden",
   "20 Dossiers pro Monat – mehr als jeder Wettbewerber liefert",
-  "Zusatz-Dossiers à 10 € nachkaufbar, jederzeit",
+  "Zusatz-Dossiers à 4,99 € nachkaufbar, jederzeit",
 ];
 
 const ELITE_BENEFITS = [
