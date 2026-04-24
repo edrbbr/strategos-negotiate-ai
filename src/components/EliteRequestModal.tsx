@@ -124,9 +124,8 @@ export const EliteRequestModal = ({ open, onOpenChange }: Props) => {
               </DialogTitle>
             </DialogHeader>
             <p className="text-foreground/85 text-[15px] leading-7 max-w-md mx-auto">
-              Ihre Anfrage wird geprüft. Bei Eignung erhalten Sie binnen
-              48 Stunden eine persönliche Einladung an{" "}
-              <span className="text-primary">{contactEmail || user?.email}</span>.
+              Ihre Anfrage wird geprüft. Bei Eignung erhalten Sie eine
+              persönliche Rückmeldung.
             </p>
             <Button variant="gold-outline" onClick={() => close(false)}>
               Schließen
