@@ -308,20 +308,49 @@ Deno.serve(async (req: Request) => {
     // Load case + latest version
     const { data: caseRow, error: caseErr } = await service
       .from("cases")
-      .select("id, user_id, language_label, medium, situation_text, tonality_profile_key")
+      .select("id, user_id, language_label, medium, situation_text, tonality_profile_key, current_version_id")
       .eq("id", case_id)
       .eq("user_id", userId)
       .maybeSingle();
     if (caseErr || !caseRow) return json({ error: "Case not found" }, 404);
 
-    const { data: latest, error: latestErr } = await service
+    // Refinement base: prefer the case's `current_version_id` (the user-marked
+    // active version). Fallback to the most recent version. This lets users
+    // branch refinements off any past version they explicitly selected.
+    let baseVersion: any = null;
+    if (caseRow.current_version_id) {
+      const { data } = await service
+        .from("case_versions")
+        .select("*")
+        .eq("id", caseRow.current_version_id)
+        .eq("case_id", case_id)
+        .maybeSingle();
+      baseVersion = data ?? null;
+    }
+    if (!baseVersion) {
+      const { data: latest, error: latestErr } = await service
+        .from("case_versions")
+        .select("*")
+        .eq("case_id", case_id)
+        .order("version_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latestErr || !latest) return json({ error: "No prior version" }, 404);
+      baseVersion = latest;
+    }
+
+    // We still need the *highest* version_number to compute the next one.
+    const { data: maxRow } = await service
       .from("case_versions")
-      .select("*")
+      .select("version_number")
       .eq("case_id", case_id)
       .order("version_number", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (latestErr || !latest) return json({ error: "No prior version" }, 404);
+    const latest = {
+      ...baseVersion,
+      version_number: maxRow?.version_number ?? baseVersion.version_number,
+    };
 
     // Pin analysis to V1 (oldest version) so it stays stable across refinements.
     const { data: v1 } = await service
@@ -423,6 +452,7 @@ Deno.serve(async (req: Request) => {
         strategy: currentStrategy,
         strategy_labels: currentLabels,
         draft: newDraft,
+        change_rationale: `Mock-Modus: Anweisung "${instruction.slice(0, 120)}" wurde am Ende des Entwurfs ergänzt.`,
       }, instruction, "mock", softWarning, usedAttachmentIds);
     }
 
@@ -518,6 +548,14 @@ Deno.serve(async (req: Request) => {
       strategy: nextStrategy,
       strategy_labels: nextLabels,
       draft: newDraft,
+      change_rationale: await buildRationale(LOVABLE_API_KEY, {
+        instruction,
+        previousStrategy: currentStrategy,
+        nextStrategy,
+        strategyChanged: classification.regenerate_strategy && nextStrategy !== currentStrategy,
+        attachmentsContext,
+        language: caseRow.language_label,
+      }),
     }, instruction, MODEL, softWarning, usedAttachmentIds);
   } catch (e) {
     console.error("strategos-refinement error", e);
@@ -538,6 +576,7 @@ interface PersistPayload {
   strategy: string;
   strategy_labels: string[];
   draft: string;
+  change_rationale?: string | null;
 }
 
 async function persistAndReply(
@@ -564,6 +603,7 @@ async function persistAndReply(
       draft: payload.draft,
       strategy_labels: payload.strategy_labels,
       model_used: model,
+      change_rationale: payload.change_rationale ?? null,
     })
     .select("id")
     .single();
