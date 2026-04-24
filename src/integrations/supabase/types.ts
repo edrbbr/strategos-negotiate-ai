@@ -122,6 +122,7 @@ export type Database = {
           status: string
           strategy: string | null
           title: string
+          tonality_profile_key: string
           updated_at: string
           user_id: string
         }
@@ -143,6 +144,7 @@ export type Database = {
           status?: string
           strategy?: string | null
           title?: string
+          tonality_profile_key?: string
           updated_at?: string
           user_id: string
         }
@@ -164,10 +166,115 @@ export type Database = {
           status?: string
           strategy?: string | null
           title?: string
+          tonality_profile_key?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: []
+      }
+      discount_codes: {
+        Row: {
+          amount_off_cents: number | null
+          applicable_billing_cycles: string[]
+          applicable_plan_ids: string[]
+          code: string
+          created_at: string
+          currency: string
+          description: string | null
+          duration: string
+          duration_in_months: number | null
+          id: string
+          is_active: boolean
+          max_redemptions_per_user: number
+          max_total_redemptions: number | null
+          percent_off: number | null
+          stripe_coupon_id_live: string | null
+          stripe_coupon_id_sandbox: string | null
+          total_redemptions: number
+          updated_at: string
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          amount_off_cents?: number | null
+          applicable_billing_cycles?: string[]
+          applicable_plan_ids?: string[]
+          code: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          duration?: string
+          duration_in_months?: number | null
+          id?: string
+          is_active?: boolean
+          max_redemptions_per_user?: number
+          max_total_redemptions?: number | null
+          percent_off?: number | null
+          stripe_coupon_id_live?: string | null
+          stripe_coupon_id_sandbox?: string | null
+          total_redemptions?: number
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          amount_off_cents?: number | null
+          applicable_billing_cycles?: string[]
+          applicable_plan_ids?: string[]
+          code?: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          duration?: string
+          duration_in_months?: number | null
+          id?: string
+          is_active?: boolean
+          max_redemptions_per_user?: number
+          max_total_redemptions?: number | null
+          percent_off?: number | null
+          stripe_coupon_id_live?: string | null
+          stripe_coupon_id_sandbox?: string | null
+          total_redemptions?: number
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: []
+      }
+      discount_redemptions: {
+        Row: {
+          discount_code_id: string
+          id: string
+          redeemed_at: string
+          stripe_session_id: string | null
+          stripe_subscription_id: string | null
+          user_id: string
+        }
+        Insert: {
+          discount_code_id: string
+          id?: string
+          redeemed_at?: string
+          stripe_session_id?: string | null
+          stripe_subscription_id?: string | null
+          user_id: string
+        }
+        Update: {
+          discount_code_id?: string
+          id?: string
+          redeemed_at?: string
+          stripe_session_id?: string | null
+          stripe_subscription_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discount_redemptions_discount_code_id_fkey"
+            columns: ["discount_code_id"]
+            isOneToOne: false
+            referencedRelation: "discount_codes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       elite_requests: {
         Row: {
@@ -351,6 +458,8 @@ export type Database = {
           is_active: boolean
           key: string
           label: string
+          min_tier: string
+          prompt_hint: string | null
           sort_order: number
         }
         Insert: {
@@ -360,6 +469,8 @@ export type Database = {
           is_active?: boolean
           key: string
           label: string
+          min_tier?: string
+          prompt_hint?: string | null
           sort_order?: number
         }
         Update: {
@@ -369,6 +480,8 @@ export type Database = {
           is_active?: boolean
           key?: string
           label?: string
+          min_tier?: string
+          prompt_hint?: string | null
           sort_order?: number
         }
         Relationships: []
@@ -377,6 +490,7 @@ export type Database = {
         Row: {
           created_at: string
           feature_text: string
+          help_text: string | null
           id: string
           is_highlight: boolean
           plan_id: string
@@ -385,6 +499,7 @@ export type Database = {
         Insert: {
           created_at?: string
           feature_text: string
+          help_text?: string | null
           id?: string
           is_highlight?: boolean
           plan_id: string
@@ -393,6 +508,7 @@ export type Database = {
         Update: {
           created_at?: string
           feature_text?: string
+          help_text?: string | null
           id?: string
           is_highlight?: boolean
           plan_id?: string
@@ -465,50 +581,77 @@ export type Database = {
       }
       plans: {
         Row: {
+          allows_deep_doc_analysis: boolean
+          allows_tonality: boolean
           badge: string | null
+          bookable_directly: boolean
           case_limit: number | null
           case_limit_type: string
           created_at: string
           id: string
+          initial_attachments_limit: number
           is_active: boolean
           is_recommended: boolean
           model_id: string
           name: string
           pipeline_config: Json | null
+          refinement_attachments_limit: number
+          refinements_per_case: number | null
+          refinements_per_month: number | null
           sort_order: number
+          support_sla_hours: number | null
           tagline: string | null
+          tier_key: string
           tier_label: string
           updated_at: string
         }
         Insert: {
+          allows_deep_doc_analysis?: boolean
+          allows_tonality?: boolean
           badge?: string | null
+          bookable_directly?: boolean
           case_limit?: number | null
           case_limit_type?: string
           created_at?: string
           id: string
+          initial_attachments_limit?: number
           is_active?: boolean
           is_recommended?: boolean
           model_id: string
           name: string
           pipeline_config?: Json | null
+          refinement_attachments_limit?: number
+          refinements_per_case?: number | null
+          refinements_per_month?: number | null
           sort_order: number
+          support_sla_hours?: number | null
           tagline?: string | null
+          tier_key?: string
           tier_label: string
           updated_at?: string
         }
         Update: {
+          allows_deep_doc_analysis?: boolean
+          allows_tonality?: boolean
           badge?: string | null
+          bookable_directly?: boolean
           case_limit?: number | null
           case_limit_type?: string
           created_at?: string
           id?: string
+          initial_attachments_limit?: number
           is_active?: boolean
           is_recommended?: boolean
           model_id?: string
           name?: string
           pipeline_config?: Json | null
+          refinement_attachments_limit?: number
+          refinements_per_case?: number | null
+          refinements_per_month?: number | null
           sort_order?: number
+          support_sla_hours?: number | null
           tagline?: string | null
+          tier_key?: string
           tier_label?: string
           updated_at?: string
         }
@@ -528,6 +671,8 @@ export type Database = {
           id: string
           organization: string | null
           plan_id: string
+          refinements_period_start: string | null
+          refinements_used_period: number
           stripe_customer_id: string | null
           subscription_status: string | null
           theme_preference: string | null
@@ -546,6 +691,8 @@ export type Database = {
           id: string
           organization?: string | null
           plan_id?: string
+          refinements_period_start?: string | null
+          refinements_used_period?: number
           stripe_customer_id?: string | null
           subscription_status?: string | null
           theme_preference?: string | null
@@ -564,6 +711,8 @@ export type Database = {
           id?: string
           organization?: string | null
           plan_id?: string
+          refinements_period_start?: string | null
+          refinements_used_period?: number
           stripe_customer_id?: string | null
           subscription_status?: string | null
           theme_preference?: string | null
@@ -658,6 +807,81 @@ export type Database = {
         }
         Relationships: []
       }
+      tonality_profiles: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          key: string
+          label: string
+          min_tier: string
+          prompt_instruction: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key: string
+          label: string
+          min_tier?: string
+          prompt_instruction: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key?: string
+          label?: string
+          min_tier?: string
+          prompt_instruction?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      upgrade_previews: {
+        Row: {
+          case_id: string
+          free_strategy_snapshot: string | null
+          generated_at: string
+          id: string
+          pro_extra_insight: string | null
+          pro_first_paragraph: string | null
+          pro_strategy: string | null
+          pro_strategy_label: string | null
+          user_id: string
+          viewed_at: string | null
+        }
+        Insert: {
+          case_id: string
+          free_strategy_snapshot?: string | null
+          generated_at?: string
+          id?: string
+          pro_extra_insight?: string | null
+          pro_first_paragraph?: string | null
+          pro_strategy?: string | null
+          pro_strategy_label?: string | null
+          user_id: string
+          viewed_at?: string | null
+        }
+        Update: {
+          case_id?: string
+          free_strategy_snapshot?: string | null
+          generated_at?: string
+          id?: string
+          pro_extra_insight?: string | null
+          pro_first_paragraph?: string | null
+          pro_strategy?: string | null
+          pro_strategy_label?: string | null
+          user_id?: string
+          viewed_at?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -683,44 +907,71 @@ export type Database = {
     Views: {
       plans_public: {
         Row: {
+          allows_deep_doc_analysis: boolean | null
+          allows_tonality: boolean | null
           badge: string | null
+          bookable_directly: boolean | null
           case_limit: number | null
           case_limit_type: string | null
           created_at: string | null
           id: string | null
+          initial_attachments_limit: number | null
           is_active: boolean | null
           is_recommended: boolean | null
           name: string | null
+          refinement_attachments_limit: number | null
+          refinements_per_case: number | null
+          refinements_per_month: number | null
           sort_order: number | null
+          support_sla_hours: number | null
           tagline: string | null
+          tier_key: string | null
           tier_label: string | null
           updated_at: string | null
         }
         Insert: {
+          allows_deep_doc_analysis?: boolean | null
+          allows_tonality?: boolean | null
           badge?: string | null
+          bookable_directly?: boolean | null
           case_limit?: number | null
           case_limit_type?: string | null
           created_at?: string | null
           id?: string | null
+          initial_attachments_limit?: number | null
           is_active?: boolean | null
           is_recommended?: boolean | null
           name?: string | null
+          refinement_attachments_limit?: number | null
+          refinements_per_case?: number | null
+          refinements_per_month?: number | null
           sort_order?: number | null
+          support_sla_hours?: number | null
           tagline?: string | null
+          tier_key?: string | null
           tier_label?: string | null
           updated_at?: string | null
         }
         Update: {
+          allows_deep_doc_analysis?: boolean | null
+          allows_tonality?: boolean | null
           badge?: string | null
+          bookable_directly?: boolean | null
           case_limit?: number | null
           case_limit_type?: string | null
           created_at?: string | null
           id?: string | null
+          initial_attachments_limit?: number | null
           is_active?: boolean | null
           is_recommended?: boolean | null
           name?: string | null
+          refinement_attachments_limit?: number | null
+          refinements_per_case?: number | null
+          refinements_per_month?: number | null
           sort_order?: number | null
+          support_sla_hours?: number | null
           tagline?: string | null
+          tier_key?: string | null
           tier_label?: string | null
           updated_at?: string | null
         }
@@ -729,6 +980,10 @@ export type Database = {
     }
     Functions: {
       consume_dossier: { Args: { p_user_id: string }; Returns: Json }
+      consume_refinement: {
+        Args: { p_case_id: string; p_user_id: string }
+        Returns: Json
+      }
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
@@ -761,6 +1016,15 @@ export type Database = {
           msg_id: number
           read_ct: number
         }[]
+      }
+      validate_discount_code: {
+        Args: {
+          p_billing_cycle: string
+          p_code: string
+          p_plan_id: string
+          p_user_id: string
+        }
+        Returns: Json
       }
     }
     Enums: {
