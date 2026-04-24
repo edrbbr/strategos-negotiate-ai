@@ -690,12 +690,17 @@ function StageBox({
     state === "failed" ? "UNTERBROCHEN" :
     label.idle;
 
+  const isRunning = state === "running";
+  const borderWidth = isRunning ? "border-l-4" : "border-l-2";
+  const runningRing = isRunning ? "shadow-[0_0_0_1px_hsl(var(--primary)/0.15)] animate-pulse-soft" : "";
+
   return (
-    <div className={`bg-card border-l-2 ${colorClass} rounded-sm p-6`}>
+    <div className={`bg-card ${borderWidth} ${colorClass} rounded-sm p-6 transition-all ${runningRing}`}>
       <div className="flex items-center justify-between mb-4 gap-3">
         <p className={`font-mono-label ${state === "failed" ? "text-destructive" : labelTone} flex items-center gap-2`}>
           <span className={`w-2 h-2 rounded-full ${state === "failed" ? "bg-destructive" : dotClass} ${state === "running" ? "animate-pulse-soft" : ""}`} />
           {labelText}
+          {isRunning && <Loader2 className="w-3 h-3 animate-spin opacity-70" />}
         </p>
         {actionRight ?? (
           <span className="font-mono-label text-muted-foreground/60 truncate max-w-[55%]">
@@ -712,7 +717,15 @@ function ShimmerLines({ lines }: { lines: number }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: lines }).map((_, i) => (
-        <div key={i} className="h-3 rounded-sm bg-muted/40 animate-pulse" style={{ width: `${70 + (i % 3) * 10}%` }} />
+        <div
+          key={i}
+          className="h-3 rounded-sm bg-gradient-to-r from-muted/20 via-muted/70 to-muted/20 bg-[length:200%_100%] animate-shimmer"
+          style={{ width: `${70 + (i % 3) * 10}%`, animationDelay: `${i * 0.15}s` }}
+        />
+      ))}
+    </div>
+  );
+}
       ))}
     </div>
   );
