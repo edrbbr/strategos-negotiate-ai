@@ -368,7 +368,7 @@ interface PersistPayload {
 }
 
 async function persistAndReply(
-  service: ReturnType<typeof createClient>,
+  service: ReturnType<typeof createClient<any>>,
   caseRow: CaseRow,
   latest: LatestRow,
   payload: PersistPayload,
