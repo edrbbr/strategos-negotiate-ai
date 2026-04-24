@@ -1,9 +1,10 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Settings, Plus, LogOut, User, CreditCard } from "lucide-react";
+import { BarChart3, Settings, Plus, LogOut, User, CreditCard, Shield } from "lucide-react";
 import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAllCases } from "@/hooks/useCases";
+import { useUserRole } from "@/hooks/useUserRole";
 
 const navItems = [
   { label: "Dashboard", to: "/app/dashboard", icon: BarChart3 },
@@ -16,6 +17,7 @@ export const AppSidebar = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const { data: allCases } = useAllCases();
+  const { data: roleInfo } = useUserRole();
 
   const activeCases = (allCases ?? [])
     .filter((c) => c.status === "draft" || c.status === "active")
@@ -26,10 +28,10 @@ export const AppSidebar = () => {
   const tierLabel = profile?.plan?.tier_label ?? planName;
   const limit = profile?.plan?.case_limit;
   const used = profile?.cases_used ?? 0;
-  const isFreeTier = planId === "free";
-  const showUsage = isFreeTier && limit !== null && limit !== undefined;
-  const usagePct = showUsage ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-  const limitWarn = showUsage && limit && used / limit >= 2 / 3;
+  const extra = profile?.extra_credits ?? 0;
+  const showUsage = limit !== null && limit !== undefined;
+  const usagePct = showUsage ? Math.min(100, Math.round((used / (limit as number)) * 100)) : 0;
+  const limitWarn = showUsage && (limit as number) && used / (limit as number) >= 2 / 3;
 
   const handleLogout = async () => {
     await signOut();
@@ -75,6 +77,17 @@ export const AppSidebar = () => {
               </li>
             );
           })}
+          {roleInfo?.isAdmin && (
+            <li className="relative">
+              <NavLink
+                to="/admin"
+                className="flex items-center gap-3 py-2.5 px-3 rounded-sm font-sans uppercase tracking-[0.18em] text-xs text-primary/80 hover:text-primary hover:bg-primary/5"
+              >
+                <Shield className="w-4 h-4" strokeWidth={1.5} />
+                Admin
+              </NavLink>
+            </li>
+          )}
         </ul>
 
         {activeCases.length > 0 && (
@@ -108,13 +121,13 @@ export const AppSidebar = () => {
       <div className="p-6 border-t border-sidebar-border space-y-4">
         {showUsage ? (
           <button
-            onClick={() => navigate("/preise")}
+            onClick={() => navigate(planId === "free" ? "/preise" : "/app/billing")}
             className="w-full text-left group"
-            aria-label="Plan upgraden"
+            aria-label={planId === "free" ? "Plan upgraden" : "Mandat verwalten"}
           >
             <div className="flex items-center justify-between mb-2">
               <span className="font-mono-label text-muted-foreground group-hover:text-primary transition-colors">
-                Free Plan
+                {tierLabel} Plan
               </span>
               <span
                 className={cn(
@@ -122,7 +135,7 @@ export const AppSidebar = () => {
                   limitWarn ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                {used}/{limit} Dossiers
+                {used}/{limit}{extra > 0 ? ` +${extra}` : ""}
               </span>
             </div>
             <div className="h-0.5 bg-muted overflow-hidden">
