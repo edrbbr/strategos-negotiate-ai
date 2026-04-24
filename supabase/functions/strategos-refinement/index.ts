@@ -228,10 +228,48 @@ Deno.serve(async (req: Request) => {
 
     const service = createClient<any>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // ---- TIER-AWARE LIMIT ENFORCEMENT ----
+    // Use the RPC to atomically validate per-case + monthly refinement quotas
+    // and increment usage. Elite returns a soft warning instead of blocking.
+    const { data: rpcResult, error: rpcErr } = await service.rpc("consume_refinement", {
+      p_user_id: userId,
+      p_case_id: case_id,
+    });
+    if (rpcErr) {
+      console.error("consume_refinement RPC failed", rpcErr);
+      return json({ error: "Internal error" }, 500);
+    }
+    type ConsumeResult = {
+      allowed: boolean;
+      reason?: string;
+      limit?: number | null;
+      used_for_case?: number;
+      used_period?: number;
+      tier?: string;
+      soft_warning?: boolean;
+      message?: string;
+    };
+    const consumed = rpcResult as ConsumeResult;
+    if (!consumed?.allowed) {
+      const status = 403;
+      return json({
+        error: "REFINEMENT_LIMIT",
+        code: consumed?.reason ?? "REFINEMENT_LIMIT",
+        message: consumed?.reason === "per_case_limit"
+          ? `Maximale Überarbeitungen für diesen Fall erreicht (${consumed?.limit}). Upgrade für mehr.`
+          : consumed?.reason === "per_month_limit"
+          ? `Monatliches Refinement-Kontingent erschöpft (${consumed?.limit}).`
+          : "Refinement nicht erlaubt.",
+        tier: consumed?.tier,
+        limit: consumed?.limit ?? null,
+      }, status);
+    }
+    const softWarning = consumed?.soft_warning ? consumed?.message ?? null : null;
+
     // Load case + latest version
     const { data: caseRow, error: caseErr } = await service
       .from("cases")
-      .select("id, user_id, language_label, medium, situation_text")
+      .select("id, user_id, language_label, medium, situation_text, tonality_profile_key")
       .eq("id", case_id)
       .eq("user_id", userId)
       .maybeSingle();
@@ -268,7 +306,21 @@ Deno.serve(async (req: Request) => {
         strategy: currentStrategy,
         strategy_labels: currentLabels,
         draft: newDraft,
-      }, instruction, "mock");
+      }, instruction, "mock", softWarning);
+    }
+
+    // Load tonality instruction if applicable
+    let tonalityNote = "";
+    if (caseRow.tonality_profile_key && caseRow.tonality_profile_key !== "standard") {
+      const { data: tone } = await service
+        .from("tonality_profiles")
+        .select("prompt_instruction")
+        .eq("key", caseRow.tonality_profile_key)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (tone?.prompt_instruction) {
+        tonalityNote = `\n\nTONALITY DIRECTIVE (mandatory):\n${tone.prompt_instruction}`;
+      }
     }
 
     // Smart classifier: does this instruction require a new strategy?
@@ -314,6 +366,7 @@ Deno.serve(async (req: Request) => {
       `PREVIOUS DRAFT (rewrite this completely according to the instruction above):\n"""\n${currentDraft}\n"""\n\n` +
       `Now return the fully rewritten draft in ${caseRow.language_label}.\n` +
       `Do not start with the same opening as the previous draft unless the instruction explicitly asks for it.` +
+      tonalityNote +
       (extraNudge ? `\n\n${extraNudge}` : "");
 
     let result = await callGateway(LOVABLE_API_KEY, SYSTEM_PROMPT, buildUserContent());
@@ -345,7 +398,7 @@ Deno.serve(async (req: Request) => {
       strategy: nextStrategy,
       strategy_labels: nextLabels,
       draft: newDraft,
-    }, instruction, MODEL);
+    }, instruction, MODEL, softWarning);
   } catch (e) {
     console.error("strategos-refinement error", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
@@ -358,7 +411,7 @@ type LatestRow = {
   analysis: unknown; strategy: string | null; draft: string | null;
   strategy_labels: string[];
 };
-type CaseRow = { id: string; user_id: string; language_label: string; medium: string; situation_text: string | null };
+type CaseRow = { id: string; user_id: string; language_label: string; medium: string; situation_text: string | null; tonality_profile_key?: string | null };
 
 interface PersistPayload {
   analysis: unknown;
@@ -374,6 +427,7 @@ async function persistAndReply(
   payload: PersistPayload,
   instruction: string,
   model: string,
+  softWarning: string | null = null,
 ) {
   const nextNumber = latest.version_number + 1;
   const { data: inserted, error: insErr } = await service
@@ -424,5 +478,6 @@ async function persistAndReply(
     version_id: inserted.id,
     version_number: nextNumber,
     model,
+    soft_warning: softWarning,
   });
 }

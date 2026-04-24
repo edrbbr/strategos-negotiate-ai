@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
     // We already verified `userId` from the JWT above, so scoping by id is safe.
     const { data: profile, error: profileErr } = await serviceClient
       .from("profiles")
-      .select("plan_id, cases_used, plans!inner(id, model_id, case_limit, case_limit_type, pipeline_config)")
+      .select("plan_id, cases_used, plans!inner(id, model_id, case_limit, case_limit_type, pipeline_config, tier_key, initial_attachments_limit, allows_tonality, allows_deep_doc_analysis)")
       .eq("id", userId)
       .maybeSingle();
 
@@ -81,6 +81,54 @@ Deno.serve(async (req: Request) => {
       ? (planRel[0] as PlanRow)
       : (planRel as PlanRow);
     if (!plan) return json({ error: "Plan not found" }, 500);
+    const tierKey = (plan.tier_key as string | undefined) ?? "free";
+    const TIER_RANK: Record<string, number> = { free: 0, pro: 1, elite: 2 };
+    const userRank = TIER_RANK[tierKey] ?? 0;
+
+    // ---- INITIAL ATTACHMENTS LIMIT ----
+    const initialAttLimit = plan.initial_attachments_limit ?? 3;
+    if (attachment_ids.length > initialAttLimit) {
+      return json({
+        error: "ATTACHMENT_LIMIT",
+        code: "ATTACHMENT_LIMIT",
+        message: `Ihr Plan erlaubt max. ${initialAttLimit} Anlage(n) für die initiale Analyse.`,
+        limit: initialAttLimit,
+        plan: plan.id,
+      }, 403);
+    }
+
+    // ---- LOAD TIER-FILTERED STRATEGIES + TONALITY ----
+    const { data: strategiesRows } = await serviceClient
+      .from("negotiation_strategies")
+      .select("key, label, prompt_hint, min_tier")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    const allowedStrategies = (strategiesRows ?? [])
+      .filter((s: { min_tier?: string }) => (TIER_RANK[s.min_tier ?? "free"] ?? 0) <= userRank)
+      .map((s) => ({ key: s.key, label: s.label, prompt_hint: s.prompt_hint ?? null }));
+
+    let tonalityInstruction: string | null = null;
+    if (plan.allows_tonality && case_id) {
+      const { data: caseTone } = await serviceClient
+        .from("cases")
+        .select("tonality_profile_key")
+        .eq("id", case_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      const toneKey = caseTone?.tonality_profile_key ?? "standard";
+      if (toneKey && toneKey !== "standard") {
+        const { data: tone } = await serviceClient
+          .from("tonality_profiles")
+          .select("prompt_instruction, min_tier")
+          .eq("key", toneKey)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (tone && (TIER_RANK[tone.min_tier ?? "pro"] ?? 1) <= userRank) {
+          tonalityInstruction = tone.prompt_instruction;
+        }
+      }
+    }
+    const enableDeepDocAnalysis = !!plan.allows_deep_doc_analysis;
 
     // ---- LIMIT ENFORCEMENT (consume_dossier handles counter + extra credits) ----
     type ConsumeResult = {
@@ -161,7 +209,8 @@ Deno.serve(async (req: Request) => {
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  model: "google/gemini-2.5-flash",
+                  // Cost-optimized: extraction is a structured-text task; use the cheap tier.
+                  model: "google/gemini-2.5-flash-lite",
                   messages: [
                     {
                       role: "user",
@@ -327,6 +376,9 @@ Deno.serve(async (req: Request) => {
           medium,
           languageLabel: language_label,
           attachmentsContext,
+          allowedStrategies,
+          tonalityInstruction,
+          enableDeepDocAnalysis,
         });
         const total = Date.now() - t0;
         const cases_used = await incrementCounter();
@@ -379,6 +431,9 @@ Deno.serve(async (req: Request) => {
         medium,
         languageLabel: language_label,
         attachmentsContext,
+        allowedStrategies,
+        tonalityInstruction,
+        enableDeepDocAnalysis,
       });
       const total = Date.now() - t0;
 
@@ -405,6 +460,24 @@ Deno.serve(async (req: Request) => {
         draft: result.draft,
         model_used: plan.model_id,
       });
+
+      // Fire-and-forget: generate Pro upgrade preview for Free users
+      if (tierKey === "free" && case_id) {
+        fetch(`${SUPABASE_URL}/functions/v1/strategos-upgrade-preview`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            case_id,
+            _internal: true,
+            _user_id: userId,
+            free_strategy: result.strategy,
+          }),
+        }).catch(() => undefined);
+      }
+
       return json({
         ...result,
         model: plan.model_id,

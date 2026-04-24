@@ -5,6 +5,7 @@ import {
   PROMPT_ANALYSIS,
   PROMPT_DRAFT,
   PROMPT_STRATEGY,
+  buildTierAddendum,
 } from "../prompts.ts";
 import {
   ProviderError,
@@ -92,6 +93,9 @@ export interface MultiStageParams {
   medium?: string;
   languageLabel?: string;
   attachmentsContext?: string;
+  allowedStrategies?: { key: string; label: string; prompt_hint: string | null }[];
+  tonalityInstruction?: string | null;
+  enableDeepDocAnalysis?: boolean;
 }
 
 export interface MultiStageResult {
@@ -109,6 +113,15 @@ export async function runMultiStagePipeline(
   params: MultiStageParams,
 ): Promise<MultiStageResult> {
   const { config, situationText, anthropicKey, openaiKey, lovableKey, onStageComplete, medium, languageLabel, attachmentsContext } = params;
+  const tierAddendum = buildTierAddendum({
+    allowedStrategies: params.allowedStrategies ?? [],
+    tonalityInstruction: params.tonalityInstruction ?? null,
+    enableDeepDocAnalysis: !!params.enableDeepDocAnalysis,
+    hasAttachments: !!attachmentsContext && attachmentsContext.length > 0,
+  });
+  const promptAnalysis = `${PROMPT_ANALYSIS}${tierAddendum}`;
+  const promptStrategy = `${PROMPT_STRATEGY}${tierAddendum}`;
+  const promptDraft = `${PROMPT_DRAFT}${tierAddendum}`;
   const langLine = `Target language: ${languageLabel ?? "Deutsch"}`;
   const mediumLine = `Medium: ${medium ?? "email"}`;
   const attachLine = attachmentsContext ? `\n\nReference documents:\n"""\n${attachmentsContext}\n"""` : "";
@@ -125,7 +138,7 @@ export async function runMultiStagePipeline(
     analysisOut = await callAnthropic({
       apiKey: anthropicKey!,
       model: s1.model,
-      systemPrompt: PROMPT_ANALYSIS,
+      systemPrompt: promptAnalysis,
       userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""${attachLine}`,
       tool: {
         name: "return_analysis",
@@ -154,7 +167,7 @@ export async function runMultiStagePipeline(
       strategyOut = await callOpenAI({
         apiKey: openaiKey!,
         model: s2.model,
-        systemPrompt: PROMPT_STRATEGY,
+        systemPrompt: promptStrategy,
         userMessage: strategyUserMessage,
         tool: {
           type: "function",
@@ -170,7 +183,7 @@ export async function runMultiStagePipeline(
       strategyOut = await callGemini({
         apiKey: lovableKey,
         model: "google/gemini-2.5-flash",
-        systemPrompt: PROMPT_STRATEGY,
+        systemPrompt: promptStrategy,
         userMessage: strategyUserMessage,
         tool: {
           type: "function",
@@ -192,7 +205,7 @@ export async function runMultiStagePipeline(
         draftOut = await callAnthropic({
           apiKey: anthropicKey!,
           model: s3.model,
-          systemPrompt: PROMPT_DRAFT,
+          systemPrompt: promptDraft,
           userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}${attachLine}`,
           tool: {
             name: "return_draft",
@@ -245,7 +258,7 @@ export async function runMultiStagePipeline(
     draftOut = await callAnthropic({
       apiKey: anthropicKey!,
       model: s3.model,
-      systemPrompt: PROMPT_DRAFT,
+      systemPrompt: promptDraft,
       userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}${attachLine}`,
       tool: {
         name: "return_draft",
