@@ -55,6 +55,50 @@ const STRATEGY_REGEN_PROMPT = `You are STRATEGOS strategist. Produce a CONCISE n
 Reply ONLY in the requested language.
 Output ONLY the strategy text — no JSON, no labels, no markdown fences, no preamble.`;
 
+const RATIONALE_PROMPT = `You are STRATEGOS in REFINEMENT-LOG mode.
+Write a SHORT explanation (2-4 sentences) that tells the user:
+(1) how the refinement instruction was interpreted,
+(2) whether the underlying negotiation strategy was kept or changed and WHY,
+(3) if attachments were provided, what was taken from them.
+Be concrete, no hedging, no preamble. Reply in the requested language.
+Output ONLY the explanation text — no labels, no markdown fences.`;
+
+async function buildRationale(
+  apiKey: string,
+  ctx: {
+    instruction: string;
+    previousStrategy: string;
+    nextStrategy: string;
+    strategyChanged: boolean;
+    attachmentsContext: string;
+    language: string;
+  },
+): Promise<string | null> {
+  try {
+    const userContent =
+      `Language: ${ctx.language}\n\n` +
+      `User instruction:\n"""\n${ctx.instruction}\n"""\n\n` +
+      `Previous strategy:\n"""\n${ctx.previousStrategy.slice(0, 600)}\n"""\n\n` +
+      `New strategy:\n"""\n${ctx.nextStrategy.slice(0, 600)}\n"""\n\n` +
+      `Strategy was ${ctx.strategyChanged ? "CHANGED" : "KEPT"}.\n` +
+      (ctx.attachmentsContext
+        ? `Refinement attachments excerpt:\n"""\n${ctx.attachmentsContext.slice(0, 1500)}\n"""\n`
+        : "No new attachments.\n");
+    const res = await callPlainGateway(
+      apiKey,
+      CLASSIFIER_MODEL,
+      RATIONALE_PROMPT,
+      userContent,
+      0.4,
+    );
+    if (res.ok && res.text) return res.text.slice(0, 800);
+    return null;
+  } catch (e) {
+    console.warn("buildRationale failed", e);
+    return null;
+  }
+}
+
 // Rough token-overlap heuristic to detect "the model basically copied the old draft"
 function similarityRatio(a: string, b: string): number {
   const tokenize = (s: string) =>
