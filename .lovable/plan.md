@@ -1,119 +1,38 @@
+## Ziel
 
-# Light/Dark Mode Umsetzung
+Einen neuen Test-User-Account anlegen mit:
+- **E-Mail:** `edrbbr@pallanx.com`
+- **Passwort:** `EnBa3005@pallanx`
+- **Plan:** Elite (mit allen Elite-Berechtigungen)
 
-Standard: **Light Mode** (Look & Feel der Elite-E-Mail-Einladung). Wer eingeloggt ist, kann seine Wahl persistieren — sowohl per Quick-Switch im Header/Sidebar als auch in den Settings.
+## Vorgehen
 
----
+Da User-Anlage und Profil-/Plan-Zuweisung nicht über das Frontend lösbar sind, erfolgt das in **drei Schritten** direkt im Backend:
 
-## Phase 1 — Light-Mode Design-Tokens (Email-Look)
+### 1. Auth-User anlegen
+Über das Supabase Admin API (Edge-Function `supabase.auth.admin.createUser` mit Service-Role-Key):
+- E-Mail: `edrbbr@pallanx.com`
+- Passwort: `EnBa3005@pallanx`
+- `email_confirm: true` → User kann sich sofort einloggen, keine Bestätigungsmail nötig
+- `user_metadata.full_name`: `"Test Elite User"`
 
-**Datei: `src/index.css`**
+Der bestehende `handle_new_user`-Trigger erstellt automatisch einen Profil-Eintrag in `public.profiles` mit `plan_id = 'free'`.
 
-Aus der Mail-Vorlage `elite-offer.tsx` extrahierte Palette:
-- Background page: `#ffffff` → Container `#fafafa` (Off-White Surface)
-- Foreground/Text: `#1a1a1a`
-- Primary (Gold): `#a4863e`
-- Muted-Text: `#666666`
-- Subtle/Hint: `#999999`
-- Borders: `#e5e5e5`
-- Card: `#ffffff` mit `border-left: 3px solid #a4863e`
+### 2. Profil auf Elite-Plan upgraden
+Per SQL-Update (Insert-Tool) auf `public.profiles`:
+- `plan_id = 'elite'`
+- `subscription_status = 'active'`
+- `billing_cycle = 'yearly'` (passt zur Elite-Tier-Logik)
+- `cases_used = 0`, `extra_credits = 0`, `refinements_used_period = 0`
+- `cases_period_start = now()`, `refinements_period_start = now()`
 
-Umsetzung:
-- **`:root`** wird auf den **Light Mode** umgeschrieben (HSL-Konvertierung der obigen Hex-Werte). Damit ist Light Mode der „kein-class"-Default.
-- Die bisher in `:root` stehende Dark-Palette wird in **`.dark`** verschoben (bleibt 1:1 erhalten).
-- Sidebar-Token bekommen ebenfalls Light-Varianten (heller Off-White `#f5f4f0`-artig, mit goldenem Border).
-- `body` behält `bg-background text-foreground` (kein hardcoded `dark`).
-- Scanline-Background (`scanline-bg`) bekommt eine sanftere Light-Variante.
+Da dieser User **keinen** echten Stripe-Kauf hat, wird **kein** Eintrag in `subscriptions` angelegt. Damit greift auch der `sync_profile_from_subscription`-Trigger nicht und überschreibt den Plan nicht.
 
-→ Da alle Components `hsl(var(--…))` nutzen, schlägt der Theme-Wechsel automatisch durch.
+### 3. Verifikation
+- Kurze SELECT-Abfrage zur Bestätigung, dass User + Profil + Elite-Plan korrekt verknüpft sind.
 
-## Phase 2 — Theme-Provider & Persistenz
+## Hinweise
 
-**Neu: `src/contexts/ThemeContext.tsx`**
-- Verwaltet `theme: "light" | "dark"`, `setTheme`, `toggleTheme`.
-- Initialisierung (Reihenfolge):
-  1. Wenn eingeloggt + `profile.theme_preference` gesetzt → das nehmen.
-  2. Sonst: `localStorage.getItem("pallanx-theme")`.
-  3. Sonst: **`"light"`** (Standard laut Anforderung — bewusst KEIN System-Preference, weil User Light bevorzugt).
-- Setzt/entfernt die `dark`-Klasse auf `document.documentElement`.
-- `setTheme()`:
-  - schreibt immer in `localStorage`,
-  - wenn eingeloggt → `UPDATE profiles SET theme_preference = …` und `refreshProfile()`.
-
-**Anti-Flash:** Inline-Script in `index.html` `<head>`, das vor React-Mount `localStorage` liest und ggf. sofort `dark` auf `<html>` setzt. So gibt es keinen weißen Blitz beim Reload für Dark-Mode-User.
-
-**Provider-Einbindung:** in `src/App.tsx` `<ThemeProvider>` direkt unter `<AuthProvider>` (damit auf `profile` reagiert werden kann).
-
-## Phase 3 — DB-Migration für Persistenz
-
-Spalte zu `profiles` hinzufügen:
-
-```sql
-ALTER TABLE public.profiles
-  ADD COLUMN IF NOT EXISTS theme_preference text
-  CHECK (theme_preference IN ('light','dark'));
-```
-
-- Default bewusst NULL → bedeutet „nutzt System-Default = Light".
-- Bestehende RLS-Policies decken Update via `id = auth.uid()` bereits ab (kein Policy-Change nötig).
-- `AuthProfile` Type + `PROFILE_SELECT` in `AuthContext.tsx` werden um `theme_preference` erweitert.
-
-## Phase 4 — UI: Toggle-Komponente & Platzierung
-
-**Neu: `src/components/ThemeToggle.tsx`**
-- Eine kleine, dezent-edle Pill mit `Sun`/`Moon` Icon (lucide), `variant="ghost"`-Style passend zum Brand.
-- Nutzt `useTheme()`; bei Klick sofort optisch + persistent.
-- Zwei Größen via Prop: `compact` (Icon-only, für Header/Sidebar) und `full` (mit Label, für Settings).
-
-**Platzierungen** — bewusst nur dort, wo es Designkonventionen erfüllt:
-
-1. **`PublicHeader.tsx`** — kompaktes Icon links neben „Login" / „Mein Mandat" Block. Sichtbar für Gäste & eingeloggte User auf Landing/Pricing.
-2. **`AppSidebar.tsx`** — kompaktes Icon im unteren Block, in der Zeile mit „Profile / Logout" als dritte Action. Gut auffindbar, stört Hierarchie nicht.
-3. **`Settings.tsx` → Profileinstellungen** — vollwertiger Switch mit Label „Erscheinungsbild" und beschreibendem Mikrotext („Hell wirkt klassisch wie unsere Einladungen, Dunkel betont das Imperiale."). Direkt über dem `MandateBlock`.
-
-Mobile/Auth-Pages bekommen keinen extra Toggle — der Header reicht.
-
-## Phase 5 — Komponenten-Audit (Light-Mode-Verträglichkeit)
-
-Ich gehe durch und prüfe/feinjustiere Stellen, wo `bg-black`, `text-white`, oder hardcoded dunkle Farben statt Tokens benutzt werden — diese müssen auf semantische Tokens umgestellt werden, sonst sind sie im Light Mode kaputt:
-
-- `Logo.tsx` (Wortmarke „PALLANX" — Goldton funktioniert in beiden Modes, aber ggf. Subtitle-Farbe prüfen)
-- `Landing.tsx`, `Pricing.tsx` (Hero-Sections, evtl. dunkle Sektionen mit hardcoded HEX)
-- `CaseChatView.tsx`, `CaseCard.tsx` (Chat-Bubbles)
-- `MandateBlock.tsx`, `EliteRequestModal.tsx`
-- `PaymentTestModeBanner.tsx`
-- `index.html` Meta-`theme-color`
-
-**Suchstrategie:** `grep` nach `bg-black`, `text-white`, `#` in `.tsx`-Dateien (innerhalb className-Strings) und auf Tokens ummappen (`bg-background`, `text-foreground`, `bg-card`, etc.). Goldton bleibt überall via `--primary`.
-
-## Phase 6 — QA
-
-- Smoke-Test beider Modes auf: Landing, Pricing, Login, Dashboard, Case-Detail, Settings, Billing, Admin.
-- Toggle persistiert über Reload (eingeloggt + ausgeloggt).
-- Anti-Flash funktioniert (kein weißer Blitz für Dark-User).
-- Keine kontrast-kritischen Texte (Gold auf Weiß bleibt ≥ AA).
-
----
-
-## Files
-
-**Neu**
-- `src/contexts/ThemeContext.tsx`
-- `src/components/ThemeToggle.tsx`
-- `supabase/migrations/<timestamp>_theme_preference.sql`
-
-**Geändert**
-- `src/index.css` (Light-Tokens in `:root`, Dark in `.dark`)
-- `index.html` (Anti-Flash-Script + theme-color meta)
-- `src/App.tsx` (ThemeProvider)
-- `src/contexts/AuthContext.tsx` (`theme_preference` in Profile/Select)
-- `src/components/PublicHeader.tsx` (Toggle eingebettet)
-- `src/components/AppSidebar.tsx` (Toggle eingebettet)
-- `src/pages/Settings.tsx` (vollständiger Erscheinungsbild-Block)
-- ggf. einzelne Komponenten mit hardcoded Farben (siehe Phase 5)
-
-## Out-of-scope
-
-- Kein „System / Auto"-Modus (nur Light & Dark wie gefordert; Standard = Light).
-- Keine Theme-Animationen/Transitions über das hinaus, was Tailwind-Defaults bieten.
-- Keine separaten Theme-Varianten für Auth-E-Mails (Mails bleiben wie sind).
+- **Keine Code-Änderungen** nötig — reine Daten-Operation.
+- **Keine** Admin-Rolle (`user_roles`) — der User soll nur Elite-Funktionen nutzen, nicht das Admin-Panel.
+- Der Account ist sofort einsatzbereit; Login über die normale Login-Seite.
