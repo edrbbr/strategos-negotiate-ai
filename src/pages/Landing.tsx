@@ -71,7 +71,7 @@ const Landing = () => {
             {[
               {
                 label: "Asymmetrie",
-                text: "Ihr Tier-1-Lieferant kennt Ihre Wechselkosten besser als Sie selbst. Er weiß, dass Sie nicht gehen werden. Also bezahlen Sie jedes Jahr 12 % mehr — und nennen es „Inflation".",
+                text: "Ihr Tier-1-Lieferant kennt Ihre Wechselkosten besser als Sie selbst. Er weiß, dass Sie nicht gehen werden. Also bezahlen Sie jedes Jahr 12 % mehr — und nennen es „Inflation\u201C.",
               },
               {
                 label: "Emotion",
@@ -213,7 +213,7 @@ const Landing = () => {
               {
                 n: "II",
                 t: "Tier-1 Vendor Renewals",
-                s: "Wenn SAP, Salesforce oder AWS das Gespräch mit „geringfügigen Anpassungen" eröffnen.",
+                s: "Wenn SAP, Salesforce oder AWS das Gespräch mit „geringfügigen Anpassungen\u201C eröffnen.",
               },
               {
                 n: "III",
