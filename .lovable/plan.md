@@ -1,55 +1,47 @@
 ## Ziel
-Header-Buttons abhängig vom Login-Status anpassen, ThemeToggle als schwebenden Button platzieren, DSGVO-konformes Cookie-Banner + Datenschutzseite hinzufügen.
+Die Inhalts-Blöcke (Initial-Prompt, Analyse, Strategie, Entwurf, Refinement-Prompts) auf Mobile großzügiger und leserlicher rendern — wie ein angenehmes Lese-Layout (Beispiel: Gemini-Chat im Screenshot). Desktop bleibt unverändert.
 
-## Änderungen
+## Diagnose
+- `src/components/CaseChatView.tsx` rendert pro Version ein 3-Spalten-Grid (`grid lg:grid-cols-3`). Auf Mobile stapelt es zwar, aber:
+  - Karten-Padding ist klein (`p-3` innen, `p-5` außen).
+  - Textgröße `text-[14px] leading-6` ist auf Smartphones zu kompakt.
+  - Labels (`text-[10px]`) und Buttons drängen sich in eine Zeile.
+- `src/components/AppLayout.tsx` hat horizontales Padding `px-6` auf Mobile — frisst zusätzlich Platz.
 
-### 1. `src/components/PublicHeader.tsx`
-- **Eingeloggt:** „Verhandlung starten"-Button wird zum Button mit der E-Mail-Adresse des Users (`user.email`), führt weiter zu `/app/dashboard`. „Login"-Link wird ausgeblendet. Das bestehende „Mein Mandat"/„Zur Kommandozentrale" wird entfernt, damit nicht doppelt CTA erscheint (E-Mail-Button ersetzt sie).
-- **Nicht eingeloggt:** „Login"-Link + „Verhandlung starten" bleiben wie bisher.
-- `ThemeToggle` aus dem Header entfernen.
+## Änderungen (nur Mobile/Responsive, keine Logik)
 
-### 2. Schwebender ThemeToggle
-- Neue Komponente `src/components/FloatingThemeToggle.tsx`: fixed unten rechts (`fixed bottom-6 right-6 z-50`), kreisrund, mit Schatten, `aria-label`, immer über dem Inhalt sichtbar.
-- In `src/App.tsx` einmal global gerendert (innerhalb von `ThemeProvider`), damit es auf allen Routen erscheint.
+### 1. `src/components/AppLayout.tsx`
+- Content-Wrapper Padding mobil reduzieren: `px-4 lg:px-10` (statt `px-6 lg:px-10`), damit Lesefläche breiter wird.
 
-### 3. Cookie-Banner (DSGVO-konform)
-- Neue Komponente `src/components/CookieConsent.tsx`:
-  - Erscheint nur, wenn `localStorage["pallanx-cookie-consent"]` nicht gesetzt ist.
-  - Drei Buttons: **Alle akzeptieren**, **Nur notwendige**, **Einstellungen** (Dialog mit Toggles für „Notwendig" (pflicht, an), „Analyse", „Marketing").
-  - Speichert JSON `{ necessary: true, analytics: bool, marketing: bool, timestamp }` in localStorage.
-  - Link zur Datenschutzseite `/datenschutz`.
-  - Fixed unten, über schwebendem ThemeToggle (z-index Hierarchie: Banner 60, Toggle 50).
-- Global in `App.tsx` eingebunden.
+### 2. `src/components/CaseChatView.tsx` — `VersionBlock`
+- Karten-Padding: `p-4 sm:p-5` (statt `p-5` fix).
+- Innere Blöcke (Prompt / Strategie / Entwurf): Padding `p-4 sm:p-3`, Schriftgrößen auf Mobile vergrößern: `text-[16px] sm:text-[14px]`, Zeilenhöhe `leading-7 sm:leading-6`.
+- Labels („PROMPT", „STRATEGIE", „ENTWURF") mobil etwas größer: `text-[11px] sm:text-[10px]`, mit mehr Abstand `mb-3 sm:mb-2`.
+- Stärkere visuelle Trennung der drei Blöcke auf Mobile: zusätzliche `gap-5 sm:gap-4` und auf Mobile linker Akzent-Border breiter (`border-l-2 sm:border-l`).
+- Header-Zeile der Version (Version-Nummer + Action-Buttons): auf Mobile in zwei Reihen umbrechen — bereits `flex-wrap` vorhanden, ergänzen: Action-Buttons in eigene horizontale Scroll-Reihe mit `gap-2 w-full sm:w-auto justify-start sm:justify-end overflow-x-auto`.
 
-### 4. Datenschutzseite
-- Neue Seite `src/pages/Privacy.tsx` mit Route `/datenschutz` (+ Alias `/privacy`).
-- Inhalt (deutsch, juristisch sauber strukturiert, aber als Vorlage gekennzeichnet — finale Prüfung durch Anwalt empfohlen):
-  1. Verantwortlicher
-  2. Erhobene Daten (Account: E-Mail, Name; Nutzungsdaten; Cookies)
-  3. Zwecke und Rechtsgrundlagen (Art. 6 DSGVO)
-  4. **Auftragsverarbeiter / Drittanbieter** mit Zweck und Datenarten:
-     - **Lovable Cloud / Supabase** (EU) — Hosting, Auth, Datenbank, Edge Functions
-     - **Lovable** (App-Hosting / Deployment)
-     - **Stripe** (Zahlungsabwicklung, USA — SCC)
-     - **Resend / E-Mail-Provider** (transaktionale E-Mails) — falls genutzt
-     - **KI-Anbieter via Lovable AI Gateway** (Google Gemini, OpenAI GPT) — Verarbeitung von Verhandlungsinhalten
-     - **Google Search Console** (Reichweitenmessung, Indexierung)
-  5. Cookies & Tracking (Liste + Zweck + Speicherdauer)
-  6. Speicherdauer
-  7. Betroffenenrechte (Auskunft, Löschung, Widerspruch, Datenübertragbarkeit, Beschwerde Aufsichtsbehörde)
-  8. Kontakt Datenschutz
-- Footer-Link „Datenschutz" zur Seite (in bestehendem Footer falls vorhanden, sonst nur via Cookie-Banner verlinkt).
+### 3. `CaseChatView.tsx` — `InitialBlockInner`
+- Padding `p-4 sm:p-5`, Situationstext: `text-[16px] sm:text-[15px] leading-7 sm:leading-7`.
+- Meta-Zeile (Sprache · Format) auf Mobile unter den Label-Titel umbrechen lassen (bereits `flex-wrap`), Label-Größe `text-[11px] sm:text-[10px]`.
 
-### 5. SEO
-- `<Seo>` auf der Datenschutzseite (`/datenschutz`, `noindex` empfohlen? — bleibt indexierbar, da Pflichtinhalt).
-- Eintrag in `public/sitemap.xml`.
+### 4. `CaseChatView.tsx` — `AnalysisAccordion`
+- Inhalt: Listentext von `text-xs` auf `text-[15px] sm:text-xs leading-7 sm:leading-relaxed` heben, Padding `px-5 pb-5 sm:px-4 sm:pb-4`.
+- Trigger-Padding `p-5 sm:p-4` für größere Tap-Targets.
 
-## Offene Punkte / Annahmen
-- **Verantwortlicher / Anschrift / Kontakt-E-Mail** für Datenschutz: Platzhalter `[Bitte ergänzen]` — bitte nach Implementierung füllen.
-- **Analytics / Marketing-Tools** derzeit nicht aktiv erkannt — Toggles im Cookie-Banner werden trotzdem vorbereitet, aktuell ohne Effekt (zukunftssicher).
-- Eigentlicher Cookie-Banner ist client-only ohne Backend-Logging der Consent-Entscheidung.
+### 5. `CaseChatView.tsx` — `change_rationale`-Box
+- Padding `p-4 sm:p-3`, Text `text-[15px] sm:text-[13px] leading-7 sm:leading-6`.
 
-## Technische Details
-- Keine DB-Migration nötig (Consent rein lokal).
-- `useAuth()` liefert bereits `user` mit `email` — direkt nutzbar.
-- ThemeToggle existiert bereits in `src/components/ThemeToggle.tsx` — Floating-Variante wrappt diesen.
+### 6. `CaseChatView.tsx` — Refinement-Eingabe & Footer-Bereich
+- Eingabe-Textarea Mobile etwas höher: `min-h-[110px] sm:min-h-[80px]` und Schrift `text-[16px] sm:text-[15px]` (vermeidet iOS-Zoom-In bei Focus).
+- SuggestionChips: Tap-Targets `py-2 sm:py-1.5 text-[12px] sm:text-[11px]`.
+
+### 7. CaseChatView Container-Höhe
+- `h-[calc(100vh-180px)]` auf Mobile zu knapp wegen Mobile-Header (≈ 56 px) + zusätzlichem Padding. Auf Mobile auf `h-[calc(100vh-140px)] sm:h-[calc(100vh-180px)]` setzen, damit die Lesefläche mehr Raum bekommt.
+
+## Out of Scope
+- Keine Backend-/Daten-Änderungen.
+- Keine Änderung an der Desktop-Darstellung (3-Spalten-Grid bleibt ab `lg`).
+- Markdown-Rendering der KI-Antworten ist nicht Teil dieser Anfrage (Texte bleiben Plain mit `whitespace-pre-line`).
+
+## Technisches Detail
+- Reine Tailwind-Responsive-Class-Anpassungen (`sm:`-Prefix). Bestehende Layout-Struktur und Komponenten-Logik bleiben unverändert.
