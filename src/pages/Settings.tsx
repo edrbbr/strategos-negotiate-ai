@@ -38,10 +38,6 @@ const Settings = () => {
     refreshProfile();
   };
 
-  const onCancel = () => {
-    if (profile) setFullName(profile.full_name ?? "");
-  };
-
   return (
     <div className="animate-fade-in max-w-5xl">
       <div className="grid lg:grid-cols-[260px_1fr] gap-12">
