@@ -22,7 +22,10 @@ import Admin from "./pages/Admin";
 import { AdminRoute } from "@/components/AdminRoute";
 import NotFound from "./pages/NotFound";
 import Unsubscribe from "./pages/Unsubscribe";
+import Privacy from "./pages/Privacy";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
+import { FloatingThemeToggle } from "@/components/FloatingThemeToggle";
+import { CookieConsent } from "@/components/CookieConsent";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +50,8 @@ const App = () => (
             <Route path="/passwort-vergessen" element={<ForgotPassword />} />
             <Route path="/passwort-neu" element={<ResetPassword />} />
             <Route path="/unsubscribe" element={<Unsubscribe />} />
+            <Route path="/datenschutz" element={<Privacy />} />
+            <Route path="/privacy" element={<Privacy />} />
 
             {/* Protected */}
             <Route
@@ -75,6 +80,8 @@ const App = () => (
 
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <FloatingThemeToggle />
+            <CookieConsent />
           </ThemeProvider>
         </AuthProvider>
       </BrowserRouter>
