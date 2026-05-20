@@ -2,18 +2,6 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/contexts/AuthContext";
-import { ThemeToggle } from "@/components/ThemeToggle";
-
-const initialsOf = (name: string | null | undefined, email: string | null | undefined) => {
-  const src = name?.trim() || email?.split("@")[0] || "U";
-  return src
-    .split(/\s+/)
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-};
 
 interface PublicHeaderProps {
   /** Which nav item is active. */
@@ -21,7 +9,7 @@ interface PublicHeaderProps {
 }
 
 export const PublicHeader = ({ active }: PublicHeaderProps) => {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const isAuthed = !!user;
 
   return (
@@ -44,24 +32,12 @@ export const PublicHeader = ({ active }: PublicHeaderProps) => {
         </Link>
       </nav>
       <div className="flex items-center gap-4">
-        <ThemeToggle />
         {isAuthed ? (
-          <>
-            <Link
-              to="/app/dashboard"
-              className="hidden sm:flex items-center gap-2 font-sans uppercase tracking-[0.2em] text-xs text-muted-foreground hover:text-primary"
-            >
-              <span className="w-7 h-7 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center text-[10px] tracking-widest text-primary">
-                {initialsOf(profile?.full_name, user?.email)}
-              </span>
-              Mein Mandat
-            </Link>
-            <Link to="/app/dashboard">
-              <Button variant="gold-outline" size="sm">
-                Zur Kommandozentrale
-              </Button>
-            </Link>
-          </>
+          <Link to="/app/dashboard">
+            <Button variant="gold-outline" size="sm" className="normal-case tracking-normal">
+              {user?.email}
+            </Button>
+          </Link>
         ) : (
           <>
             <Link
