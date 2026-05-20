@@ -744,7 +744,7 @@ function SuggestionChips({
 }) {
   if (loading || !suggestions) {
     return (
-      <div className="flex flex-wrap gap-2">
+      <div className="hidden sm:flex flex-wrap gap-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-7 w-32" />
         ))}
