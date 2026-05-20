@@ -2,12 +2,18 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { PublicHeader } from "@/components/PublicHeader";
+import { Seo } from "@/components/Seo";
 
 const Landing = () => {
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <Seo
+        title="PALLANX — Elite Verhandlungs-Terminal für C-Level"
+        description="Spieltheorie trifft taktische Empathie. PALLANX kalibriert M&A-, Vendor- und Board-Verhandlungen in Echtzeit. By invitation."
+        path="/"
+      />
       <PublicHeader active="home" />
-
+      <main>
       {/* 1. THE GATE */}
       <section className="container relative min-h-[85vh] flex flex-col justify-center py-24">
         <span className="hidden md:block absolute top-6 right-6 font-sans uppercase tracking-[0.25em] text-[10px] text-muted-foreground">
@@ -280,6 +286,7 @@ const Landing = () => {
       </section>
 
       {/* Footer */}
+      </main>
       <footer className="container py-10 flex flex-col md:flex-row gap-4 justify-between items-center text-[10px] font-sans uppercase tracking-[0.25em] text-muted-foreground">
         <Logo />
         <span>PALLANX // Elite Negotiation Terminal</span>

@@ -1,0 +1,11 @@
+# PALLANX
+
+> Elite AI Negotiation Terminal. Spieltheorie und taktische Empathie für M&A-, Vendor- und Board-Verhandlungen.
+
+PALLANX ist ein B2B SaaS-Terminal (€49–€499/Monat) für C-Level, Procurement, M&A und Enterprise Sales. Das System kombiniert FBI-Verhörtaktik mit spieltheoretischen Modellen und kalibriert Hochstakes-Verhandlungen in Echtzeit.
+
+## Pages
+
+- [Home](/): Produktübersicht, Diagnose, Einsatzgebiete und Briefing-Anfrage.
+- [Preise](/preise): Free, Pro und Elite Mandatsstufen mit Leistungsumfang.
+- [Registrierung](/register): Terminal-Zugang anfragen.

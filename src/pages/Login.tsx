@@ -6,6 +6,7 @@ import { LogIn, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Seo } from "@/components/Seo";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -66,6 +67,11 @@ const Login = () => {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
+      <Seo
+        title="Login — PALLANX Terminal"
+        description="Zugang zum PALLANX Verhandlungs-Terminal. Sicheres Login für autorisierte Mandate."
+        path="/login"
+      />
       <div className="hidden lg:flex flex-col justify-between p-12 border-r border-border/40">
         <Link to="/" aria-label="Zur Startseite">
           <Logo />

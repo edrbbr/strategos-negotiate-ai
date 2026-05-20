@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Logo } from "@/components/Logo";
+import { Seo } from "@/components/Seo";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -71,6 +72,11 @@ const Register = () => {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
+      <Seo
+        title="Registrierung — PALLANX Terminal-Zugang"
+        description="Strategie-Briefing anfragen und Eligibility für das PALLANX Verhandlungs-Terminal prüfen lassen."
+        path="/register"
+      />
       <div className="hidden lg:flex flex-col justify-between p-12 border-r border-border/40 scanline-bg">
         <div className="flex items-center justify-between">
           <Link to="/" aria-label="Zur Startseite">
