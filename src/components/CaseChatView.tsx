@@ -266,7 +266,7 @@ export function CaseChatView({ caseRow }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)] min-h-[600px]">
+    <div className="flex flex-col h-[calc(100vh-140px)] sm:h-[calc(100vh-180px)] min-h-[600px]">
       {/* Scrollable timeline */}
       <div className="flex-1 overflow-y-auto pr-2 space-y-6 pb-6">
         {/* V0 Initial situation */}
@@ -355,7 +355,7 @@ export function CaseChatView({ caseRow }: Props) {
             }}
             disabled={refineMut.isPending}
             placeholder="Anweisung zur Anpassung eingeben… (Enter = senden, Shift+Enter = Zeilenumbruch)"
-            className="w-full bg-transparent focus:outline-none py-2 px-1 font-sans text-[15px] leading-7 placeholder:text-muted-foreground/60 disabled:opacity-50 resize-none min-h-[80px] max-h-[200px]"
+            className="w-full bg-transparent focus:outline-none py-2 px-1 font-sans text-[16px] sm:text-[15px] leading-7 placeholder:text-muted-foreground/60 disabled:opacity-50 resize-none min-h-[110px] sm:min-h-[80px] max-h-[200px]"
             rows={3}
           />
         </div>
