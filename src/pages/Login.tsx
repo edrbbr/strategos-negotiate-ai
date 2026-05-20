@@ -102,7 +102,7 @@ const Login = () => {
         <div className="w-full max-w-md">
           <Link
             to="/"
-            className="inline-flex items-center gap-2 font-mono-label text-muted-foreground hover:text-primary mb-6 transition-colors lg:hidden"
+            className="inline-flex items-center gap-2 font-mono-label text-muted-foreground hover:text-primary mb-6 transition-colors"
           >
             <ArrowLeft className="w-3 h-3" />
             Zurück zur Startseite
