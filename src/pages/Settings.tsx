@@ -75,9 +75,6 @@ const Settings = () => {
           </div>
 
           <div className="flex items-center justify-end gap-6 mb-16">
-            <button onClick={onCancel} className="font-mono-label text-muted-foreground hover:text-foreground">
-              Abbrechen
-            </button>
             <Button variant="gold-outline" size="lg" onClick={onSave} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Änderungen speichern
