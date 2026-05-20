@@ -266,9 +266,9 @@ export function CaseChatView({ caseRow }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] sm:h-[calc(100vh-180px)] min-h-[600px]">
+    <div className="flex flex-col h-[calc(100dvh-120px)] sm:h-[calc(100vh-180px)] sm:min-h-[600px]">
       {/* Scrollable timeline */}
-      <div className="flex-1 overflow-y-auto pr-2 space-y-6 pb-6">
+      <div className="flex-1 overflow-y-auto space-y-6 pb-6 sm:pr-2">
         {/* V0 Initial situation */}
         <InitialBlockInner
           caseRow={caseRow}
@@ -300,7 +300,7 @@ export function CaseChatView({ caseRow }: Props) {
       </div>
 
       {/* Sticky input */}
-      <div className="border-t border-border/30 bg-background pt-4">
+      <div className="border-t-0 sm:border-t border-border/30 bg-background pt-4">
         <RefinementCounter
           perCaseRemaining={perCaseRemaining}
           perCaseLimit={perCaseLimit}
@@ -347,27 +347,21 @@ export function CaseChatView({ caseRow }: Props) {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
             disabled={refineMut.isPending}
-            placeholder="Anweisung zur Anpassung eingeben… (Enter = senden, Shift+Enter = Zeilenumbruch)"
-            className="w-full bg-transparent focus:outline-none py-2 px-1 font-sans text-[16px] sm:text-[15px] leading-7 placeholder:text-muted-foreground/60 disabled:opacity-50 resize-none min-h-[110px] sm:min-h-[80px] max-h-[200px]"
+            placeholder="Anweisung zur Anpassung eingeben…"
+            className="w-full bg-transparent focus:outline-none py-2 px-1 pr-12 font-sans text-[16px] sm:text-[15px] leading-7 placeholder:text-muted-foreground/60 disabled:opacity-50 resize-none min-h-[110px] sm:min-h-[80px] max-h-[200px]"
             rows={3}
           />
-        </div>
-        <div className="flex justify-end mt-3">
           <Button
             variant="gold"
-            size="sm"
+            size="icon"
             onClick={send}
             disabled={refineMut.isPending || input.trim().length < 2}
+            className="absolute bottom-2 right-2 h-9 w-9 rounded-sm"
+            aria-label="Senden"
+            title="Senden"
           >
-            {refineMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            <span className="ml-1">Senden</span>
+            {refineMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </Button>
         </div>
       </div>
