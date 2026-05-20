@@ -266,7 +266,7 @@ export function CaseChatView({ caseRow }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)] min-h-[600px]">
+    <div className="flex flex-col h-[calc(100vh-140px)] sm:h-[calc(100vh-180px)] min-h-[600px]">
       {/* Scrollable timeline */}
       <div className="flex-1 overflow-y-auto pr-2 space-y-6 pb-6">
         {/* V0 Initial situation */}
@@ -355,7 +355,7 @@ export function CaseChatView({ caseRow }: Props) {
             }}
             disabled={refineMut.isPending}
             placeholder="Anweisung zur Anpassung eingeben… (Enter = senden, Shift+Enter = Zeilenumbruch)"
-            className="w-full bg-transparent focus:outline-none py-2 px-1 font-sans text-[15px] leading-7 placeholder:text-muted-foreground/60 disabled:opacity-50 resize-none min-h-[80px] max-h-[200px]"
+            className="w-full bg-transparent focus:outline-none py-2 px-1 font-sans text-[16px] sm:text-[15px] leading-7 placeholder:text-muted-foreground/60 disabled:opacity-50 resize-none min-h-[110px] sm:min-h-[80px] max-h-[200px]"
             rows={3}
           />
         </div>
@@ -420,9 +420,9 @@ function InitialBlockInner({
   attachments: CaseAttachment[];
 }) {
   return (
-    <div className="bg-card border-l-2 border-secondary rounded-sm p-5">
+    <div className="bg-card border-l-2 border-secondary rounded-sm p-4 sm:p-5">
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-        <p className="font-mono-label text-secondary flex items-center gap-2">
+        <p className="font-mono-label text-secondary flex items-center gap-2 text-[11px] sm:text-[10px]">
           <span className="w-2 h-2 rounded-full bg-secondary" /> V0 · INITIAL
         </p>
         <div className="flex gap-3 font-mono-label text-muted-foreground/70 text-[10px]">
@@ -431,7 +431,7 @@ function InitialBlockInner({
           <span>Format: {caseRow.medium ?? "—"}</span>
         </div>
       </div>
-      <p className="font-sans text-[15px] leading-7 text-foreground/90 whitespace-pre-line">
+      <p className="font-sans text-[16px] sm:text-[15px] leading-7 text-foreground/90 whitespace-pre-line">
         {caseRow.situation_text || "—"}
       </p>
       {attachments.length > 0 && (
@@ -470,13 +470,13 @@ function VersionBlock({
         : "PROMPT";
   return (
     <div className="space-y-4">
-      <div className="bg-card border border-border/30 rounded-sm p-5">
+      <div className="bg-card border border-border/30 rounded-sm p-4 sm:p-5">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <p className="font-mono-label text-primary flex items-center gap-2">
+          <p className="font-mono-label text-primary flex items-center gap-2 text-[11px] sm:text-[10px]">
             <Bot className="w-3.5 h-3.5" /> V{version.version_number} · {version.kind.toUpperCase()}
             {isCurrent && <span className="text-[10px] text-tertiary ml-2">● AKTIV</span>}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-start sm:justify-end overflow-x-auto">
             {version.draft && (
               <Button
                 variant="gold-outline"
@@ -516,37 +516,37 @@ function VersionBlock({
         </div>
 
         {version.change_rationale && version.kind === "refinement" && (
-          <div className="mb-4 bg-tertiary/5 border-l-2 border-tertiary/50 rounded-sm p-3">
+          <div className="mb-4 bg-tertiary/5 border-l-2 border-tertiary/50 rounded-sm p-4 sm:p-3">
             <p className="font-mono-label text-tertiary text-[10px] mb-1.5 flex items-center gap-1.5">
               <Info className="w-2.5 h-2.5" /> ÄNDERUNGS-BEGRÜNDUNG
             </p>
-            <p className="font-sans text-[13px] leading-6 text-foreground/85 whitespace-pre-line">
+            <p className="font-sans text-[15px] sm:text-[13px] leading-7 sm:leading-6 text-foreground/85 whitespace-pre-line">
               {version.change_rationale}
             </p>
           </div>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-4">
+        <div className="grid lg:grid-cols-3 gap-5 sm:gap-4">
           {/* Prompt */}
-          <div className="bg-background/50 border-l border-tertiary/60 rounded-sm p-3">
-            <p className="font-mono-label text-tertiary text-[10px] mb-2 flex items-center gap-1.5">
+          <div className="bg-background/50 border-l-2 sm:border-l border-tertiary/60 rounded-sm p-4 sm:p-3">
+            <p className="font-mono-label text-tertiary text-[11px] sm:text-[10px] mb-3 sm:mb-2 flex items-center gap-1.5">
               <MessageSquare className="w-2.5 h-2.5" /> {promptLabel}
             </p>
-            <p className="font-sans text-[14px] leading-6 text-foreground/85 whitespace-pre-line">
+            <p className="font-sans text-[16px] sm:text-[14px] leading-7 sm:leading-6 text-foreground/85 whitespace-pre-line">
               {promptText}
             </p>
           </div>
           {/* Strategy */}
-          <div className="bg-background/50 border-l border-primary/60 rounded-sm p-3">
-            <p className="font-mono-label text-primary text-[10px] mb-2">STRATEGIE</p>
-            <p className="font-sans text-[14px] leading-6 text-foreground/85 whitespace-pre-line">
+          <div className="bg-background/50 border-l-2 sm:border-l border-primary/60 rounded-sm p-4 sm:p-3">
+            <p className="font-mono-label text-primary text-[11px] sm:text-[10px] mb-3 sm:mb-2">STRATEGIE</p>
+            <p className="font-sans text-[16px] sm:text-[14px] leading-7 sm:leading-6 text-foreground/85 whitespace-pre-line">
               {renderStrategy(version.strategy)}
             </p>
           </div>
           {/* Draft */}
-          <div className="bg-background/50 border-l border-secondary/60 rounded-sm p-3">
-            <p className="font-mono-label text-secondary text-[10px] mb-2">ENTWURF</p>
-            <p className="font-sans text-[14px] leading-6 text-foreground/90 whitespace-pre-line">
+          <div className="bg-background/50 border-l-2 sm:border-l border-secondary/60 rounded-sm p-4 sm:p-3">
+            <p className="font-mono-label text-secondary text-[11px] sm:text-[10px] mb-3 sm:mb-2">ENTWURF</p>
+            <p className="font-sans text-[16px] sm:text-[14px] leading-7 sm:leading-6 text-foreground/90 whitespace-pre-line">
               {version.draft ?? "—"}
             </p>
           </div>
@@ -710,10 +710,10 @@ function AnalysisAccordion({
   return (
     <Collapsible open={open} onOpenChange={handleOpenChange}>
       <div className="bg-card border-l-2 border-secondary rounded-sm">
-        <CollapsibleTrigger className="w-full flex items-center justify-between gap-3 p-4 group">
+        <CollapsibleTrigger className="w-full flex items-center justify-between gap-3 p-5 sm:p-4 group">
           <div className="flex items-center gap-2">
             <Diamond className="w-3 h-3 text-secondary" fill="currentColor" />
-            <span className="font-mono-label text-secondary">ANALYSE</span>
+            <span className="font-mono-label text-secondary text-[11px] sm:text-[10px]">ANALYSE</span>
             <span className="font-mono-label text-muted-foreground/70 text-[10px]">
               · {analysis.length} {analysis.length === 1 ? "Punkt" : "Punkte"}
             </span>
@@ -723,8 +723,8 @@ function AnalysisAccordion({
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="px-4 pb-4 pt-1 border-t border-border/30">
-            <ul className="space-y-2 text-xs text-foreground/85 leading-relaxed mt-3">
+          <div className="px-5 pb-5 sm:px-4 sm:pb-4 pt-1 border-t border-border/30">
+            <ul className="space-y-3 sm:space-y-2 text-[15px] sm:text-xs text-foreground/85 leading-7 sm:leading-relaxed mt-3">
               {analysis.map((it, i) => (
                 <li key={i} className="flex gap-2">
                   <Diamond className="w-2 h-2 text-secondary mt-1 shrink-0" fill="currentColor" />
@@ -765,7 +765,7 @@ function SuggestionChips({
           key={i}
           onClick={() => onPick(s.prompt)}
           title={s.prompt}
-          className="px-3 py-1.5 border border-border/40 rounded-sm font-mono-label text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors text-[11px]"
+          className="px-3 py-2 sm:py-1.5 border border-border/40 rounded-sm font-mono-label text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors text-[12px] sm:text-[11px]"
         >
           {s.label}
         </button>

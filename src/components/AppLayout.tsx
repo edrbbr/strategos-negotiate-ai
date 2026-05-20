@@ -157,7 +157,7 @@ export const AppLayout = () => {
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        <div className="px-6 lg:px-10 pb-16">
+        <div className="px-4 lg:px-10 pb-16">
           <Outlet />
         </div>
         <footer className="px-10 py-6 flex items-center justify-between text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground/50 border-t border-border/20">
