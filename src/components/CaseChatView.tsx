@@ -470,13 +470,13 @@ function VersionBlock({
         : "PROMPT";
   return (
     <div className="space-y-4">
-      <div className="bg-card border border-border/30 rounded-sm p-5">
+      <div className="bg-card border border-border/30 rounded-sm p-4 sm:p-5">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <p className="font-mono-label text-primary flex items-center gap-2">
+          <p className="font-mono-label text-primary flex items-center gap-2 text-[11px] sm:text-[10px]">
             <Bot className="w-3.5 h-3.5" /> V{version.version_number} · {version.kind.toUpperCase()}
             {isCurrent && <span className="text-[10px] text-tertiary ml-2">● AKTIV</span>}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-start sm:justify-end overflow-x-auto">
             {version.draft && (
               <Button
                 variant="gold-outline"
