@@ -753,7 +753,7 @@ function SuggestionChips({
   }
   if (suggestions.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="hidden sm:flex flex-wrap gap-2">
       {suggestions.map((s, i) => (
         <button
           key={i}
