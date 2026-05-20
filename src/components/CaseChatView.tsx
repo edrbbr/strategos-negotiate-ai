@@ -420,9 +420,9 @@ function InitialBlockInner({
   attachments: CaseAttachment[];
 }) {
   return (
-    <div className="bg-card border-l-2 border-secondary rounded-sm p-5">
+    <div className="bg-card border-l-2 border-secondary rounded-sm p-4 sm:p-5">
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-        <p className="font-mono-label text-secondary flex items-center gap-2">
+        <p className="font-mono-label text-secondary flex items-center gap-2 text-[11px] sm:text-[10px]">
           <span className="w-2 h-2 rounded-full bg-secondary" /> V0 · INITIAL
         </p>
         <div className="flex gap-3 font-mono-label text-muted-foreground/70 text-[10px]">
@@ -431,7 +431,7 @@ function InitialBlockInner({
           <span>Format: {caseRow.medium ?? "—"}</span>
         </div>
       </div>
-      <p className="font-sans text-[15px] leading-7 text-foreground/90 whitespace-pre-line">
+      <p className="font-sans text-[16px] sm:text-[15px] leading-7 text-foreground/90 whitespace-pre-line">
         {caseRow.situation_text || "—"}
       </p>
       {attachments.length > 0 && (
