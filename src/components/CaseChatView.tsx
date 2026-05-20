@@ -765,7 +765,7 @@ function SuggestionChips({
           key={i}
           onClick={() => onPick(s.prompt)}
           title={s.prompt}
-          className="px-3 py-1.5 border border-border/40 rounded-sm font-mono-label text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors text-[11px]"
+          className="px-3 py-2 sm:py-1.5 border border-border/40 rounded-sm font-mono-label text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors text-[12px] sm:text-[11px]"
         >
           {s.label}
         </button>
