@@ -5,6 +5,7 @@ import { PublicHeader } from "@/components/PublicHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePlans } from "@/hooks/usePlans";
 import { PlansGrid } from "@/components/pricing/PlanCard";
+import { Seo } from "@/components/Seo";
 
 const SkeletonCard = () => (
   <div className="p-8 border border-border/40 bg-card/40 space-y-6">
@@ -34,6 +35,11 @@ const Pricing = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <Seo
+        title="Preise — PALLANX Verhandlungs-Terminal"
+        description="Drei Mandatsstufen von €49 bis €499/Monat. Free, Pro und Elite — für Verhandler, die nicht improvisieren wollen."
+        path="/preise"
+      />
       <PublicHeader active="preise" />
 
       <section className="container py-20 text-center">
