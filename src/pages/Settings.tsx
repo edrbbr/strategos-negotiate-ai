@@ -38,10 +38,6 @@ const Settings = () => {
     refreshProfile();
   };
 
-  const onCancel = () => {
-    if (profile) setFullName(profile.full_name ?? "");
-  };
-
   return (
     <div className="animate-fade-in max-w-5xl">
       <div className="grid lg:grid-cols-[260px_1fr] gap-12">
@@ -75,9 +71,6 @@ const Settings = () => {
           </div>
 
           <div className="flex items-center justify-end gap-6 mb-16">
-            <button onClick={onCancel} className="font-mono-label text-muted-foreground hover:text-foreground">
-              Abbrechen
-            </button>
             <Button variant="gold-outline" size="lg" onClick={onSave} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Änderungen speichern
