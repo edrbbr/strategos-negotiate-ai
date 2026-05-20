@@ -710,10 +710,10 @@ function AnalysisAccordion({
   return (
     <Collapsible open={open} onOpenChange={handleOpenChange}>
       <div className="bg-card border-l-2 border-secondary rounded-sm">
-        <CollapsibleTrigger className="w-full flex items-center justify-between gap-3 p-4 group">
+        <CollapsibleTrigger className="w-full flex items-center justify-between gap-3 p-5 sm:p-4 group">
           <div className="flex items-center gap-2">
             <Diamond className="w-3 h-3 text-secondary" fill="currentColor" />
-            <span className="font-mono-label text-secondary">ANALYSE</span>
+            <span className="font-mono-label text-secondary text-[11px] sm:text-[10px]">ANALYSE</span>
             <span className="font-mono-label text-muted-foreground/70 text-[10px]">
               · {analysis.length} {analysis.length === 1 ? "Punkt" : "Punkte"}
             </span>
@@ -723,8 +723,8 @@ function AnalysisAccordion({
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="px-4 pb-4 pt-1 border-t border-border/30">
-            <ul className="space-y-2 text-xs text-foreground/85 leading-relaxed mt-3">
+          <div className="px-5 pb-5 sm:px-4 sm:pb-4 pt-1 border-t border-border/30">
+            <ul className="space-y-3 sm:space-y-2 text-[15px] sm:text-xs text-foreground/85 leading-7 sm:leading-relaxed mt-3">
               {analysis.map((it, i) => (
                 <li key={i} className="flex gap-2">
                   <Diamond className="w-2 h-2 text-secondary mt-1 shrink-0" fill="currentColor" />
