@@ -516,37 +516,37 @@ function VersionBlock({
         </div>
 
         {version.change_rationale && version.kind === "refinement" && (
-          <div className="mb-4 bg-tertiary/5 border-l-2 border-tertiary/50 rounded-sm p-3">
+          <div className="mb-4 bg-tertiary/5 border-l-2 border-tertiary/50 rounded-sm p-4 sm:p-3">
             <p className="font-mono-label text-tertiary text-[10px] mb-1.5 flex items-center gap-1.5">
               <Info className="w-2.5 h-2.5" /> ÄNDERUNGS-BEGRÜNDUNG
             </p>
-            <p className="font-sans text-[13px] leading-6 text-foreground/85 whitespace-pre-line">
+            <p className="font-sans text-[15px] sm:text-[13px] leading-7 sm:leading-6 text-foreground/85 whitespace-pre-line">
               {version.change_rationale}
             </p>
           </div>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-4">
+        <div className="grid lg:grid-cols-3 gap-5 sm:gap-4">
           {/* Prompt */}
-          <div className="bg-background/50 border-l border-tertiary/60 rounded-sm p-3">
-            <p className="font-mono-label text-tertiary text-[10px] mb-2 flex items-center gap-1.5">
+          <div className="bg-background/50 border-l-2 sm:border-l border-tertiary/60 rounded-sm p-4 sm:p-3">
+            <p className="font-mono-label text-tertiary text-[11px] sm:text-[10px] mb-3 sm:mb-2 flex items-center gap-1.5">
               <MessageSquare className="w-2.5 h-2.5" /> {promptLabel}
             </p>
-            <p className="font-sans text-[14px] leading-6 text-foreground/85 whitespace-pre-line">
+            <p className="font-sans text-[16px] sm:text-[14px] leading-7 sm:leading-6 text-foreground/85 whitespace-pre-line">
               {promptText}
             </p>
           </div>
           {/* Strategy */}
-          <div className="bg-background/50 border-l border-primary/60 rounded-sm p-3">
-            <p className="font-mono-label text-primary text-[10px] mb-2">STRATEGIE</p>
-            <p className="font-sans text-[14px] leading-6 text-foreground/85 whitespace-pre-line">
+          <div className="bg-background/50 border-l-2 sm:border-l border-primary/60 rounded-sm p-4 sm:p-3">
+            <p className="font-mono-label text-primary text-[11px] sm:text-[10px] mb-3 sm:mb-2">STRATEGIE</p>
+            <p className="font-sans text-[16px] sm:text-[14px] leading-7 sm:leading-6 text-foreground/85 whitespace-pre-line">
               {renderStrategy(version.strategy)}
             </p>
           </div>
           {/* Draft */}
-          <div className="bg-background/50 border-l border-secondary/60 rounded-sm p-3">
-            <p className="font-mono-label text-secondary text-[10px] mb-2">ENTWURF</p>
-            <p className="font-sans text-[14px] leading-6 text-foreground/90 whitespace-pre-line">
+          <div className="bg-background/50 border-l-2 sm:border-l border-secondary/60 rounded-sm p-4 sm:p-3">
+            <p className="font-mono-label text-secondary text-[11px] sm:text-[10px] mb-3 sm:mb-2">ENTWURF</p>
+            <p className="font-sans text-[16px] sm:text-[14px] leading-7 sm:leading-6 text-foreground/90 whitespace-pre-line">
               {version.draft ?? "—"}
             </p>
           </div>
