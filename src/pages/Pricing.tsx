@@ -36,8 +36,8 @@ const Pricing = () => {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Seo
-        title="Preise — PALLANX Verhandlungs-Terminal"
-        description="Drei Mandatsstufen von €49 bis €499/Monat. Free, Pro und Elite — für Verhandler, die nicht improvisieren wollen."
+        title="Preise — PALLANX für Selbständige & Freelancer"
+        description="Free, Single-Case-Pass (29 €), Pro (49 €/Monat oder 490 €/Jahr) und Elite auf Anfrage. Kein Risiko, kein Abo-Zwang."
         path="/preise"
       />
       <PublicHeader active="preise" />
@@ -45,11 +45,11 @@ const Pricing = () => {
       <section className="container py-20 text-center">
         <p className="font-mono-label text-primary mb-6">◆ Preise</p>
         <h1 className="font-serif text-5xl md:text-6xl mb-6">
-          Wählen Sie Ihre <span className="italic text-primary">Kapazität</span>
+          Wähle, was zu dir <span className="italic text-primary">passt</span>
         </h1>
         <p className="max-w-xl mx-auto text-muted-foreground mb-2">
-          Drei Tarife — kompromisslos kalkuliert für Anwender, die das
-          Verhandlungsergebnis nicht dem Zufall überlassen.
+          Kostenlos starten · einmal zahlen · oder dauerhaft im Pro-Tarif arbeiten.
+          Kein Risiko, jederzeit kündbar.
         </p>
       </section>
 

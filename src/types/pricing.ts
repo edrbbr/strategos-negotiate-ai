@@ -1,4 +1,4 @@
-export type BillingCycle = "monthly" | "yearly";
+export type BillingCycle = "monthly" | "yearly" | "one_time";
 
 export type CaseLimitType = "lifetime" | "monthly" | "unlimited";
 

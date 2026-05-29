@@ -29,9 +29,11 @@ import {
 } from "@/components/pricing/DiscountCodeField";
 
 const lookupKeyFor = (planId: string, cycle: BillingCycle): string | null => {
-  if (planId === "pro") return cycle === "yearly" ? "pro_yearly" : "pro_monthly";
+  if (planId === "pro")
+    return cycle === "yearly" ? "pro_yearly_v2" : "pro_monthly";
   if (planId === "elite")
     return cycle === "yearly" ? "elite_yearly" : "elite_monthly";
+  if (planId === "single_case") return "single_case_one_time";
   return null;
 };
 
@@ -42,6 +44,7 @@ const ctaLabelFor = (
 ): string => {
   if (planId === "free") return isAuthed ? "DOSSIER STARTEN" : "KOSTENLOS STARTEN";
   if (planId === "elite" || !bookableDirectly) return "ZUGANG ANFRAGEN";
+  if (planId === "single_case") return "JETZT KAUFEN";
   return "JETZT SICHERN";
 };
 
@@ -64,14 +67,18 @@ export const PlanCard = ({
   isAuthed,
   freeCtaTo,
 }: PlanCardProps) => {
-  const price = getPriceForCycle(plan, cycle);
+  const isSingleCase = plan.id === "single_case";
+  const effectiveCycle: BillingCycle = isSingleCase ? "one_time" : cycle;
+  const price = isSingleCase
+    ? plan.prices.find((p) => p.billing_cycle === "one_time")
+    : getPriceForCycle(plan, cycle);
   const monthly = getPriceForCycle(plan, "monthly");
   const featured = plan.is_recommended;
-  const lookupKey = lookupKeyFor(plan.id, cycle);
+  const lookupKey = lookupKeyFor(plan.id, effectiveCycle);
   const isFree = plan.id === "free";
   const isPending = lookupKey !== null && pendingPriceId === lookupKey;
   const bookableDirectly = plan.bookable_directly ?? true;
-  const isOnRequest = !isFree && !bookableDirectly;
+  const isOnRequest = !isFree && !isSingleCase && !bookableDirectly;
 
   const showEffective = cycle === "yearly" && price && price.amount_cents > 0;
   const effectivePerMonth = showEffective
@@ -101,7 +108,9 @@ export const PlanCard = ({
           {price ? formatPrice(price.amount_cents, price.currency) : "—"}
         </span>
         <span className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-          / {cycle === "monthly" ? "Monat" : "Jahr"}
+          {isSingleCase
+            ? "einmalig"
+            : `/ ${cycle === "monthly" ? "Monat" : "Jahr"}`}
         </span>
       </div>
       {effectivePerMonth ? (
@@ -175,7 +184,7 @@ export const PlanCard = ({
           className="w-full"
           size="lg"
           disabled={isPending || !lookupKey}
-          onClick={() => onCheckout(plan.id, cycle)}
+          onClick={() => onCheckout(plan.id, effectiveCycle)}
         >
           {isPending ? (
             <>
@@ -187,14 +196,19 @@ export const PlanCard = ({
           )}
         </Button>
       )}
-      {!isOnRequest && monthly && cycle === "yearly" && monthly.amount_cents > 0 && (
+      {!isSingleCase && !isOnRequest && monthly && cycle === "yearly" && monthly.amount_cents > 0 && (
         <p className="mt-3 text-[10px] text-muted-foreground/60 text-center font-sans uppercase tracking-[0.18em]">
           Statt {formatPrice(monthly.amount_cents, monthly.currency)} / Monat
         </p>
       )}
       {isOnRequest && (
         <p className="mt-3 text-[10px] text-muted-foreground/60 text-center font-sans uppercase tracking-[0.18em]">
-          Aufnahme nach Eignungsprüfung
+          Auf Anfrage · Kurzes Bedarfsgespräch
+        </p>
+      )}
+      {isSingleCase && (
+        <p className="mt-3 text-[10px] text-muted-foreground/60 text-center font-sans uppercase tracking-[0.18em]">
+          Einmalig · Kein Abo
         </p>
       )}
     </div>
@@ -335,7 +349,7 @@ export const PlansGrid = ({
         </div>
       )}
 
-      <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
         {plans.map((plan) => (
           <PlanCard
             key={plan.id}
