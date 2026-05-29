@@ -28,10 +28,7 @@ import {
   type AppliedDiscount,
 } from "@/components/pricing/DiscountCodeField";
 
-const lookupKeyFor = (
-  planId: string,
-  cycle: BillingCycle | "one_time",
-): string | null => {
+const lookupKeyFor = (planId: string, cycle: BillingCycle): string | null => {
   if (planId === "pro")
     return cycle === "yearly" ? "pro_yearly_v2" : "pro_monthly";
   if (planId === "elite")
@@ -71,9 +68,7 @@ export const PlanCard = ({
   freeCtaTo,
 }: PlanCardProps) => {
   const isSingleCase = plan.id === "single_case";
-  const effectiveCycle: BillingCycle | "one_time" = isSingleCase
-    ? "one_time"
-    : cycle;
+  const effectiveCycle: BillingCycle = isSingleCase ? "one_time" : cycle;
   const price = isSingleCase
     ? plan.prices.find((p) => p.billing_cycle === "one_time")
     : getPriceForCycle(plan, cycle);
@@ -261,10 +256,7 @@ export const PlansGrid = ({
   const isAuthed = !!user;
   const freeCtaTo = isAuthed ? "/app/case/new" : "/register";
 
-  const handleCheckout = (
-    planId: string,
-    c: BillingCycle | "one_time",
-  ) => {
+  const handleCheckout = (planId: string, c: BillingCycle) => {
     const priceId = lookupKeyFor(planId, c);
     if (!priceId) return;
     if (!user) {
@@ -277,7 +269,7 @@ export const PlansGrid = ({
       appliedDiscount &&
       discountTarget &&
       discountTarget.planId === planId &&
-      discountTarget.cycle === (c as BillingCycle);
+      discountTarget.cycle === c;
     setPendingPriceId(priceId);
     openCheckout({
       priceId,
