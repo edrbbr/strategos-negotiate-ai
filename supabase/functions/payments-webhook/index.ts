@@ -23,11 +23,22 @@ async function handleCheckoutCompleted(session: any, env: StripeEnv) {
 
   const userId = session.metadata?.userId;
   const lookupKey = session.metadata?.lookupKey;
-  if (!userId || lookupKey !== "extra_dossier_single") return;
+  if (!userId) return;
+  if (
+    lookupKey !== "extra_dossier_single" &&
+    lookupKey !== "single_case_one_time"
+  )
+    return;
 
   // Quantity from line items (managed-payments stores it on the session line items).
   // We stored the quantity in metadata for safety.
-  const qty = Math.max(1, Math.min(10, parseInt(session.metadata?.quantity ?? "1", 10) || 1));
+  const qty =
+    lookupKey === "single_case_one_time"
+      ? 1
+      : Math.max(
+          1,
+          Math.min(10, parseInt(session.metadata?.quantity ?? "1", 10) || 1),
+        );
   const amountCents = session.amount_total ?? qty * 499;
   const currency = (session.currency ?? "eur").toUpperCase();
 
@@ -63,6 +74,10 @@ async function handleCheckoutCompleted(session: any, env: StripeEnv) {
     return;
   }
 
+  // Single-Case-Pass never expires; extra credits from a Pro period expire with that period.
+  const expiresAt =
+    lookupKey === "single_case_one_time" ? null : sub?.current_period_end ?? null;
+
   await getSupabase().from("extra_credit_purchases").insert({
     user_id: userId,
     quantity: qty,
@@ -70,7 +85,7 @@ async function handleCheckoutCompleted(session: any, env: StripeEnv) {
     currency,
     status: "completed",
     stripe_session_id: session.id,
-    expires_at: sub?.current_period_end ?? null,
+    expires_at: expiresAt,
   });
 
   await getSupabase()
