@@ -19,6 +19,7 @@ import CaseDetail from "./pages/CaseDetail";
 import Settings from "./pages/Settings";
 import Billing from "./pages/Billing";
 import Admin from "./pages/Admin";
+import AdminContent from "./pages/AdminContent";
 import { AdminRoute } from "@/components/AdminRoute";
 import NotFound from "./pages/NotFound";
 import Unsubscribe from "./pages/Unsubscribe";
@@ -74,6 +75,14 @@ const App = () => (
               element={
                 <AdminRoute>
                   <Admin />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/content"
+              element={
+                <AdminRoute>
+                  <AdminContent />
                 </AdminRoute>
               }
             />

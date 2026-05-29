@@ -31,6 +31,8 @@ import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { TonalitySelect } from "@/components/TonalitySelect";
 import { UpgradePreviewPanel } from "@/components/UpgradePreviewPanel";
 import { consumeFirstCasePrefill } from "@/lib/firstCaseFlow";
+import { LinkedInConsentCard } from "@/components/case/LinkedInConsentCard";
+import { track } from "@/lib/analytics";
 
 type StageState = "pending" | "running" | "complete" | "failed";
 type Tier = "free" | "pro" | "elite";
@@ -420,6 +422,7 @@ const CaseDetail = () => {
       {hasVersions && caseRow ? (
         <>
           <CaseChatView caseRow={caseRow as Parameters<typeof CaseChatView>[0]["caseRow"]} />
+          {caseId && <LinkedInConsentCard caseId={caseId} />}
           {tier === "free" && caseId && (
             <UpgradePreviewPanel caseId={caseId} onUpgradeClick={() => setShowUpgrade(true)} />
           )}
