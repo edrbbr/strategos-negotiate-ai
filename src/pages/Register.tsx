@@ -5,6 +5,7 @@ import { ArrowRight, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Logo } from "@/components/Logo";
 import { Seo } from "@/components/Seo";
+import { track } from "@/lib/analytics";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -45,12 +46,14 @@ const Register = () => {
     }
     setError(null);
     setLoading(true);
+    track("register_started", { method: "email" });
     const { error: err } = await signUpWithEmail(email, password, fullName);
     setLoading(false);
     if (err) {
       setError(err);
       return;
     }
+    track("register_completed", { method: "email", has_prefill: !!sessionStorage.getItem("pallanx_prefill") });
     navigate(`/check-email?email=${encodeURIComponent(email)}`);
   };
 

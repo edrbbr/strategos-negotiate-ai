@@ -31,6 +31,8 @@ import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { TonalitySelect } from "@/components/TonalitySelect";
 import { UpgradePreviewPanel } from "@/components/UpgradePreviewPanel";
 import { consumeFirstCasePrefill } from "@/lib/firstCaseFlow";
+import { LinkedInConsentCard } from "@/components/case/LinkedInConsentCard";
+import { track } from "@/lib/analytics";
 
 type StageState = "pending" | "running" | "complete" | "failed";
 type Tier = "free" | "pro" | "elite";
@@ -274,6 +276,7 @@ const CaseDetail = () => {
 
     setLoading(true);
     setStageMeta({});
+    track("case_started", { case_id: activeCaseId, tier, is_first: !caseId });
     if (isMultiStage) {
       setStageState({ analysis: "running", strategy: "pending", draft: "pending" });
     } else {
@@ -310,7 +313,11 @@ const CaseDetail = () => {
         if (ctx?.status === 403) {
           try {
             const body = await ctx.json();
-            if (body?.error === "CASE_LIMIT_REACHED") { setShowUpgrade(true); return; }
+            if (body?.error === "CASE_LIMIT_REACHED") {
+              track("case_limit_hit", { tier });
+              setShowUpgrade(true);
+              return;
+            }
           } catch { /* ignore */ }
         }
         if (ctx?.status === 502 || ctx?.status === 429) {
@@ -346,6 +353,7 @@ const CaseDetail = () => {
         toast.message(`Noch ${remaining} Dossier übrig in Ihrem Plan.`);
       }
       toast.success("Pipeline abgeschlossen");
+      track("case_completed", { case_id: activeCaseId, tier });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unbekannter Fehler";
       toast.error(`Pipeline-Fehler: ${msg}`);
@@ -420,6 +428,7 @@ const CaseDetail = () => {
       {hasVersions && caseRow ? (
         <>
           <CaseChatView caseRow={caseRow as Parameters<typeof CaseChatView>[0]["caseRow"]} />
+          {caseId && <LinkedInConsentCard caseId={caseId} />}
           {tier === "free" && caseId && (
             <UpgradePreviewPanel caseId={caseId} onUpgradeClick={() => setShowUpgrade(true)} />
           )}

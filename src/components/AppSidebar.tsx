@@ -114,6 +114,13 @@ export const AppSidebar = ({ mobileOpen, onMobileOpenChange }: AppSidebarProps =
                 <Shield className="w-4 h-4" strokeWidth={1.5} />
                 Admin
               </NavLink>
+              <NavLink
+                to="/admin/content"
+                className="flex items-center gap-3 py-2.5 px-3 rounded-sm font-sans uppercase tracking-[0.18em] text-xs text-primary/80 hover:text-primary hover:bg-primary/5"
+              >
+                <Shield className="w-4 h-4" strokeWidth={1.5} />
+                Content
+              </NavLink>
             </li>
           )}
         </ul>

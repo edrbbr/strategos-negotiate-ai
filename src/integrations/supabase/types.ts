@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      analytics_events: {
+        Row: {
+          created_at: string
+          event_name: string
+          id: string
+          path: string | null
+          properties: Json
+          session_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_name: string
+          id?: string
+          path?: string | null
+          properties?: Json
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_name?: string
+          id?: string
+          path?: string | null
+          properties?: Json
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       case_attachments: {
         Row: {
           case_id: string
@@ -453,6 +483,96 @@ export type Database = {
           stripe_session_id?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      linkedin_pool: {
+        Row: {
+          anonymized_outcome: string | null
+          anonymized_situation: string | null
+          case_id: string
+          consent_at: string | null
+          created_at: string
+          curated_at: string | null
+          curated_by: string | null
+          curator_notes: string | null
+          generated_post: string | null
+          id: string
+          posted_at: string | null
+          status: string
+          template_key: string | null
+          updated_at: string
+          user_consent: boolean
+          user_id: string
+        }
+        Insert: {
+          anonymized_outcome?: string | null
+          anonymized_situation?: string | null
+          case_id: string
+          consent_at?: string | null
+          created_at?: string
+          curated_at?: string | null
+          curated_by?: string | null
+          curator_notes?: string | null
+          generated_post?: string | null
+          id?: string
+          posted_at?: string | null
+          status?: string
+          template_key?: string | null
+          updated_at?: string
+          user_consent?: boolean
+          user_id: string
+        }
+        Update: {
+          anonymized_outcome?: string | null
+          anonymized_situation?: string | null
+          case_id?: string
+          consent_at?: string | null
+          created_at?: string
+          curated_at?: string | null
+          curated_by?: string | null
+          curator_notes?: string | null
+          generated_post?: string | null
+          id?: string
+          posted_at?: string | null
+          status?: string
+          template_key?: string | null
+          updated_at?: string
+          user_consent?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
+      linkedin_templates: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          key: string
+          label: string
+          prompt_skeleton: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key: string
+          label: string
+          prompt_skeleton: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key?: string
+          label?: string
+          prompt_skeleton?: string
+          sort_order?: number
         }
         Relationships: []
       }

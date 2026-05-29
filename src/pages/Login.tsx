@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Seo } from "@/components/Seo";
 import { postAuthRedirect } from "@/lib/firstCaseFlow";
+import { track } from "@/lib/analytics";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -43,6 +44,7 @@ const Login = () => {
       }
       return;
     }
+    track("login_completed", { method: "email" });
     navigate(returnUrl, { replace: true });
   };
 
