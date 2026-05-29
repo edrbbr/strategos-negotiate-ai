@@ -73,8 +73,8 @@ const Register = () => {
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       <Seo
-        title="Registrierung — PALLANX Terminal-Zugang"
-        description="Strategie-Briefing anfragen und Eligibility für das PALLANX Verhandlungs-Terminal prüfen lassen."
+        title="Registrierung — PALLANX für Selbstständige & Coaches"
+        description="Account erstellen und ersten Verhandlungsfall kostenlos mit PALLANX analysieren — Honorare, Verträge, Rabattdruck."
         path="/register"
       />
       <div className="hidden lg:flex flex-col justify-between p-12 border-r border-border/40 scanline-bg">
@@ -85,16 +85,16 @@ const Register = () => {
           <span className="font-mono-label text-muted-foreground">V.6.0</span>
         </div>
         <div>
-          <p className="font-mono-label text-primary mb-6">Sovereign Intelligence</p>
+          <p className="font-mono-label text-primary mb-6">Verhandlungs-Doktrin für Selbstständige</p>
           <h1 className="font-serif italic text-primary text-7xl xl:text-8xl font-semibold tracking-tight mb-10">
             PALLANX
           </h1>
           <p className="font-serif text-2xl leading-snug max-w-md text-foreground/90">
-            The absolute terminal for high-stakes negotiation analysis and strategic execution. Secure your seat at the table.
+            Honorare verteidigen. Verträge schärfen. Rabattdruck abwehren. Dein Co-Pilot für jede Verhandlung, die zählt.
           </p>
           <div className="flex items-center gap-4 mt-10">
             <span className="w-16 h-px bg-primary" />
-            <span className="font-mono-label text-primary">Est. MMXXVI</span>
+            <span className="font-mono-label text-primary">Made in DACH · Est. MMXXVI</span>
           </div>
         </div>
         <span className="font-mono-label text-muted-foreground">◆ Secure_Server_A12 — Timestamp: 12:44:01 GMT</span>
@@ -109,33 +109,33 @@ const Register = () => {
             <ArrowLeft className="w-3 h-3" />
             Zurück zur Startseite
           </Link>
-          <h1 className="font-serif text-5xl mb-2">Create Account</h1>
-          <p className="font-serif italic text-muted-foreground mb-10">Initialize your sovereign profile</p>
+          <h1 className="font-serif text-5xl mb-2">Account erstellen</h1>
+          <p className="font-serif italic text-muted-foreground mb-10">Ersten Fall kostenlos analysieren — keine Kreditkarte.</p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="font-mono-label text-muted-foreground mb-2 block">Full Name</label>
+              <label className="font-mono-label text-muted-foreground mb-2 block">Vollständiger Name</label>
               <input
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="E.g. Alexander von Clausewitz"
+                placeholder="z. B. Anna Schmidt"
                 className="w-full bg-transparent border-0 border-b border-border/60 focus:border-primary focus:outline-none py-2 font-serif text-lg placeholder:text-muted-foreground/40"
               />
             </div>
             <div>
-              <label className="font-mono-label text-muted-foreground mb-2 block">Email Address</label>
+              <label className="font-mono-label text-muted-foreground mb-2 block">E-Mail-Adresse</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@organization.com"
+                placeholder="name@deine-firma.de"
                 className="w-full bg-transparent border-0 border-b border-border/60 focus:border-primary focus:outline-none py-2 font-serif text-lg placeholder:text-muted-foreground/40"
               />
             </div>
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <label className="font-mono-label text-muted-foreground mb-2 block">Password</label>
+                <label className="font-mono-label text-muted-foreground mb-2 block">Passwort</label>
                 <input
                   type="password"
                   value={password}
@@ -145,7 +145,7 @@ const Register = () => {
                 />
               </div>
               <div>
-                <label className="font-mono-label text-muted-foreground mb-2 block">Confirm</label>
+                <label className="font-mono-label text-muted-foreground mb-2 block">Bestätigen</label>
                 <input
                   type="password"
                   value={confirm}
@@ -164,7 +164,7 @@ const Register = () => {
                 className="mt-0.5 accent-primary"
               />
               <span className="font-serif italic">
-                I accept the <a className="text-primary hover:underline">Terms of Sovereignty</a> and the <a className="text-primary hover:underline">Strategic Protocol</a>.
+                Ich akzeptiere die <a className="text-primary hover:underline">AGB</a> und die <a className="text-primary hover:underline">Datenschutzerklärung</a>.
               </span>
             </label>
 
@@ -176,12 +176,12 @@ const Register = () => {
 
             <Button type="submit" variant="gold-outline" size="xl" className="w-full" disabled={loading}>
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Account Erstellen <ArrowRight className="w-4 h-4" />
+              Account erstellen <ArrowRight className="w-4 h-4" />
             </Button>
 
             <div className="flex items-center gap-4">
               <span className="flex-1 h-px bg-border/40" />
-              <span className="font-mono-label text-muted-foreground">Or Continue With</span>
+              <span className="font-mono-label text-muted-foreground">Oder weiter mit</span>
               <span className="flex-1 h-px bg-border/40" />
             </div>
 
@@ -197,12 +197,12 @@ const Register = () => {
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
               </svg>
-              Google Identification
+              Mit Google fortfahren
             </button>
 
             <p className="text-center font-serif italic text-sm text-muted-foreground pt-4">
-              Already an initiate?{" "}
-              <Link to="/login" className="font-sans uppercase tracking-[0.2em] text-xs text-primary hover:underline ml-2">Login Here</Link>
+              Bereits registriert?{" "}
+              <Link to="/login" className="font-sans uppercase tracking-[0.2em] text-xs text-primary hover:underline ml-2">Jetzt einloggen</Link>
             </p>
           </form>
         </div>
