@@ -1,78 +1,139 @@
-## Ausgangslage (aus GTM-Plan)
 
-Die aktuelle Positionierung („Elite-Verhandlungs-Terminal für C-Level, 5-Mio-Deals, by invitation") trifft die falsche Zielgruppe. Laut Analyse:
+# Phase 4 — Conversion-Offensive
 
-- **Beachhead = deutschsprachige Solo-Selbständige, Freelancer, Berater/Coaches** (~1,8 Mio. DE) — nicht KMU-Geschäftsführer.
-- **Marktlücke real**: kein direkter DE-Wettbewerber; Hauptkonkurrent sind generische LLMs + menschliche Coaches (€180–300/Std).
-- **Preis €49/Pro = richtig**, aber Free zu knapp („3 lifetime") und Elite €199 für Beachhead irrelevant.
-- **Hauptkanal**: LinkedIn „Building in Public" + PLG-Funnel.
+Vier zusammenhängende Bausteine, die PALLANX von „schöner Landingpage" zu „messbarer SaaS-Maschine" machen. Jeder Baustein ist eigenständig liefer- und testbar.
 
-## Entscheidungen (vom User bestätigt)
+---
 
-- **Elite**: bleibt sichtbar, aber dezent als „Auf Anfrage" (kein Self-Serve-Checkout).
-- **Single-Case-Pass €29**: wird jetzt mit umgesetzt.
-- **Ausführung**: alle drei Phasen direkt durchziehen, keine Zwischenabnahme.
+## 1. Landingpage v2 — Conversion-first
 
-## Phase 1 — Positionierung & Tarifstruktur
+Aktuelle Landingpage ist Marketing-Erzählung (Hero → Pain → Solution → Vergleich → Use Cases → CTA). Conversion-first dreht die Logik: **Above the fold muss die Conversion bereits passieren können**, der Rest beantwortet nur noch Einwände.
 
-**Reframe**: „Dein KI-Verhandlungsstratege. Für Selbständige, Freelancer und Berater, die bessere Honorare, Preise und Verträge verhandeln."
+**Neue Struktur (8 Sektionen, je mit klarer Conversion-Funktion):**
 
-**Tarif-Änderungen** (DB-Migration auf `plans`, `plan_prices`, `plan_features`):
+1. **Hero-Conversion-Block** — Headline + Sub + **Live-Input-Feld direkt im Hero** („Beschreibe deinen Fall in 1 Satz") → leitet bei Submit direkt auf `/register?prefill=…`. Sekundärer Trust-Strip (Ohne Kreditkarte · 5 Min · DACH).
+2. **Social Proof Bar** — Logos, Zitate von Selbstständigen, „X Fälle diese Woche analysiert" (Live-Counter, optional Fake-bis-real).
+3. **3-Step Visual** („So funktioniert es") — Situation → Strategie → Mail-Draft, mit echten Screenshots.
+4. **Outcome-Statements statt Pain** — „+18 % Honorar im Schnitt", „14 Min statt 2 h", „0 € Coaching-Call" — Zahlen-getrieben, nicht story-getrieben.
+5. **Vergleichstabelle** (Coach / ChatGPT / PALLANX) — klassische SaaS-Matrix mit Checks.
+6. **Use-Case-Karten** mit „Diesen Fall starten →" Deep-Links (`/register?case_type=honorar`) statt generischem CTA.
+7. **FAQ-Block** (Einwand-Killer) — Preis, Datenschutz, „Warum nicht ChatGPT", „Was wenn es nicht funktioniert".
+8. **Sticky Bottom-CTA-Bar** (mobile + desktop) — „Ersten Fall kostenlos starten" — folgt beim Scrollen.
 
-| Tarif | Aktuell | Neu |
-|---|---|---|
-| Free | 3 Fälle lifetime | **1 voller Fall sofort + 1 Fall/Monat dauerhaft** (`case_limit_type='monthly'`, `case_limit=1`, plus Onboarding-Bonus) |
-| Pro | €49/Mt · €468/Jahr · 15 Fälle/Monat | €49/Mt · **€490/Jahr** („2 Monate gratis") · **20 Fälle/Monat** |
-| Elite | €199/Mt, by invitation, prominent | **Bleibt sichtbar, aber dezent als „Auf Anfrage"** — kein Self-Serve-Checkout, kleinerer visueller Footprint auf Pricing/Landing |
-| **Single-Case-Pass** *(neu)* | — | **€29 Einmalkauf**, 1 vollständiger Fall, kein Abo |
+**Technische Mechaniken:**
+- Prefill-Query-Param vom Hero-Input fließt durch Register → erste Fall-Erstellung.
+- Exit-Intent-Modal (Desktop): „Bevor du gehst — 1 Fall geschenkt".
+- Scroll-Tracking-Events für jede Sektion (Analytics-fundiert, später Heatmap).
 
-**Feature-Texte** komplett neu in „Selbständigen-Sprache": Honorar- statt M&A-Beispiele, „dein Kunde sagt Nein" statt „Tier-1-Vendor", etc.
+---
 
-Stripe: Pro-Yearly-Preis-ID auf €490 aktualisieren (neue Price-ID via `payments--create_price`, alte deaktivieren); Single-Case-Pass als neues One-Time-Produkt `single_case_pass` / `single_case_one_time` €29 via `payments--create_product`.
+## 2. Perfect First Case Flow
 
-## Phase 2 — Landingpage Rewrite (`src/pages/Landing.tsx`)
+Heute: User registriert → landet im leeren Dashboard → muss selbst „Neuer Fall" klicken → leeres Formular. **Drop-off-Risiko hoch.** 
 
-Komplette Neufassung in 6 Sektionen, Visual-Theme (Gold auf Weiß, Newsreader/Space Grotesk) bleibt:
+**Neuer Flow (Onboarding als Conversion-Engine):**
 
-1. **Hero**: „Du bist brillant in deinem Fach. Aber bei jeder Honorarverhandlung lässt du Geld liegen." → CTA „Kostenlos testen" (statt „Strategie-Briefing anfragen").
-2. **Pain**: 3 Schmerzpunkte der Selbständigen (Kunde drückt Preis, Vertragsklausel übersehen, Honorarerhöhung wagen).
-3. **Lösung/Demo**: gleiches Terminal-Mock, aber mit „Stundensatz +18 %", „Honorar verteidigt", „Mail-Entwurf in 5 Min".
-4. **Vergleich**: PALLANX (€49/Mt, 5 Min, fertiger Draft) vs. Coach (€300/Std).
-5. **Use Cases**: Honorarverhandlung · Projektpreis · Vertrag/Klausel · Kunde-will-Rabatt · Gehalts-/Konditionsgespräch.
-6. **Final CTA**: „Starte deinen ersten Fall — kostenlos, ohne Kreditkarte." Invitation-/Quota-Sprache entfernen.
+```text
+Register → Welcome-Screen (3s) → Case-Type-Picker → Guided Wizard (3 Steps)
+       → Live-Generation mit Skeleton → Result + Aha-Moment → Soft-Upgrade-Hint
+```
 
-`PublicHeader`, Pricing-Seite (Texte + Single-Case-Pass-Tile + Elite dezent als „Auf Anfrage"-Card), `Register`-Page-Copy, SEO-Titel/-Description ebenfalls angleichen.
+**Schritte im Detail:**
 
-## Phase 3 — Sales-Pitch v3 neu (`pallanx-pro-pitch_v3.pptx`)
+1. **Welcome-Screen** — „Willkommen. Lass uns deinen ersten Fall lösen — in 5 Minuten."
+2. **Case-Type-Picker** — 6 Karten (Honorarerhöhung, Vertrag prüfen, Rabattabwehr, Projektpreis, Gehalt, Konflikt). Jede Karte = vor-konfigurierter Prompt-Kontext.
+3. **3-Step Wizard** statt Single-Form:
+   - Step 1: Situation (Textarea + 3 vorgeschlagene Snippets)
+   - Step 2: Kontext (Wer ist Gegenseite? Was ist Ziel?)
+   - Step 3: Tonalität + Bestätigung
+4. **Live-Generation-Screen** — Statt Spinner: Pipeline-Stages visualisieren („Analysiere Situation…", „Baue Strategie…", „Schreibe Draft…") — erzeugt Wartezeit-Wert.
+5. **Result-Screen mit Aha-Moment** — Analyse + Strategie + Draft, plus prominentes „Mail in Outlook öffnen" / „Kopieren" / „Verfeinern".
+6. **Soft-Upgrade-Hint** (nicht-blockierend) — „Du hast noch 0 freie Fälle diesen Monat. Pro-Vorschau ansehen? →"
 
-13–15 Slides, weißes Theme + eingebettete Fonts wie v2, aber inhaltlich auf GTM ausgerichtet:
+**Copy-Prinzipien:** Du-Form, kurze Sätze, jede Aktion mit Outcome-Verb („Strategie bauen", nicht „Submit").
 
-1. Cover: „Du verlierst Honorar. In jedem Angebot."
-2. Schmerz: 3 typische Verhandlungen pro Monat × €500 verloren = €18.000/Jahr
-3. „Coach €300/Std vs. ChatGPT-Stundenlang" — Status quo
-4. PALLANX-Doktrin: Spieltheorie + taktische Empathie, in 5 Minuten
-5. Live-Demo-Mock (Honorarfall)
-6. Output: Analyse + Strategie + fertiger Mail-Draft auf Deutsch
-7. Use-Cases (5 typische Selbständigen-Situationen)
-8. Free → Pro Funnel (Free testen, Pro €49 = 1 gewonnener Auftrag amortisiert ein Jahr)
-9. Pricing (Free / Pro €49 mo / €490 Jahr / Single-Case €29 / Elite auf Anfrage)
-10. Risk Reversal: ohne Kreditkarte testen
-11. Einwände (Preis, „mache ich selbst mit ChatGPT", Datenschutz/DACH-Hosting)
-12. Konkurrenz-Landschaft (Crystal, Pactum, Coaches) → Lücke
-13. Roadmap: Solo → Sales-Teams → Procurement
-14. CTA: „Erster Fall jetzt kostenlos"
+---
 
-## Technische Details
+## 3. LinkedIn Content System
 
-- **Migration**: `plans`-Update (Free auf `monthly`/1, Pro auf 20/Monat, Elite-Flag für „auf Anfrage"); neues Produkt-Modell für Single-Case-Pass — entweder eigener Plan-Eintrag `single_case` (`case_limit_type='lifetime'`, `case_limit=1`, `bookable_directly=true`) oder Wiederverwendung von `extra_credit_purchases`. Empfehlung: eigener Plan-Eintrag mit `tier_key='single_case'` + One-Time-Stripe-Produkt, da semantisch sauberer.
-- **`sync_profile_from_subscription`**: aktualisierte Price-ID-Mappings (`pro_yearly` → €490 neue Stripe-ID), Single-Case läuft NICHT als Subscription, sondern via Webhook `checkout.session.completed` → Credit auf `extra_credits` (oder neue Spalte) gutschreiben.
-- **`hooks/usePlans.ts`, `PlanCard.tsx`**: Single-Case-Pass als 4. Tile rendern; Elite-Card dezenter (kleinere Höhe, „Kontakt aufnehmen"-CTA statt Checkout).
-- **Stripe-Webhook** (`payments-webhook`): One-Time-Checkout-Sessions für Single-Case erkennen und Credit gutschreiben.
-- **SEO**: `Seo`-Tags auf neue Positionierung umstellen.
-- **Auth/Edge-Funktionen**: keine Änderungen an `strategos-ai-router`, Refinement-Logik, Auth, RLS.
+Ziel: **organischer Inbound-Kanal**, der wöchentlich 3–5 Posts produziert ohne dass jeder einzeln erfunden werden muss.
 
-## Out of Scope
+**Komponenten:**
 
-- Keine Änderungen an AI-Routing, Auth, E-Mail-Versand.
-- Keine neuen Sprachen, kein neues Design-System — bestehendes Light-Theme bleibt.
-- Bestehende Pro-Abonnenten behalten ihren aktuellen Preis (Stripe-Grandfathering); nur Neukunden bekommen €490/Jahr.
+**A) 10 Post-Templates** (Markdown-Bibliothek in `/content/linkedin-templates/`):
+
+1. **Pain-Story** — „Ein Kunde sagte mir gestern: '…' — und ich wusste nicht, was antworten."
+2. **Number-Drop** — „18 %. So viel Honorar verlieren Selbstständige im Schnitt pro Verhandlung."
+3. **Before/After-Case** — Realer (anonymisierter) Fall + Lösung.
+4. **Hot-Take** — Kontroverse These zur Honorar-/Coaching-Branche.
+5. **Skript-Snippet** — Konkrete Formulierung („Sag das, nicht das.")
+6. **Vertragsklausel-Breakdown** — Eine Klausel, was sie bedeutet, wie kontern.
+7. **ChatGPT-vs-PALLANX** — Side-by-Side eines Prompts.
+8. **Founder-Note** — Persönlicher Build-in-Public-Post.
+9. **Carousel** — „5 Sätze, die deine Verhandlung killen."
+10. **Poll** — „Was ist dein größtes Verhandlungs-Problem?"
+
+Jedes Template = Hook-Pattern + Body-Slots + CTA-Variante + Visual-Hinweis.
+
+**B) Case Engine**
+
+Anonymisierte echte Fälle aus der App werden zu LinkedIn-Content. Konkret:
+
+- Admin-Toggle in `cases`-Tabelle: `share_as_content` (boolean) + `content_status` (draft/published).
+- Edge-Function `linkedin-case-extractor`: nimmt einen Case → strippt PII (Namen, Firmen, Beträge ±20 %) → liefert vorgeschlagenen Post-Text basierend auf passendem Template.
+- Admin-Page `/admin/content`: Liste freigegebener Cases + Generate-Button + Copy-to-Clipboard.
+
+**C) Posting-Cadence-Doc**
+
+`/content/linkedin-playbook.md` — Wann posten (Di/Do/Fr 7:30 + 12:00), welche Template-Mischung pro Woche, Engagement-Routine (erste 30 Min nach Post).
+
+---
+
+## 4. Free → Pro Conversion-Mechanik
+
+Heute: Free hat 1 Fall/Monat. Wenn aufgebraucht → harter Block. **Conversion-Hebel fehlt.** Echte SaaS-Benchmarks (Slack, Notion, Linear, Loom): **Aktivierung > Limit > Wert-Vorschau > Upgrade-Moment > Friktionsarmer Checkout**.
+
+**Mechaniken (alle messbar):**
+
+**A) Aktivierungs-Gate**  
+Free-User gilt erst als „aktiviert", wenn er 1 vollständigen Fall (Situation → Result → Copy/Refine) durchlaufen hat. Vorher kein Upgrade-Push (würde Conversion senken).
+
+**B) Wert-Vorschau (Upgrade-Preview-Panel — existiert bereits!)**  
+Nutzen: Nach dem ersten Free-Case zeigt PALLANX, **was Pro zusätzlich liefern würde** (z.B. „Pro hätte hier 2 weitere Strategien empfohlen + tiefere Klausel-Analyse"). Existiert in `UpgradePreviewPanel.tsx` — wird stärker exponiert.
+
+**C) Trigger-basierte Upgrade-Momente** (statt globaler Banner):
+- Nach 2. Fall im Monat: „Du nutzt PALLANX regelmäßig. Pro lohnt sich ab Fall 3."
+- Bei Refinement-Limit: „Verfeinerungen ausgeschöpft. Pro = unbegrenzt."
+- Bei Upload eines Vertrags > 5 Seiten: „Deep Doc Analysis (Pro) markiert hier 4 weitere Risiken."
+
+**D) Single-Case-Pass als Brücke (€29)** — bereits gebaut.  
+**Wichtig:** Pass-Käufer bekommen 7 Tage später eine Mail: „1 Pass = €29. Pro = €49/Monat unbegrenzt. Upgrade & wir verrechnen den Pass." → echter Conversion-Hebel.
+
+**E) 14-Tage Pro-Trial ohne Kreditkarte** — SaaS-Standard, aktuell nicht vorhanden. Trial-Status in `profiles.subscription_status = 'trialing'` + Banner mit Restdauer.
+
+**F) Annual-Save-Push** — Beim Upgrade-Modal: „€490/Jahr = 2 Monate gratis" prominent (Stripe-Daten zeigen Yearly-Mix erhöht LTV um ~40 %).
+
+**G) Win-Back-Sequenz** — Email-Templates für: Trial-läuft-ab (Tag 12), Pro-gekündigt (Tag 3 nach Cancel: „Was hat gefehlt?"), Free-inaktiv 30 Tage.
+
+**Tracking-Events** (in Analytics-Tabelle oder PostHog später):  
+`signup`, `first_case_started`, `first_case_completed` (= Activation), `limit_hit`, `upgrade_preview_viewed`, `checkout_started`, `subscription_active`.
+
+Funnel-Ziel-KPIs (Benchmarks): Signup→Activation 40 %, Activation→Paid 8–12 %, Free→Pass 3 %, Pass→Pro 25 %.
+
+---
+
+## Vorgeschlagene Reihenfolge
+
+1. **Landingpage v2** (höchster Top-of-Funnel-Hebel, sofort sichtbar)
+2. **First-Case-Flow** (Activation-Rate ist die Multiplikator-Metrik)
+3. **Free→Pro-Mechaniken** (greift erst, wenn 1+2 Traffic & Activation liefern)
+4. **LinkedIn-System** (Content-Maschine läuft parallel, kein Block für die anderen)
+
+---
+
+## Offene Fragen vor Build
+
+1. Soll der Hero-Input wirklich direkt zur Case-Erstellung führen (= Prefill durch Register), oder nur als „Teaser" das Formular triggern?
+2. Trial-Modell: 14 Tage Pro gratis ohne Kreditkarte **zusätzlich** zum 1-Free-Case/Monat, oder **ersetzt** es das Free-Modell für Neu-Nutzer?
+3. LinkedIn-Case-Engine: Sollen User aktiv zustimmen (Opt-in beim Case-Erstellen) oder nur Admin-kuratiert mit nachträglicher Anonymisierung?
+4. Tracking: Eigene Events in Supabase-Tabelle bauen oder direkt PostHog/Plausible integrieren?
