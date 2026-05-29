@@ -8,84 +8,85 @@ const Landing = () => {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Seo
-        title="PALLANX — Elite Verhandlungs-Terminal für C-Level"
-        description="Spieltheorie trifft taktische Empathie. PALLANX kalibriert M&A-, Vendor- und Board-Verhandlungen in Echtzeit. By invitation."
+        title="PALLANX — Dein KI-Verhandlungsstratege für Selbständige"
+        description="Bessere Honorare, faire Verträge, durchsetzungsfähige Mails. PALLANX liefert in 5 Minuten Analyse, Strategie und fertigen Entwurf. Kostenlos testen."
         path="/"
       />
       <PublicHeader active="home" />
       <main>
-      {/* 1. THE GATE */}
+      {/* 1. HERO */}
       <section className="container relative min-h-[85vh] flex flex-col justify-center py-24">
         <span className="hidden md:block absolute top-6 right-6 font-sans uppercase tracking-[0.25em] text-[10px] text-muted-foreground">
-          Terminal // Session 04.26 // Clearance Required
+          Terminal // Live Session // Kostenlos starten
         </span>
 
         <div className="max-w-4xl">
           <div className="flex items-center gap-4 mb-10">
             <span className="h-px w-10 bg-primary" />
             <span className="font-sans uppercase tracking-[0.25em] text-[11px] text-primary">
-              ◆ PALLANX Intelligence Terminal
+              ◆ Dein KI-Verhandlungsstratege
             </span>
           </div>
 
           <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl leading-[1.02] tracking-tight mb-10">
-            Sie verlieren Marge.
+            Du bist brillant in deinem Fach.
             <br />
-            In jedem Meeting. <span className="italic text-primary">Lautlos.</span>
+            Aber bei jeder Verhandlung lässt du <span className="italic text-primary">Honorar liegen.</span>
           </h1>
 
           <p className="font-serif text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed mb-12">
-            Während Sie verhandeln, kalkuliert Ihr Gegenüber. Jeder nachgegebene Prozentpunkt
-            auf einem 5-Millionen-Deal kostet Sie 50.000 €. PALLANX beendet die Asymmetrie.
+            Honorar, Projektpreis, Vertragsklausel, Gehaltsgespräch — PALLANX analysiert
+            deine Situation, baut deine Strategie und liefert in 5 Minuten den fertigen
+            Mail- oder Gesprächs-Entwurf. Auf Deutsch. Mit Spieltheorie und taktischer Empathie.
           </p>
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-16">
             <Link to="/register">
               <Button variant="gold" size="xl">
-                Strategie-Briefing buchen →
+                Kostenlos testen →
               </Button>
             </Link>
             <Link
-              to="/register"
+              to="/preise"
               className="font-sans uppercase tracking-[0.2em] text-xs text-primary hover:text-primary/80 border-b border-primary/40 pb-1"
             >
-              Terminal-Zugang anfragen
+              Preise ansehen
             </Link>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 font-sans uppercase tracking-[0.3em] text-[10px] text-muted-foreground">
-            <span>Souverän</span>
+            <span>Ohne Kreditkarte</span>
             <span className="h-px w-6 bg-primary/40" />
-            <span>Diskret</span>
+            <span>5 Minuten zum Draft</span>
             <span className="h-px w-6 bg-primary/40" />
-            <span>By Invitation</span>
+            <span>Made in DACH</span>
           </div>
         </div>
       </section>
 
-      {/* 2. THE PAIN */}
+      {/* 2. PAIN */}
       <section className="border-t border-border/40">
         <div className="container py-32">
           <p className="font-sans uppercase tracking-[0.25em] text-[11px] text-primary mb-6">
-            ◆ 01 / Die Diagnose
+            ◆ 01 / Kennst du das?
           </p>
           <h2 className="font-serif italic text-4xl md:text-6xl tracking-tight mb-20 max-w-3xl">
-            Drei stille Killer Ihres EBITDA.
+            Drei Momente, in denen Selbständige Geld verlieren.
           </h2>
 
           <div className="grid md:grid-cols-3 gap-px bg-border/40 border border-border/40">
             {[
               {
-                label: "Asymmetrie",
-                text: "Ihr Tier-1-Lieferant kennt Ihre Wechselkosten besser als Sie selbst. Er weiß, dass Sie nicht gehen werden. Also bezahlen Sie jedes Jahr 12 % mehr — und nennen es „Inflation\u201C.",
+                label: "Der Preisdruck",
+                text: "„Können Sie da preislich noch was machen?" — Und plötzlich rabattierst du 15 %, weil dir kein Argument einfällt. Pro Auftrag. Jedes Jahr.",
               },
               {
-                label: "Emotion",
-                text: "Im entscheidenden Moment greift Ihr limbisches System ein. Sie reden, um die Stille zu füllen. Sie geben nach, um die Beziehung zu retten. Sie verlieren — höflich.",
+                label: "Die Honorarerhöhung",
+                text: "Seit zwei Jahren willst du den Stundensatz anheben. Aber wie formulierst du das, ohne den Kunden zu verlieren? Also bleibt alles, wie es ist.",
               },
               {
-                label: "Improvisation",
-                text: "Ihre Gegenseite hat ein Playbook, ein Legal-Team und drei Wochen Vorbereitung. Sie haben ein Bauchgefühl und einen vollen Kalender. Der Ausgang ist mathematisch determiniert.",
+                label: "Die Klausel",
+                text: "Ein Vertrag landet im Postfach: 14 Seiten, juristische Sprache, drei Tage Frist. Was übersiehst du dieses Mal — die Haftung, die Kündigungsfrist oder die Nutzungsrechte?",
               },
             ].map((p) => (
               <div key={p.label} className="bg-background p-10">
@@ -100,31 +101,31 @@ const Landing = () => {
           </div>
 
           <p className="font-serif italic text-xl md:text-2xl text-primary text-center mt-20 max-w-3xl mx-auto">
-            Verhandeln ohne System ist die teuerste Form von Optimismus.
+            Jede dieser Situationen kostet dich vierstellig — oft mehr.
           </p>
         </div>
       </section>
 
-      {/* 3. THE PARADIGM SHIFT */}
+      {/* 3. SOLUTION / DEMO */}
       <section className="border-t border-border/40 bg-card/30">
         <div className="container py-32 grid lg:grid-cols-5 gap-16 items-start">
           <div className="lg:col-span-3">
             <p className="font-sans uppercase tracking-[0.25em] text-[11px] text-primary mb-6">
-              ◆ 02 / Der unfaire Vorteil
+              ◆ 02 / Die Lösung
             </p>
             <h2 className="font-serif text-4xl md:text-6xl tracking-tight mb-10 leading-[1.05]">
-              PALLANX ist keine Software.
+              PALLANX ist kein Chatbot.
               <br />
-              Es ist eine <span className="italic text-primary">Doktrin</span>.
+              Es ist dein <span className="italic text-primary">Strategiestab</span>.
             </h2>
             <div className="space-y-6 font-serif text-lg text-muted-foreground leading-relaxed max-w-xl">
               <p>
-                Wir kombinieren die Verhörtaktik des FBI mit den spieltheoretischen Modellen,
-                die Hedgefonds für M&amp;A-Mandate einsetzen — und destillieren beides in ein
-                Terminal, das jede Ihrer Verhandlungen in Echtzeit kalibriert.
+                Du beschreibst kurz deine Situation. PALLANX kombiniert Spieltheorie mit der
+                Verhandlungs-Doktrin nach Voss („Never Split the Difference") — und gibt dir
+                Analyse, Strategie und einen fertigen Entwurf, den du direkt verschicken kannst.
               </p>
               <p className="text-foreground">
-                Das Ergebnis ist nicht „bessere Kommunikation". Das Ergebnis ist Souveränität.
+                Kein stundenlanges Prompten. Kein 300-€-Coaching-Call. Kein „mal sehen, wie's läuft".
               </p>
             </div>
 
@@ -132,18 +133,18 @@ const Landing = () => {
               {[
                 {
                   n: "01",
-                  t: "Wasserdichte Verträge.",
-                  s: "Klauseln, die Ihre Gegenseite unterschreibt, weil sie keine andere Wahl sieht.",
+                  t: "Höhere Honorare durchgesetzt.",
+                  s: "Du bekommst das passende Framing, die richtigen Anker und die Antwort auf jeden Einwand.",
                 },
                 {
                   n: "02",
-                  t: "Verteidigte Marge.",
-                  s: "Die Konzessionen finden auf der anderen Seite des Tisches statt.",
+                  t: "Klauseln im Griff.",
+                  s: "PALLANX liest Verträge, markiert kritische Stellen und schlägt Gegenformulierungen vor.",
                 },
                 {
                   n: "03",
-                  t: "Totale Kontrolle.",
-                  s: "Sie diktieren das Tempo, das Framing und den Ausgang.",
+                  t: "Fertige Mail in 5 Minuten.",
+                  s: "Statt zwei Stunden Grübeln: ein durchdachter Entwurf, den du nur noch absendest.",
                 },
               ].map((o) => (
                 <div key={o.n} className="py-6 flex gap-6">
@@ -167,17 +168,17 @@ const Landing = () => {
                   ◆ Pallanx // Live
                 </span>
                 <span className="font-sans uppercase tracking-[0.25em] text-[10px] text-muted-foreground">
-                  Mandate #04-26
+                  Fall #2089
                 </span>
               </div>
 
               <div className="space-y-5 font-sans text-xs">
                 {[
-                  ["Leverage Index", "0.84"],
-                  ["BATNA", "Secured"],
-                  ["Concession Ceiling", "3.2 %"],
-                  ["Counterparty Profile", "Analytical / Risk-Averse"],
-                  ["Anchor Position", "+18 % Above Target"],
+                  ["Situation", "Honorarerhöhung"],
+                  ["Kunde", "Bestand, 2 Jahre"],
+                  ["Empfohlener Anker", "+22 %"],
+                  ["Plausibler Abschluss", "+18 %"],
+                  ["Risiko Abwanderung", "Niedrig"],
                 ].map(([k, v]) => (
                   <div key={k} className="flex items-baseline justify-between gap-4">
                     <span className="uppercase tracking-[0.2em] text-[10px] text-muted-foreground">
@@ -190,97 +191,114 @@ const Landing = () => {
 
               <div className="mt-8 pt-6 border-t border-primary/30">
                 <p className="font-sans uppercase tracking-[0.25em] text-[10px] text-muted-foreground mb-2">
-                  Recommended Move
+                  Empfohlener Zug
                 </p>
-                <p className="font-serif italic text-lg text-primary">Anchor High. Hold Silence.</p>
+                <p className="font-serif italic text-lg text-primary">Hoch ankern. Pause halten.</p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 4. THE ARENAS */}
+      {/* 4. VERGLEICH */}
       <section className="border-t border-border/40">
         <div className="container py-32">
           <p className="font-sans uppercase tracking-[0.25em] text-[11px] text-primary mb-6">
-            ◆ 03 / Einsatzgebiete
+            ◆ 03 / Vergleich
           </p>
-          <h2 className="font-serif text-4xl md:text-6xl tracking-tight mb-20">
-            Wo PALLANX operiert.
+          <h2 className="font-serif text-4xl md:text-6xl tracking-tight mb-20 max-w-3xl">
+            Verhandlungs-Coach für 300 €/Std. — oder PALLANX für 49 €/Monat.
           </h2>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-px bg-border/40 border border-border/40">
+          <div className="grid md:grid-cols-2 gap-px bg-border/40 border border-border/40">
             {[
               {
                 n: "I",
-                t: "M&A Earn-Outs",
-                s: "Wenn 18 Monate nach Closing entschieden wird, ob Ihr Exit ein Triumph oder eine Fußnote war.",
+                t: "Klassischer Coach",
+                s: "180–300 € pro Stunde. Termin in 2 Wochen frei. Du erzählst, er gibt Tipps. Schreiben musst du am Ende selbst — meistens nachts vor dem Termin.",
               },
               {
                 n: "II",
-                t: "Tier-1 Vendor Renewals",
-                s: "Wenn SAP, Salesforce oder AWS das Gespräch mit „geringfügigen Anpassungen\u201C eröffnen.",
-              },
-              {
-                n: "III",
-                t: "Hostile B2B Disputes",
-                s: "Wenn die Anwaltskanzlei der Gegenseite teurer ist als Ihre Forderung.",
-              },
-              {
-                n: "IV",
-                t: "Board & Investor Negotiations",
-                s: "Wenn Term Sheets über Kontrollmehrheiten entscheiden und jedes Komma zählt.",
+                t: "PALLANX",
+                s: "49 € im Monat (oder 29 € für einen einzelnen Fall). Sofort verfügbar. Analyse, Strategie und fertiger Mail-Entwurf in unter 5 Minuten — auf Deutsch.",
               },
             ].map((a) => (
-              <div key={a.n} className="bg-background p-8 min-h-[220px] flex flex-col">
+              <div key={a.n} className="bg-background p-10 min-h-[260px] flex flex-col">
                 <span className="font-serif italic text-primary text-2xl mb-8">{a.n}</span>
-                <p className="font-serif text-xl mb-3">{a.t}</p>
-                <p className="text-sm text-muted-foreground leading-relaxed">{a.s}</p>
+                <p className="font-serif text-2xl mb-4">{a.t}</p>
+                <p className="text-base text-muted-foreground leading-relaxed">{a.s}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* 5. THE FINAL GATE */}
+      {/* 5. USE CASES */}
+      <section className="border-t border-border/40 bg-card/30">
+        <div className="container py-32">
+          <p className="font-sans uppercase tracking-[0.25em] text-[11px] text-primary mb-6">
+            ◆ 04 / Typische Fälle
+          </p>
+          <h2 className="font-serif text-4xl md:text-6xl tracking-tight mb-20 max-w-3xl">
+            Wofür Selbständige PALLANX nutzen.
+          </h2>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-px bg-border/40 border border-border/40">
+            {[
+              { t: "Honorarerhöhung beim Bestandskunden", s: "Wie heben Sie 15 % an, ohne den Kunden zu verlieren? PALLANX baut Anker, Framing und Antwort auf jeden Einwand." },
+              { t: "Projektpreis verteidigen", s: "Kunde will 20 % runter. PALLANX zeigt, warum nicht — und wie du es so sagst, dass es niemand persönlich nimmt." },
+              { t: "Vertrag prüfen", s: "Lade den Vertrag hoch. PALLANX markiert kritische Klauseln und liefert Gegenvorschläge." },
+              { t: "Kunde will Rabatt", s: "Standardantworten reichen nicht mehr. Du bekommst eine Reaktion, die den Wert betont — nicht den Preis." },
+              { t: "Gehalts- oder Konditionsgespräch", s: "Auch als Angestellter mit Nebengewerbe: BATNA, Skripte, Einwand-Behandlung." },
+              { t: "Kündigung / Konflikt mit Auftraggeber", s: "Sachlich, juristisch sauber, ohne Eskalation — und doch durchsetzungsfähig." },
+            ].map((u) => (
+              <div key={u.t} className="bg-background p-8 min-h-[200px] flex flex-col">
+                <p className="font-serif text-lg mb-3 text-foreground">{u.t}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{u.s}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 6. FINAL CTA */}
       <section className="border-y border-primary/60">
         <div className="container py-40 max-w-3xl text-center">
           <p className="font-sans uppercase tracking-[0.3em] text-[11px] text-primary mb-8">
-            ◆ Evaluation
+            ◆ Jetzt starten
           </p>
           <h2 className="font-serif text-5xl md:text-7xl tracking-tight leading-[1.05] mb-10">
-            30 Minuten.
+            Starte deinen ersten Fall.
             <br />
-            Oder die nächsten <span className="italic text-primary">€500.000</span>.
+            <span className="italic text-primary">Kostenlos.</span> Ohne Kreditkarte.
           </h2>
           <div className="space-y-6 font-serif text-lg md:text-xl text-muted-foreground leading-relaxed mb-14 max-w-2xl mx-auto">
             <p>
-              Der nächste 5-Millionen-Deal verliert 10 %, wenn Sie unvorbereitet hineingehen.
-              Das sind 500.000 €, die Sie nie sehen werden — und nie vermissen, weil sie nie
-              auf Ihrem Konto waren.
+              Beschreibe in 2 Minuten deine Situation — Honorarerhöhung, schwieriger Kunde,
+              Vertragsklausel. Du bekommst Analyse, Strategie und fertigen Entwurf.
             </p>
             <p className="text-foreground">
-              Das Strategie-Briefing dauert 30 Minuten. Wir prüfen, ob Ihre Mandatslage PALLANX
-              rechtfertigt. Wenn nicht, sagen wir es Ihnen.
+              1 Fall sofort, danach 1 weiterer pro Monat dauerhaft kostenlos.
+              Brauchst du mehr? Pro ab 49 € oder ein Single-Case-Pass für 29 €.
             </p>
           </div>
 
           <div className="flex flex-col items-center gap-6">
             <Link to="/register">
               <Button variant="gold" size="xl">
-                Strategie-Briefing anfragen →
+                Jetzt kostenlos testen →
               </Button>
             </Link>
             <Link
-              to="/register"
+              to="/preise"
               className="font-sans uppercase tracking-[0.2em] text-xs text-primary hover:text-primary/80 border-b border-primary/40 pb-1"
             >
-              Eligibility prüfen lassen
+              Alle Tarife ansehen
             </Link>
           </div>
 
           <p className="font-serif italic text-sm text-muted-foreground mt-12">
-            By invitation. Limitiertes Mandatskontingent pro Quartal.
+            Made in DACH · Daten bleiben in Europa · Jederzeit kündbar
           </p>
         </div>
       </section>
@@ -289,7 +307,7 @@ const Landing = () => {
       </main>
       <footer className="container py-10 flex flex-col md:flex-row gap-4 justify-between items-center text-[10px] font-sans uppercase tracking-[0.25em] text-muted-foreground">
         <Logo />
-        <span>PALLANX // Elite Negotiation Terminal</span>
+        <span>PALLANX // Dein KI-Verhandlungsstratege</span>
         <div className="flex gap-6">
           <a href="#" className="hover:text-primary">Impressum</a>
           <a href="#" className="hover:text-primary">Datenschutz</a>
