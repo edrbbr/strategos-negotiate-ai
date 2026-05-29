@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { track } from "@/lib/analytics";
 
 /**
  * Hero conversion input — captures the user's situation in one line and
@@ -22,6 +23,7 @@ export const HeroCaseInput = () => {
         /* ignore */
       }
     }
+    track("hero_input_submitted", { length: trimmed.length });
     navigate("/register");
   };
 
