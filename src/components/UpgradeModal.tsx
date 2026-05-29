@@ -10,9 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Diamond, Loader2 } from "lucide-react";
 import pallanxLogo from "@/assets/pallanx-logo.png";
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useStripeCheckout } from "@/hooks/useStripeCheckout";
+import { track } from "@/lib/analytics";
 import {
   formatPrice,
   getPriceForCycle,
@@ -92,18 +93,24 @@ export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
   const { openCheckout, closeCheckout, isOpen, checkoutElement } =
     useStripeCheckout();
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (open) track("upgrade_modal_shown", { plan_id: profile?.plan_id ?? "free" });
+  }, [open, profile?.plan_id]);
   const upgradePlans = (plans ?? []).filter(
     (p) => p.id === "pro" || p.id === "elite",
   );
 
   const handleUpgrade = () => {
     const priceId = "pro_monthly";
+    track("upgrade_cta_clicked", { price_id: priceId, has_user: !!user });
     if (!user) {
       onOpenChange(false);
       navigate(`/register?intent=checkout&price_id=${priceId}`);
       return;
     }
     setPending(true);
+    track("checkout_started", { price_id: priceId });
     openCheckout({
       priceId,
       customerEmail: user.email ?? undefined,
