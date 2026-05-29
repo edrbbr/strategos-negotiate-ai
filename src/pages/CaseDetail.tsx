@@ -428,6 +428,25 @@ const CaseDetail = () => {
       <div className="grid lg:grid-cols-2 gap-10">
         {/* Left column */}
         <div className="space-y-8">
+          {firstCaseLabel && (
+            <div className="border border-primary/30 bg-primary/5 rounded-sm px-5 py-4 flex items-start gap-3 animate-fade-in">
+              <Sparkles className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="font-mono-label text-primary mb-1">Dein erster Fall · {firstCaseLabel}</p>
+                <p className="font-serif italic text-sm text-foreground/80 leading-snug">
+                  Wir haben deine Situation vorbereitet. Ergänze Details, dann starte die Pipeline — in ~2 Minuten hast du Analyse, Strategie und einen fertigen Draft.
+                </p>
+              </div>
+            </div>
+          )}
+          {!firstCaseLabel && !caseId && situation && (
+            <div className="border border-primary/30 bg-primary/5 rounded-sm px-5 py-4 flex items-start gap-3 animate-fade-in">
+              <Sparkles className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <p className="font-serif italic text-sm text-foreground/80 leading-snug">
+                Deine Situation aus der Startseite ist übernommen. Ergänze Details und starte die Pipeline.
+              </p>
+            </div>
+          )}
           <div>
             <p className="font-mono-label text-primary mb-3">◆ Situationsbeschreibung</p>
             <textarea
