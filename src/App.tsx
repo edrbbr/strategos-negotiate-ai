@@ -20,6 +20,7 @@ import Settings from "./pages/Settings";
 import Billing from "./pages/Billing";
 import Admin from "./pages/Admin";
 import AdminContent from "./pages/AdminContent";
+import AdminAnalytics from "./pages/AdminAnalytics";
 import { AdminRoute } from "@/components/AdminRoute";
 import NotFound from "./pages/NotFound";
 import Unsubscribe from "./pages/Unsubscribe";
@@ -83,6 +84,14 @@ const App = () => (
               element={
                 <AdminRoute>
                   <AdminContent />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/analytics"
+              element={
+                <AdminRoute>
+                  <AdminAnalytics />
                 </AdminRoute>
               }
             />
