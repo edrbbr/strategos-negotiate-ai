@@ -30,6 +30,8 @@ import {
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { TonalitySelect } from "@/components/TonalitySelect";
 import { UpgradePreviewPanel } from "@/components/UpgradePreviewPanel";
+import { consumeFirstCasePrefill } from "@/lib/firstCaseFlow";
+import { Sparkles as SparklesIcon } from "lucide-react";
 
 type StageState = "pending" | "running" | "complete" | "failed";
 type Tier = "free" | "pro" | "elite";
@@ -108,6 +110,22 @@ const CaseDetail = () => {
     draft: "pending",
   });
   const [stageMeta, setStageMeta] = useState<{ failed_at?: "analysis"|"strategy"|"draft"; error?: string }>({});
+  // Phase 2 — First Case Flow: label of the use-case the user picked on the landing page.
+  const [firstCaseLabel, setFirstCaseLabel] = useState<string | null>(null);
+
+  // Consume hero/use-case prefill exactly once when we land on /app/case/new.
+  useEffect(() => {
+    if (caseId) return; // only for brand-new cases
+    const prefill = consumeFirstCasePrefill();
+    if (!prefill) return;
+    if (prefill.situation) {
+      setSituation((prev) => (prev ? prev : prefill.situation));
+    }
+    if (prefill.caseTypeLabel) {
+      setFirstCaseLabel(prefill.caseTypeLabel);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Hydrate form once when case loads
   useEffect(() => {
