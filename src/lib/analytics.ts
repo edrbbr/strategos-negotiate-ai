@@ -48,13 +48,15 @@ export function track(event: AnalyticsEvent, properties: Record<string, unknown>
     try {
       const { data } = await supabase.auth.getSession();
       const user_id = data.session?.user?.id ?? null;
-      await supabase.from("analytics_events").insert({
-        user_id,
-        session_id: getOrCreateSessionId(),
-        event_name: event,
-        properties,
-        path: typeof window !== "undefined" ? window.location.pathname : null,
-      });
+      await supabase.from("analytics_events").insert([
+        {
+          user_id,
+          session_id: getOrCreateSessionId(),
+          event_name: event,
+          properties: properties as never,
+          path: typeof window !== "undefined" ? window.location.pathname : null,
+        } as never,
+      ]);
     } catch {
       /* swallow */
     }
