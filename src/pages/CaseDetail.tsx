@@ -31,7 +31,6 @@ import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { TonalitySelect } from "@/components/TonalitySelect";
 import { UpgradePreviewPanel } from "@/components/UpgradePreviewPanel";
 import { consumeFirstCasePrefill } from "@/lib/firstCaseFlow";
-import { Sparkles as SparklesIcon } from "lucide-react";
 
 type StageState = "pending" | "running" | "complete" | "failed";
 type Tier = "free" | "pro" | "elite";
