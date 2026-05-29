@@ -7,11 +7,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Seo } from "@/components/Seo";
+import { postAuthRedirect } from "@/lib/firstCaseFlow";
 
 const Login = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const returnUrl = params.get("returnUrl") || "/app/dashboard";
+  // If the user arrived from the landing hero with a stashed situation,
+  // skip the dashboard and drop them straight into a pre-filled new case.
+  const returnUrl = params.get("returnUrl") || postAuthRedirect();
   const { signInWithEmail, signInWithGoogle, isAuthenticated } = useAuth();
 
   const [email, setEmail] = useState("");

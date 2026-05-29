@@ -30,6 +30,7 @@ import {
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { TonalitySelect } from "@/components/TonalitySelect";
 import { UpgradePreviewPanel } from "@/components/UpgradePreviewPanel";
+import { consumeFirstCasePrefill } from "@/lib/firstCaseFlow";
 
 type StageState = "pending" | "running" | "complete" | "failed";
 type Tier = "free" | "pro" | "elite";
@@ -108,6 +109,22 @@ const CaseDetail = () => {
     draft: "pending",
   });
   const [stageMeta, setStageMeta] = useState<{ failed_at?: "analysis"|"strategy"|"draft"; error?: string }>({});
+  // Phase 2 — First Case Flow: label of the use-case the user picked on the landing page.
+  const [firstCaseLabel, setFirstCaseLabel] = useState<string | null>(null);
+
+  // Consume hero/use-case prefill exactly once when we land on /app/case/new.
+  useEffect(() => {
+    if (caseId) return; // only for brand-new cases
+    const prefill = consumeFirstCasePrefill();
+    if (!prefill) return;
+    if (prefill.situation) {
+      setSituation((prev) => (prev ? prev : prefill.situation));
+    }
+    if (prefill.caseTypeLabel) {
+      setFirstCaseLabel(prefill.caseTypeLabel);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Hydrate form once when case loads
   useEffect(() => {
@@ -411,6 +428,25 @@ const CaseDetail = () => {
       <div className="grid lg:grid-cols-2 gap-10">
         {/* Left column */}
         <div className="space-y-8">
+          {firstCaseLabel && (
+            <div className="border border-primary/30 bg-primary/5 rounded-sm px-5 py-4 flex items-start gap-3 animate-fade-in">
+              <Sparkles className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="font-mono-label text-primary mb-1">Dein erster Fall · {firstCaseLabel}</p>
+                <p className="font-serif italic text-sm text-foreground/80 leading-snug">
+                  Wir haben deine Situation vorbereitet. Ergänze Details, dann starte die Pipeline — in ~2 Minuten hast du Analyse, Strategie und einen fertigen Draft.
+                </p>
+              </div>
+            </div>
+          )}
+          {!firstCaseLabel && !caseId && situation && (
+            <div className="border border-primary/30 bg-primary/5 rounded-sm px-5 py-4 flex items-start gap-3 animate-fade-in">
+              <Sparkles className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <p className="font-serif italic text-sm text-foreground/80 leading-snug">
+                Deine Situation aus der Startseite ist übernommen. Ergänze Details und starte die Pipeline.
+              </p>
+            </div>
+          )}
           <div>
             <p className="font-mono-label text-primary mb-3">◆ Situationsbeschreibung</p>
             <textarea
