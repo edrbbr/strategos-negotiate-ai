@@ -48,7 +48,7 @@ export const PublicHeader = ({ active }: PublicHeaderProps) => {
             </Link>
             <Link to="/login">
               <Button variant="gold-outline" size="sm">
-                Verhandlung starten
+                Ersten Fall starten
               </Button>
             </Link>
           </>
