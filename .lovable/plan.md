@@ -1,54 +1,78 @@
-## Korrekturen an `pallanx-pro-pitch.pptx`
+## Ausgangslage (aus GTM-Plan)
 
-Zwei gezielte Fixes am Generator-Skript, damit die PPTX exakt dem Light-Theme der Webseite (Gold auf Weiß, Newsreader + Space Grotesk) entspricht.
+Die aktuelle Positionierung („Elite-Verhandlungs-Terminal für C-Level, 5-Mio-Deals, by invitation") trifft die falsche Zielgruppe. Laut Analyse:
 
-### 1. Farbpalette: Light Theme (Gold auf Weiß)
+- **Beachhead = deutschsprachige Solo-Selbständige, Freelancer, Berater/Coaches** (~1,8 Mio. DE) — nicht KMU-Geschäftsführer.
+- **Marktlücke real**: kein direkter DE-Wettbewerber; Hauptkonkurrent sind generische LLMs + menschliche Coaches (€180–300/Std).
+- **Preis €49/Pro = richtig**, aber Free zu knapp („3 lifetime") und Elite €199 für Beachhead irrelevant.
+- **Hauptkanal**: LinkedIn „Building in Public" + PLG-Funnel.
 
-Aus `src/index.css` (`:root`, Light Mode) übernommen — nicht mehr Dark Mode:
+## Entscheidungen (vom User bestätigt)
 
-| Token | Alt (Dark) | Neu (Light, Hex) | HSL-Quelle |
-|---|---|---|---|
-| Background | `#0B0B0C` | `#FFFFFF` | `0 0% 100%` |
-| Surface / Card | — | `#FAFAFA` | `0 0% 98%` |
-| Foreground | `#F0EADD` | `#1A1A1A` | `0 0% 10%` |
-| Muted Foreground | `#8A8478` | `#666666` | `0 0% 40%` |
-| Primary / Gold | `#D4B158` | `#A4863E` | `41 45% 44%` |
-| Gold Dim / Border | `#2A2825` | `#E6E6E6` | `0 0% 90%` |
+- **Elite**: bleibt sichtbar, aber dezent als „Auf Anfrage" (kein Self-Serve-Checkout).
+- **Single-Case-Pass €29**: wird jetzt mit umgesetzt.
+- **Ausführung**: alle drei Phasen direkt durchziehen, keine Zwischenabnahme.
 
-Anpassungen pro Slide-Typ:
-- Cover/CTA/Pull-Quote: weißer Hintergrund, schwarze Headline, Gold-Akzente (Diamant „◆", Trennlinien, Mandate-Code)
-- Stat-Slides: große Zahl in Gold `#A4863E`, Labels in `#1A1A1A`, Captions in `#666666`
-- Terminal-Demo-Slide: hellgraues Surface `#FAFAFA` mit Gold-Border `#A4863E` statt schwarzem Panel; Key/Value-Rows in Schwarz, Werte in Gold
-- 2×2 / 3-Spalten-Grids: weißer Karten-Hintergrund, dünne `#E6E6E6` Borders, Gold-Diamant als Marker
-- Footer/Page-Number: `#666666` auf Weiß
+## Phase 1 — Positionierung & Tarifstruktur
 
-### 2. Schriftarten: Newsreader + Space Grotesk einbetten
+**Reframe**: „Dein KI-Verhandlungsstratege. Für Selbständige, Freelancer und Berater, die bessere Honorare, Preise und Verträge verhandeln."
 
-Auf der Webseite (aus `src/index.css` Google-Fonts-Import + `tailwind.config.ts`):
-- **Serif (Headlines, Body-Default)**: `Newsreader`
-- **Sans (Labels, Kicker, Mono-artiges)**: `Space Grotesk`
+**Tarif-Änderungen** (DB-Migration auf `plans`, `plan_prices`, `plan_features`):
 
-Aktuell nutzt das Skript Platzhalter wie „Playfair / Cormorant / Inter", die auf dem Gerät des Betrachters nicht garantiert vorhanden sind → PowerPoint fällt auf Calibri/Arial zurück.
+| Tarif | Aktuell | Neu |
+|---|---|---|
+| Free | 3 Fälle lifetime | **1 voller Fall sofort + 1 Fall/Monat dauerhaft** (`case_limit_type='monthly'`, `case_limit=1`, plus Onboarding-Bonus) |
+| Pro | €49/Mt · €468/Jahr · 15 Fälle/Monat | €49/Mt · **€490/Jahr** („2 Monate gratis") · **20 Fälle/Monat** |
+| Elite | €199/Mt, by invitation, prominent | **Bleibt sichtbar, aber dezent als „Auf Anfrage"** — kein Self-Serve-Checkout, kleinerer visueller Footprint auf Pricing/Landing |
+| **Single-Case-Pass** *(neu)* | — | **€29 Einmalkauf**, 1 vollständiger Fall, kein Abo |
 
-Lösung — echtes Font-Embedding im PPTX:
-1. Im Build-Schritt die TTF-Dateien für `Newsreader` und `Space Grotesk` von Google Fonts herunterladen (Regular, Italic, 500, 600, 700) und nach `/tmp/fonts/` legen
-2. `pptxgenjs` selbst kann keine Fonts in die PPTX einbetten — daher Post-Processing: PPTX entpacken, Fonts unter `ppt/fonts/` als `.fntdata` ablegen, Einträge in `ppt/presentation.xml` (`<p:embeddedFontLst>`) und `ppt/_rels/presentation.xml.rels` ergänzen, Content-Types erweitern, neu zippen
-3. In allen `slide.addText(...)`-Aufrufen `fontFace: "Newsreader"` bzw. `"Space Grotesk"` explizit setzen (statt der bisherigen Platzhalter-Namen), damit die eingebetteten Fonts beim Öffnen gezogen werden
-4. Validierung: PPTX entpacken und prüfen, dass `ppt/fonts/` die TTFs enthält und `presentation.xml` die `embeddedFont`-Einträge listet
+**Feature-Texte** komplett neu in „Selbständigen-Sprache": Honorar- statt M&A-Beispiele, „dein Kunde sagt Nein" statt „Tier-1-Vendor", etc.
 
-### 3. QA
+Stripe: Pro-Yearly-Preis-ID auf €490 aktualisieren (neue Price-ID via `payments--create_price`, alte deaktivieren); Single-Case-Pass als neues One-Time-Produkt `single_case_pass` / `single_case_one_time` €29 via `payments--create_product`.
 
-- LibreOffice → PDF → `pdftoppm` JPGs für alle 13 Slides
-- Visuell prüfen: weißer Hintergrund überall, ausreichender Kontrast (Gold `#A4863E` auf Weiß ist WCAG-AA-grenzwertig → für reine Text-Labels Schwarz statt Gold verwenden, Gold nur für Akzente/Zahlen/Linien)
-- Terminal-Slide besonders prüfen (war zuvor dominant dunkel)
-- Output: `pallanx-pro-pitch_v2.pptx` (neue Datei, Original bleibt zum Vergleich)
+## Phase 2 — Landingpage Rewrite (`src/pages/Landing.tsx`)
 
-### Was nicht passiert
+Komplette Neufassung in 6 Sektionen, Visual-Theme (Gold auf Weiß, Newsreader/Space Grotesk) bleibt:
 
-- Keine Änderungen am App-Code, Routen, Stripe oder Pricing
-- Keine inhaltlichen Slide-Änderungen — nur Farben + Fonts
-- Kein neues Design — exakte Übernahme des bestehenden Light-Themes der Webseite
+1. **Hero**: „Du bist brillant in deinem Fach. Aber bei jeder Honorarverhandlung lässt du Geld liegen." → CTA „Kostenlos testen" (statt „Strategie-Briefing anfragen").
+2. **Pain**: 3 Schmerzpunkte der Selbständigen (Kunde drückt Preis, Vertragsklausel übersehen, Honorarerhöhung wagen).
+3. **Lösung/Demo**: gleiches Terminal-Mock, aber mit „Stundensatz +18 %", „Honorar verteidigt", „Mail-Entwurf in 5 Min".
+4. **Vergleich**: PALLANX (€49/Mt, 5 Min, fertiger Draft) vs. Coach (€300/Std).
+5. **Use Cases**: Honorarverhandlung · Projektpreis · Vertrag/Klausel · Kunde-will-Rabatt · Gehalts-/Konditionsgespräch.
+6. **Final CTA**: „Starte deinen ersten Fall — kostenlos, ohne Kreditkarte." Invitation-/Quota-Sprache entfernen.
 
-### Hinweis zu Credits
+`PublicHeader`, Pricing-Seite (Texte + Single-Case-Pass-Tile + Elite dezent als „Auf Anfrage"-Card), `Register`-Page-Copy, SEO-Titel/-Description ebenfalls angleichen.
 
-Eine Rückerstattung von Credits kann ich technisch nicht selbst auslösen — das läuft über das Lovable-Support-Team. Du kannst die Anfrage über das Hilfe-Menü (Support) im Lovable-Dashboard stellen; ich erstelle die korrigierte Version v2 ohne weitere Rückfragen.
+## Phase 3 — Sales-Pitch v3 neu (`pallanx-pro-pitch_v3.pptx`)
+
+13–15 Slides, weißes Theme + eingebettete Fonts wie v2, aber inhaltlich auf GTM ausgerichtet:
+
+1. Cover: „Du verlierst Honorar. In jedem Angebot."
+2. Schmerz: 3 typische Verhandlungen pro Monat × €500 verloren = €18.000/Jahr
+3. „Coach €300/Std vs. ChatGPT-Stundenlang" — Status quo
+4. PALLANX-Doktrin: Spieltheorie + taktische Empathie, in 5 Minuten
+5. Live-Demo-Mock (Honorarfall)
+6. Output: Analyse + Strategie + fertiger Mail-Draft auf Deutsch
+7. Use-Cases (5 typische Selbständigen-Situationen)
+8. Free → Pro Funnel (Free testen, Pro €49 = 1 gewonnener Auftrag amortisiert ein Jahr)
+9. Pricing (Free / Pro €49 mo / €490 Jahr / Single-Case €29 / Elite auf Anfrage)
+10. Risk Reversal: ohne Kreditkarte testen
+11. Einwände (Preis, „mache ich selbst mit ChatGPT", Datenschutz/DACH-Hosting)
+12. Konkurrenz-Landschaft (Crystal, Pactum, Coaches) → Lücke
+13. Roadmap: Solo → Sales-Teams → Procurement
+14. CTA: „Erster Fall jetzt kostenlos"
+
+## Technische Details
+
+- **Migration**: `plans`-Update (Free auf `monthly`/1, Pro auf 20/Monat, Elite-Flag für „auf Anfrage"); neues Produkt-Modell für Single-Case-Pass — entweder eigener Plan-Eintrag `single_case` (`case_limit_type='lifetime'`, `case_limit=1`, `bookable_directly=true`) oder Wiederverwendung von `extra_credit_purchases`. Empfehlung: eigener Plan-Eintrag mit `tier_key='single_case'` + One-Time-Stripe-Produkt, da semantisch sauberer.
+- **`sync_profile_from_subscription`**: aktualisierte Price-ID-Mappings (`pro_yearly` → €490 neue Stripe-ID), Single-Case läuft NICHT als Subscription, sondern via Webhook `checkout.session.completed` → Credit auf `extra_credits` (oder neue Spalte) gutschreiben.
+- **`hooks/usePlans.ts`, `PlanCard.tsx`**: Single-Case-Pass als 4. Tile rendern; Elite-Card dezenter (kleinere Höhe, „Kontakt aufnehmen"-CTA statt Checkout).
+- **Stripe-Webhook** (`payments-webhook`): One-Time-Checkout-Sessions für Single-Case erkennen und Credit gutschreiben.
+- **SEO**: `Seo`-Tags auf neue Positionierung umstellen.
+- **Auth/Edge-Funktionen**: keine Änderungen an `strategos-ai-router`, Refinement-Logik, Auth, RLS.
+
+## Out of Scope
+
+- Keine Änderungen an AI-Routing, Auth, E-Mail-Versand.
+- Keine neuen Sprachen, kein neues Design-System — bestehendes Light-Theme bleibt.
+- Bestehende Pro-Abonnenten behalten ihren aktuellen Preis (Stripe-Grandfathering); nur Neukunden bekommen €490/Jahr.
