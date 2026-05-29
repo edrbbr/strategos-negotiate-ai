@@ -78,7 +78,7 @@ const Landing = () => {
             {[
               {
                 label: "Der Preisdruck",
-                text: "„Können Sie da preislich noch was machen?" — Und plötzlich rabattierst du 15 %, weil dir kein Argument einfällt. Pro Auftrag. Jedes Jahr.",
+                text: '„Können Sie da preislich noch was machen?" — und plötzlich rabattierst du 15 %, weil dir kein Argument einfällt. Pro Auftrag. Jedes Jahr.',
               },
               {
                 label: "Die Honorarerhöhung",
