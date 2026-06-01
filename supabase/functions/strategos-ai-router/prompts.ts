@@ -185,7 +185,7 @@ export const MOCK_RESPONSE = {
     "Sehr geehrte Damen und Herren,\n\nwir haben die vorliegenden Parameter sorgfältig geprüft. Während die technische Spezifikation unseren Anforderungen entspricht, ist die aktuelle Zahlungsziel-Regelung in dieser Form für uns nicht abbildbar. Wir schlagen vor, den Fokus auf eine exklusive Revisionsklausel nach 6 Monaten zu legen, um die Partnerschaft agil und für beide Seiten tragfähig zu halten.\n\nWir gehen davon aus, dass Ihnen an einer zügigen Einigung vor Quartalsende gelegen ist und erwarten Ihre Rückmeldung bis Freitag, 17:00 Uhr.\n\nMit freundlichen Grüßen",
   variants: {
     soft:
-      "Sehr geehrte Damen und Herren,\n\nvielen Dank für Ihr Angebot. Es klingt, als sei Ihnen eine standardisierte Lösung zum Quartalsende wichtig — verständlich. Aus unserer Sicht passt die aktuelle Zahlungsfrist nicht zu unserer Liquiditätsplanung. Wäre eine Revisionsklausel nach sechs Monaten für Sie denkbar, sodass wir gemeinsam nachjustieren können?\n\nMit freundlichen Grüßen",
+      "Sehr geehrte Damen und Herren,\n\nvielen Dank für Ihr Angebot. Es klingt, als sei Ihnen eine standardisierte Lösung zum Quartalsende wichtig. Die aktuelle Zahlungsfrist können wir in dieser Form nicht abbilden — tragfähig wird die Vereinbarung mit einer Revisionsklausel nach sechs Monaten. Auf dieser Basis können wir noch diese Woche unterzeichnen.\n\nMit freundlichen Grüßen",
     neutral:
       "Sehr geehrte Damen und Herren,\n\nwir haben die vorliegenden Parameter geprüft. Die technische Spezifikation passt; die Zahlungsfrist in der aktuellen Form ist für uns nicht abbildbar. Wir schlagen eine Revisionsklausel nach sechs Monaten vor. Bitte teilen Sie uns Ihre Rückmeldung bis Freitag mit.\n\nMit freundlichen Grüßen",
     hard:
