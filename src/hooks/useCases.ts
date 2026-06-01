@@ -51,7 +51,7 @@ export function useCase(caseId: string | undefined) {
         .eq("id", caseId!)
         .maybeSingle();
       if (error) throw error;
-      return data as CaseRow | null;
+      return data as unknown as CaseRow | null;
     },
   });
 }
@@ -68,7 +68,7 @@ export function useAllCases() {
         .select("*")
         .order("updated_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as CaseRow[];
+      return (data ?? []) as unknown as CaseRow[];
     },
   });
 }
@@ -142,7 +142,7 @@ export function useCreateCase() {
         .select("*")
         .single();
       if (error) throw error;
-      return data as CaseRow;
+      return data as unknown as CaseRow;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cases"] });
@@ -156,12 +156,12 @@ export function useUpdateCase() {
     mutationFn: async (params: { id: string; patch: Partial<CaseRow> }) => {
       const { data, error } = await supabase
         .from("cases")
-        .update(params.patch)
+        .update(params.patch as never)
         .eq("id", params.id)
         .select("*")
         .single();
       if (error) throw error;
-      return data as CaseRow;
+      return data as unknown as CaseRow;
     },
     onSuccess: (data) => {
       qc.setQueryData(["case", data.id], data);
@@ -181,7 +181,7 @@ export function useArchiveCase() {
         .select("*")
         .single();
       if (error) throw error;
-      return data as CaseRow;
+      return data as unknown as CaseRow;
     },
     onSuccess: (data) => {
       qc.setQueryData(["case", data.id], data);
