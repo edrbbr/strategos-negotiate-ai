@@ -362,6 +362,12 @@ Deno.serve(async (req) => {
     }
 
     if (phase === "embed") {
+      if (await isCancelled(bookKey)) {
+        return new Response(JSON.stringify({ ok: true, phase: "embed", cancelled: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const res = await phaseEmbed(bookKey);
       if (!res.done) {
         scheduleNext({ book_key: bookKey, phase: "embed" });
@@ -373,13 +379,10 @@ Deno.serve(async (req) => {
     }
 
     if (phase === "start") {
-      const { count, error: countError } = await admin
-        .from("knowledge_chunks")
-        .select("id", { count: "exact", head: true })
-        .eq("book_key", bookKey);
-      if (countError) throw new Error(`Count chunks: ${countError.message}`);
-      scheduleNext({ book_key: bookKey, phase: "embed" });
-      return new Response(JSON.stringify({ ok: true, phase: "start", total_chunks: count ?? 0, status: "indexing" }), {
+      // For user-initiated start: do extract+chunk+seed synchronously in this invocation,
+      // then schedule the embed loop in the background.
+      const { total } = await phaseStart(bookKey);
+      return new Response(JSON.stringify({ ok: true, phase: "start", total_chunks: total, status: "indexing" }), {
         status: 202,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
