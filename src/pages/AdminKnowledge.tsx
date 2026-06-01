@@ -21,6 +21,10 @@ type Book = {
   error_message: string | null;
   indexed_at: string | null;
   updated_at: string;
+  progress_phase: string | null;
+  progress_done: number;
+  progress_total: number;
+  progress_updated_at: string | null;
 };
 
 const STATUS_STYLE: Record<Book["status"], string> = {
@@ -40,6 +44,15 @@ const STATUS_LABEL: Record<Book["status"], string> = {
 };
 
 const CHUNK_UPLOAD_BATCH_SIZE = 100;
+
+const STALL_THRESHOLD_MS = 90_000; // 90s ohne Fortschritt => festhängend
+
+const PHASE_LABEL: Record<string, string> = {
+  extracting_pdf: "PDF wird gelesen…",
+  seeding: "Chunks werden hochgeladen…",
+  embedding: "Embeddings werden erzeugt…",
+  stalled: "Steckt fest — bitte abbrechen & neu starten",
+};
 
 type ChunkStats = { total: number; embedded: number; pending: number };
 
@@ -145,55 +158,93 @@ const AdminKnowledge = () => {
         throw new Error("Bitte zuerst eine PDF hochladen.");
       }
 
-      // Optimistic: flip the book to "indexing" immediately so the progress UI
-      // and disabled-state appear right away (PDF extraction can take 10–30s
-      // before the first seed batch reaches the server).
-      await supabase
-        .from("knowledge_books")
-        .update({ status: "indexing", error_message: null, chunk_count: 0, indexed_at: null })
-        .eq("book_key", book.book_key);
-      qc.invalidateQueries({ queryKey: ["knowledge-books"] });
-
-      const { data: file, error: downloadError } = await supabase.storage
-        .from("knowledge-base")
-        .download(book.file_path);
-
-      if (downloadError || !file) {
-        throw new Error(downloadError?.message ?? "PDF konnte nicht geladen werden.");
-      }
-
-      const chunks = await extractKnowledgeChunksFromPdf(file);
-      if (chunks.length === 0) {
-        throw new Error("Die PDF enthält keinen extrahierbaren Text.");
-      }
-
-      for (let index = 0; index < chunks.length; index += CHUNK_UPLOAD_BATCH_SIZE) {
-        const batch = chunks.slice(index, index + CHUNK_UPLOAD_BATCH_SIZE);
-        const { error } = await supabase.functions.invoke("ingest-knowledge-base", {
-          body: {
-            book_key: book.book_key,
-            phase: "seed",
-            reset: index === 0,
-            chunks: batch,
-          },
-        });
-
-        if (error) throw error;
-      }
-
-      const { data, error } = await supabase.functions.invoke("ingest-knowledge-base", {
-        body: {
-          book_key: book.book_key,
-          phase: "embed",
-        },
-      });
-
-      if (error) throw error;
-
-      return {
-        ...(data ?? {}),
-        total_chunks: chunks.length,
+      const setProgress = async (
+        phase: string,
+        done: number,
+        total: number,
+      ) => {
+        await supabase
+          .from("knowledge_books")
+          .update({
+            status: "indexing",
+            error_message: null,
+            progress_phase: phase,
+            progress_done: done,
+            progress_total: total,
+            progress_updated_at: new Date().toISOString(),
+          })
+          .eq("book_key", book.book_key);
+        qc.invalidateQueries({ queryKey: ["knowledge-books"] });
       };
+
+      const markError = async (message: string) => {
+        await supabase
+          .from("knowledge_books")
+          .update({
+            status: "error",
+            error_message: message.slice(0, 500),
+            progress_phase: null,
+            progress_done: 0,
+            progress_total: 0,
+            progress_updated_at: new Date().toISOString(),
+          })
+          .eq("book_key", book.book_key);
+        qc.invalidateQueries({ queryKey: ["knowledge-books"] });
+      };
+
+      try {
+        // Phase 1: PDF laden
+        await setProgress("extracting_pdf", 0, 0);
+        const { data: file, error: downloadError } = await supabase.storage
+          .from("knowledge-base")
+          .download(book.file_path);
+        if (downloadError || !file) {
+          throw new Error(downloadError?.message ?? "PDF konnte nicht geladen werden.");
+        }
+
+        // Phase 2: lokal extrahieren mit Page-Heartbeat
+        let lastHeartbeat = 0;
+        const chunks = await extractKnowledgeChunksFromPdf(file, (page, total) => {
+          const now = Date.now();
+          if (now - lastHeartbeat > 1500) {
+            lastHeartbeat = now;
+            // fire and forget — keine await im inneren Loop, sonst bremst es die Extraktion
+            void setProgress("extracting_pdf", page, total);
+          }
+        });
+        if (chunks.length === 0) {
+          throw new Error("Die PDF enthält keinen extrahierbaren Text.");
+        }
+
+        // Phase 3: Chunks an Edge Function senden
+        await setProgress("seeding", 0, chunks.length);
+        for (let index = 0; index < chunks.length; index += CHUNK_UPLOAD_BATCH_SIZE) {
+          const batch = chunks.slice(index, index + CHUNK_UPLOAD_BATCH_SIZE);
+          const { error } = await supabase.functions.invoke("ingest-knowledge-base", {
+            body: {
+              book_key: book.book_key,
+              phase: "seed",
+              reset: index === 0,
+              chunks: batch,
+            },
+          });
+          if (error) throw error;
+          await setProgress("seeding", Math.min(index + batch.length, chunks.length), chunks.length);
+        }
+
+        // Phase 4: Embeddings starten
+        await setProgress("embedding", 0, chunks.length);
+        const { data, error } = await supabase.functions.invoke("ingest-knowledge-base", {
+          body: { book_key: book.book_key, phase: "embed" },
+        });
+        if (error) throw error;
+
+        return { ...(data ?? {}), total_chunks: chunks.length };
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        await markError(message);
+        throw e;
+      }
     },
     onSuccess: (data: { done?: boolean; total_chunks?: number }) => {
       toast.success(
@@ -392,18 +443,32 @@ const AdminKnowledge = () => {
 
                   {b.status === "indexing" && (() => {
                     const s = chunkStats?.[b.book_key];
-                    const total = s?.total ?? 0;
+                    const chunkTotal = s?.total ?? 0;
                     const embedded = s?.embedded ?? 0;
-                    const pct = total > 0 ? Math.round((embedded / total) * 100) : 0;
+
+                    const phase = b.progress_phase ?? (chunkTotal > 0 ? "embedding" : "extracting_pdf");
+                    const isEmbedPhase = phase === "embedding";
+
+                    // Während des Embeddings sind DB-Counts (chunk_stats) die Wahrheit,
+                    // davor zeigen wir den lokal gemeldeten Fortschritt aus knowledge_books.
+                    const done = isEmbedPhase ? embedded : b.progress_done ?? 0;
+                    const total = isEmbedPhase ? chunkTotal : b.progress_total ?? 0;
+                    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+                    const lastHeartbeat = b.progress_updated_at ? new Date(b.progress_updated_at).getTime() : 0;
+                    const ageMs = lastHeartbeat ? Date.now() - lastHeartbeat : Infinity;
+                    const isStalled = ageMs > STALL_THRESHOLD_MS;
+
+                    const label = isStalled ? PHASE_LABEL.stalled : (PHASE_LABEL[phase] ?? "Indexierung läuft…");
+
                     return (
                       <div className="mb-4 space-y-2">
                         <div className="flex justify-between font-mono-label text-xs">
-                          <span className="text-muted-foreground">
-                            {total > 0
-                              ? `${embedded.toLocaleString("de-DE")} / ${total.toLocaleString("de-DE")} Chunks eingebettet`
-                              : "Warte auf Chunks…"}
+                          <span className={isStalled ? "text-destructive" : "text-muted-foreground"}>
+                            {label}
+                            {total > 0 && ` · ${done.toLocaleString("de-DE")} / ${total.toLocaleString("de-DE")}`}
                           </span>
-                          <span className="text-primary">{pct}%</span>
+                          <span className={isStalled ? "text-destructive" : "text-primary"}>{pct}%</span>
                         </div>
                         <Progress value={pct} className="h-1.5" />
                       </div>

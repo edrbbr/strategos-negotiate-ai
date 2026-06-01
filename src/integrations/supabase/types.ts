@@ -534,6 +534,10 @@ export type Database = {
           error_message: string | null
           file_path: string | null
           indexed_at: string | null
+          progress_done: number
+          progress_phase: string | null
+          progress_total: number
+          progress_updated_at: string | null
           status: string
           title: string
           updated_at: string
@@ -546,6 +550,10 @@ export type Database = {
           error_message?: string | null
           file_path?: string | null
           indexed_at?: string | null
+          progress_done?: number
+          progress_phase?: string | null
+          progress_total?: number
+          progress_updated_at?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -558,6 +566,10 @@ export type Database = {
           error_message?: string | null
           file_path?: string | null
           indexed_at?: string | null
+          progress_done?: number
+          progress_phase?: string | null
+          progress_total?: number
+          progress_updated_at?: string | null
           status?: string
           title?: string
           updated_at?: string
