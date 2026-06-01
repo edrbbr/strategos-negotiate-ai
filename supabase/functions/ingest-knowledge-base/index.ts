@@ -406,6 +406,52 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (phase === "resume") {
+      // User-initiated resume: if there are pending embeddings, kick off embed phase again.
+      const { count: pending } = await admin
+        .from("knowledge_chunks")
+        .select("id", { count: "exact", head: true })
+        .eq("book_key", bookKey)
+        .is("embedding", null);
+      const { count: total } = await admin
+        .from("knowledge_chunks")
+        .select("id", { count: "exact", head: true })
+        .eq("book_key", bookKey);
+      const t = total ?? 0;
+      const p = pending ?? 0;
+      if (t === 0) {
+        return new Response(JSON.stringify({ error: "Keine Chunks vorhanden — bitte neu indexieren." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (p === 0) {
+        await admin
+          .from("knowledge_books")
+          .update({
+            status: "ready",
+            chunk_count: t,
+            indexed_at: new Date().toISOString(),
+            error_message: null,
+            progress_phase: null,
+            progress_done: t,
+            progress_total: t,
+            progress_updated_at: new Date().toISOString(),
+          })
+          .eq("book_key", bookKey);
+        return new Response(JSON.stringify({ ok: true, phase: "resume", status: "ready" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      await setProgress(bookKey, "embedding", t - p, t);
+      scheduleNext({ book_key: bookKey, phase: "embed" });
+      return new Response(JSON.stringify({ ok: true, phase: "resume", pending: p, total: t }), {
+        status: 202,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (phase === "start") {
       // User-initiated start: just flip state + schedule the heavy ingest job,
       // so the HTTP call returns immediately and doesn't time out on big PDFs.
