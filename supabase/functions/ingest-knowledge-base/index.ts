@@ -379,11 +379,21 @@ Deno.serve(async (req) => {
     }
 
     if (phase === "start") {
-      // For user-initiated start: do extract+chunk+seed synchronously in this invocation,
-      // then schedule the embed loop in the background.
-      const { total } = await phaseStart(bookKey);
-      return new Response(JSON.stringify({ ok: true, phase: "start", total_chunks: total, status: "indexing" }), {
+      // User-initiated start: just flip state + schedule the heavy ingest job,
+      // so the HTTP call returns immediately and doesn't time out on big PDFs.
+      await admin.from("knowledge_chunks").delete().eq("book_key", bookKey);
+      await setProgress(bookKey, "downloading", 0, 0, { chunk_count: 0, indexed_at: null });
+      scheduleNext({ book_key: bookKey, phase: "ingest" });
+      return new Response(JSON.stringify({ ok: true, phase: "start", status: "indexing" }), {
         status: 202,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (phase === "ingest") {
+      const { total } = await phaseStart(bookKey);
+      return new Response(JSON.stringify({ ok: true, phase: "ingest", total_chunks: total }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
