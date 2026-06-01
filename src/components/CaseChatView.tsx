@@ -32,6 +32,7 @@ import {
 } from "@/hooks/useCaseAttachments";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 
 interface NegStrategy {
   key: string;
@@ -453,6 +454,8 @@ function VersionBlock({
   onSetActive: () => void;
   restoring: boolean;
 }) {
+  const { data: roleData } = useUserRole();
+  const isAdmin = !!roleData?.isAdmin;
   const promptText =
     version.kind === "initial"
       ? "Erste Version aus dem Initial-Setup."
@@ -546,7 +549,7 @@ function VersionBlock({
           <PlanStepsBlock steps={version.plan_steps} />
         )}
 
-        {version.knowledge_sources && version.knowledge_sources.length > 0 && (
+        {isAdmin && version.knowledge_sources && version.knowledge_sources.length > 0 && (
           <KnowledgeSourcesBlock sources={version.knowledge_sources} />
         )}
 
