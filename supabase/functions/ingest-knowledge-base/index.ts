@@ -228,6 +228,32 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (phase === "cancel") {
+      const { error: delErr } = await admin.from("knowledge_chunks").delete().eq("book_key", bookKey);
+      if (delErr) throw new Error(`Delete chunks: ${delErr.message}`);
+      await admin
+        .from("knowledge_books")
+        .update({ status: "uploaded", chunk_count: 0, indexed_at: null, error_message: null })
+        .eq("book_key", bookKey);
+      return new Response(JSON.stringify({ ok: true, phase: "cancel" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (phase === "status") {
+      const [{ count: total }, { count: pending }] = await Promise.all([
+        admin.from("knowledge_chunks").select("id", { count: "exact", head: true }).eq("book_key", bookKey),
+        admin.from("knowledge_chunks").select("id", { count: "exact", head: true }).eq("book_key", bookKey).is("embedding", null),
+      ]);
+      const t = total ?? 0;
+      const p = pending ?? 0;
+      return new Response(JSON.stringify({ ok: true, phase: "status", total: t, embedded: t - p, pending: p }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: `Unknown phase: ${phase}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
