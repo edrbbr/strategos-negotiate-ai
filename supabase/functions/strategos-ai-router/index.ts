@@ -448,6 +448,7 @@ Deno.serve(async (req: Request) => {
             stages: stageMetas,
             total_latency_ms: total,
           },
+          knowledge_sources: isAdmin ? (result.knowledge_sources ?? null) : null,
         });
       } catch (e) {
         if (isStageFailure(e)) {
@@ -564,6 +565,7 @@ Deno.serve(async (req: Request) => {
           stages: stageMetas,
           total_latency_ms: total,
         },
+        knowledge_sources: isAdmin ? (result.knowledge_sources ?? null) : null,
       });
     } catch (e) {
       if (e instanceof ProviderError) {
