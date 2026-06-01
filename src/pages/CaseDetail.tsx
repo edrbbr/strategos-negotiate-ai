@@ -152,11 +152,25 @@ const CaseDetail = () => {
   // Derive stage states from realtime case row while running (multi-stage only)
   useEffect(() => {
     if (!loading || !isMultiStage || !caseRow) return;
+    // Stage failure reported by the background pipeline.
+    const pErr = (caseRow as unknown as { pipeline_error?: { stage?: string; message?: string } | null }).pipeline_error;
+    if (pErr && pErr.stage) {
+      const failedStage = pErr.stage as "analysis" | "strategy" | "draft";
+      setStageMeta({ failed_at: failedStage, error: pErr.message });
+      setStageState((prev) => ({
+        analysis: failedStage === "analysis" ? "failed" : (caseRow.analysis && caseRow.analysis.length > 0 ? "complete" : prev.analysis),
+        strategy: failedStage === "strategy" ? "failed" : (caseRow.strategy ? "complete" : "pending"),
+        draft:    failedStage === "draft"    ? "failed" : "pending",
+      }));
+      toast.error(`Pipeline bei Schritt "${failedStage}" abgebrochen.`);
+      setLoading(false);
+      return;
+    }
     setStageState((prev) => {
       const analysisDone = !!(caseRow.analysis && caseRow.analysis.length > 0);
       const strategyDone = !!caseRow.strategy;
       const draftDone = !!caseRow.draft;
-      return {
+      const next = {
         analysis: analysisDone ? "complete" : prev.analysis,
         strategy: strategyDone
           ? "complete"
@@ -168,7 +182,22 @@ const CaseDetail = () => {
           : strategyDone && prev.draft === "pending"
           ? "running"
           : prev.draft,
-      };
+      } as { analysis: StageState; strategy: StageState; draft: StageState };
+      // All three stages done + version persisted → close out loading.
+      if (
+        next.analysis === "complete" &&
+        next.strategy === "complete" &&
+        next.draft === "complete" &&
+        (caseRow as unknown as { current_version_id?: string | null }).current_version_id
+      ) {
+        // Defer side effects to next tick so we don't setState during render of another component.
+        queueMicrotask(() => {
+          setLoading(false);
+          refreshProfile();
+          toast.success("Pipeline abgeschlossen");
+        });
+      }
+      return next;
     });
   }, [caseRow, loading, isMultiStage]);
 
@@ -280,6 +309,7 @@ const CaseDetail = () => {
     setLoading(true);
     setStageMeta({});
     track("case_started", { case_id: activeCaseId, tier, is_first: !caseId });
+    let backgroundStarted = false;
     if (isMultiStage) {
       setStageState({ analysis: "running", strategy: "pending", draft: "pending" });
     } else {
@@ -346,6 +376,36 @@ const CaseDetail = () => {
       if (payload?.error === "CASE_LIMIT_REACHED") { setShowUpgrade(true); return; }
       if (payload?.error) throw new Error(String(payload.error));
 
+      // Multi-stage now runs in the background; the function returns immediately
+      // with { status: "started" } and the UI advances via realtime updates on
+      // the cases row (handled by the effect that watches `caseRow`).
+      if (payload?.status === "started") {
+        backgroundStarted = true;
+        // Safety watchdog: if no terminal state in 5 min, surface a timeout.
+        if (activeCaseId) {
+          const watchdogId = activeCaseId;
+          setTimeout(async () => {
+            // Only act if we're still loading on the same case.
+            const { data: row } = await supabase
+              .from("cases")
+              .select("current_version_id, pipeline_error")
+              .eq("id", watchdogId)
+              .maybeSingle();
+            const done = !!row?.current_version_id || !!row?.pipeline_error;
+            if (!done) {
+              toast.error("Pipeline hat nicht innerhalb von 5 Minuten geantwortet.");
+              setStageState((s) => ({
+                analysis: s.analysis === "running" ? "failed" : s.analysis,
+                strategy: s.strategy === "running" ? "failed" : s.strategy,
+                draft: s.draft === "running" ? "failed" : s.draft,
+              }));
+              setLoading(false);
+            }
+          }, 5 * 60_000);
+        }
+        return;
+      }
+
       setStageState({ analysis: "complete", strategy: "complete", draft: "complete" });
       refreshProfile();
 
@@ -367,7 +427,7 @@ const CaseDetail = () => {
         draft: s.draft === "running" ? "failed" : s.draft,
       }));
     } finally {
-      setLoading(false);
+      if (!backgroundStarted) setLoading(false);
     }
   };
 

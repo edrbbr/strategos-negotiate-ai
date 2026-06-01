@@ -1,8 +1,10 @@
 import { ProviderError } from "../types.ts";
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-// Per-attempt timeout. Reasoning-capable models (gpt-5*) routinely need >30s.
-const TIMEOUT_MS = 90_000;
+// Per-attempt timeout. Reasoning-capable models (gpt-5*) need extra time, but we
+// keep the whole-call budget below the edge runtime window so a stuck request
+// fails fast and lets the multi-stage fallback kick in.
+const TIMEOUT_MS = 60_000;
 
 export interface OpenAITool {
   type: "function";
@@ -54,7 +56,7 @@ export async function callOpenAI(
   try {
     let response = await doFetch();
     // Retry on 429/5xx with exponential backoff + jitter, honoring Retry-After
-    const maxRetries = 4;
+    const maxRetries = 2;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       if (response.status !== 429 && response.status < 500) break;
       const retryAfter = Number(response.headers.get("retry-after"));

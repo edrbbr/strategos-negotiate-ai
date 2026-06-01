@@ -250,7 +250,11 @@ export async function runMultiStagePipeline(
         },
       });
     } catch (e) {
-      if (!(e instanceof ProviderError) || e.code !== "RATE_LIMIT" || !lovableKey) throw e;
+      const canFallback =
+        e instanceof ProviderError &&
+        (e.code === "RATE_LIMIT" || e.code === "TIMEOUT") &&
+        !!lovableKey;
+      if (!canFallback) throw e;
       strategyOut = await callGemini({
         apiKey: lovableKey,
         model: "google/gemini-2.5-flash",

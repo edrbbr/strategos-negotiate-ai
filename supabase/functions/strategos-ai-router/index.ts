@@ -403,71 +403,112 @@ Deno.serve(async (req: Request) => {
     const pipelineConfig = plan.pipeline_config as PipelineConfig | null;
 
     if (pipelineConfig && pipelineConfig.type === "multi_stage") {
-      // ELITE
-      try {
+      // ELITE — Multi-Stage pipeline runs in the background. We return immediately
+      // so the edge-runtime wall/CPU limit never kills it mid-stage; the frontend
+      // observes progress via realtime updates on the `cases` row (stage fields +
+      // `pipeline_error`).
+      if (case_id) {
+        // Clear any previous error before a fresh run.
+        await serviceClient
+          .from("cases")
+          .update({ pipeline_error: null })
+          .eq("id", case_id)
+          .eq("user_id", userId)
+          .then(() => undefined, (e) => console.warn("clear pipeline_error failed", e));
+      }
+
+      const runInBackground = async () => {
         const t0 = Date.now();
-        const { result, stageMetas } = await runMultiStagePipeline({
-          config: pipelineConfig,
-          situationText: situation_text,
-          anthropicKey: ANTHROPIC_API_KEY,
-          openaiKey: OPENAI_API_KEY,
-          lovableKey: LOVABLE_API_KEY,
-          onStageComplete: writeStage,
-          medium,
-          languageLabel: language_label,
-          attachmentsContext,
-          allowedStrategies,
-          tonalityInstruction,
-          enableDeepDocAnalysis,
-          escalationLevel: escalation_level,
-          knowledgeContext,
-          knowledgeSources,
-        });
-        const total = Date.now() - t0;
-        const cases_used = await incrementCounter();
-        await persistInitialVersion({
-          analysis: result.analysis,
-          strategy: result.strategy,
-          draft: result.draft,
-          model_used: "multi_stage_elite",
-          mode: result.mode,
-          variants: result.variants,
-          recommended_variant: result.recommended_variant,
-          plan_steps: result.plan_steps,
-          clarifying_questions: result.clarifying_questions,
-          knowledge_sources: result.knowledge_sources,
-        });
-        return json({
-          ...result,
+        try {
+          const { result } = await runMultiStagePipeline({
+            config: pipelineConfig,
+            situationText: situation_text,
+            anthropicKey: ANTHROPIC_API_KEY,
+            openaiKey: OPENAI_API_KEY,
+            lovableKey: LOVABLE_API_KEY,
+            onStageComplete: writeStage,
+            medium,
+            languageLabel: language_label,
+            attachmentsContext,
+            allowedStrategies,
+            tonalityInstruction,
+            enableDeepDocAnalysis,
+            escalationLevel: escalation_level,
+            knowledgeContext,
+            knowledgeSources,
+          });
+          await persistInitialVersion({
+            analysis: result.analysis,
+            strategy: result.strategy,
+            draft: result.draft,
+            model_used: "multi_stage_elite",
+            mode: result.mode,
+            variants: result.variants,
+            recommended_variant: result.recommended_variant,
+            plan_steps: result.plan_steps,
+            clarifying_questions: result.clarifying_questions,
+            knowledge_sources: result.knowledge_sources,
+          });
+          console.log("multi-stage pipeline complete", { case_id, total_ms: Date.now() - t0 });
+        } catch (e) {
+          if (isStageFailure(e)) {
+            const cause = e.cause;
+            const code = cause instanceof ProviderError ? cause.code : "STAGE_FAILED";
+            const message = cause instanceof Error ? cause.message : String(cause);
+            console.error("multi-stage stage failure", { case_id, stage: e.stage, code, message });
+            if (case_id) {
+              await serviceClient
+                .from("cases")
+                .update({
+                  pipeline_error: {
+                    stage: e.stage,
+                    code,
+                    message,
+                    at: new Date().toISOString(),
+                  },
+                })
+                .eq("id", case_id)
+                .eq("user_id", userId)
+                .then(() => undefined, (err) => console.error("write pipeline_error failed", err));
+            }
+            return;
+          }
+          console.error("multi-stage unexpected error", e);
+          if (case_id) {
+            await serviceClient
+              .from("cases")
+              .update({
+                pipeline_error: {
+                  stage: "draft",
+                  code: "UNEXPECTED",
+                  message: e instanceof Error ? e.message : "Unknown error",
+                  at: new Date().toISOString(),
+                },
+              })
+              .eq("id", case_id)
+              .eq("user_id", userId)
+              .then(() => undefined, () => undefined);
+          }
+        }
+      };
+
+      // Kick off async; keep the function alive after returning the HTTP response.
+      // @ts-ignore — EdgeRuntime is a global available in Supabase Edge Functions.
+      EdgeRuntime.waitUntil(runInBackground());
+
+      const cases_used = await incrementCounter();
+      return json(
+        {
+          status: "started",
+          case_id,
           model: "multi_stage_elite",
           plan: plan.id,
           cases_used,
           case_limit: plan.case_limit,
-          pipeline_meta: {
-            type: "multi_stage",
-            stages: stageMetas,
-            total_latency_ms: total,
-          },
-          knowledge_sources: isAdmin ? (result.knowledge_sources ?? null) : null,
-        });
-      } catch (e) {
-        if (isStageFailure(e)) {
-          const cause = e.cause;
-          const code = cause instanceof ProviderError ? cause.code : "STAGE_FAILED";
-          const status = cause instanceof ProviderError && cause.status === 429 ? 429 : 502;
-          return json(
-            {
-              error: "STAGE_FAILED",
-              code,
-              failed_at: e.stage,
-              completed_stages: e.completedStages,
-              message: cause.message,
-            },
-            status,
-          );
-        }
-        throw e;
-      }
+          pipeline_meta: { type: "multi_stage", stages: [], total_latency_ms: 0 },
+        },
+        202,
+      );
     }
 
     // FREE / PRO — Single-Call
