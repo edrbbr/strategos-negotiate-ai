@@ -14,7 +14,8 @@ const EMBED_MODEL = "google/gemini-embedding-001";
 const EMBED_DIMS = 3072;
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
-const EMBED_BATCH = 16;
+const EMBED_BATCH = 8;
+const EMBED_BATCHES_PER_INVOCATION = 2; // small to stay under CPU limit
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
