@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, XCircle, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, XCircle, Trash2, Play } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
@@ -183,6 +183,20 @@ const AdminKnowledge = () => {
     onError: (e: Error) => toast.error(`Abbruch fehlgeschlagen: ${e.message}`),
   });
 
+  const resume = useMutation({
+    mutationFn: async (book: Book) => {
+      const { error } = await supabase.functions.invoke("ingest-knowledge-base", {
+        body: { book_key: book.book_key, phase: "resume" },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Embedding wird fortgesetzt — bereits erzeugte Chunks bleiben erhalten.");
+      qc.invalidateQueries({ queryKey: ["knowledge-books"] });
+    },
+    onError: (e: Error) => toast.error(`Fortsetzen fehlgeschlagen: ${e.message}`),
+  });
+
   const remove = useMutation({
     mutationFn: async (book: Book) => {
       const { error } = await supabase.functions.invoke("ingest-knowledge-base", {
@@ -319,6 +333,16 @@ const AdminKnowledge = () => {
             {(books ?? []).map((b) => {
               const isUploading = uploadingKey === b.book_key;
               const isProcessing = (ingest.isPending && ingest.variables?.book_key === b.book_key) || b.status === "indexing";
+              const s = chunkStats?.[b.book_key];
+              const pendingEmbeds = s?.pending ?? 0;
+              const heartbeatAge = b.progress_updated_at
+                ? Date.now() - new Date(b.progress_updated_at).getTime()
+                : Infinity;
+              const stalled = b.status === "indexing" && heartbeatAge > STALL_THRESHOLD_MS;
+              const canResume =
+                (b.status === "error" || stalled) &&
+                (s?.total ?? b.chunk_count) > 0 &&
+                pendingEmbeds >= 0;
 
               return (
                 <article key={b.book_key} className="border border-border/30 rounded-sm p-6 hover:border-primary/30 transition-colors">
@@ -424,6 +448,21 @@ const AdminKnowledge = () => {
                         Abbrechen
                       </Button>
                     )}
+                    {canResume && (
+                      <Button
+                        variant="gold-outline"
+                        size="sm"
+                        onClick={() => resume.mutate(b)}
+                        disabled={resume.isPending}
+                      >
+                        {resume.isPending && resume.variables?.book_key === b.book_key ? (
+                          <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+                        ) : (
+                          <Play className="w-3.5 h-3.5 mr-2" />
+                        )}
+                        Fortsetzen
+                      </Button>
+                    )}
                     <Button
                       variant="gold-outline"
                       size="sm"
@@ -452,7 +491,7 @@ const AdminKnowledge = () => {
 
         <div className="mt-12 border-t border-border/20 pt-6 text-xs text-muted-foreground font-mono-label">
           <p>
-            Hinweis: Die PDF wird im Admin-Browser in Text-Chunks zerlegt. Der Backend-Worker erzeugt danach nur noch die 3072-dimensionalen Embeddings via google/gemini-embedding-001.
+            Hinweis: Die PDF wird komplett im Backend extrahiert, zerlegt und über google/gemini-embedding-001 (3072-dim) eingebettet. Bei einem Hänger bleibt der Fortschritt erhalten — „Fortsetzen" macht direkt weiter, ohne bereits erzeugte Chunks zu verwerfen.
           </p>
         </div>
       </main>

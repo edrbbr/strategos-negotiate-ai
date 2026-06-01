@@ -13,7 +13,7 @@ const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const EMBED_MODEL = "google/gemini-embedding-001";
 const EMBED_DIMS = 3072;
 const EMBED_BATCH = 4;
-const EMBED_BATCHES_PER_INVOCATION = 1;
+const EMBED_BATCHES_PER_INVOCATION = 6;
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
 const CHUNK_INSERT_BATCH = 200;
@@ -191,6 +191,7 @@ async function phaseStart(bookKey: string): Promise<{ total: number }> {
 // Self-invoke the same function to continue processing in a fresh CPU budget.
 function scheduleNext(payload: Record<string, unknown>) {
   const url = `${SUPABASE_URL}/functions/v1/ingest-knowledge-base`;
+  const bookKey = (payload as { book_key?: string }).book_key;
   const p = fetch(url, {
     method: "POST",
     headers: {
@@ -200,7 +201,34 @@ function scheduleNext(payload: Record<string, unknown>) {
       "x-internal-continue": "1",
     },
     body: JSON.stringify(payload),
-  }).then((r) => r.text()).catch((e) => console.error("scheduleNext failed:", e));
+  })
+    .then(async (r) => {
+      if (!r.ok) {
+        const text = await r.text().catch(() => "");
+        console.error(`scheduleNext non-ok ${r.status}: ${text}`);
+        if (bookKey) {
+          await admin
+            .from("knowledge_books")
+            .update({
+              status: "error",
+              error_message: `Folgeaufruf fehlgeschlagen (${r.status}): ${text.slice(0, 300)}`,
+            })
+            .eq("book_key", bookKey);
+        }
+      }
+    })
+    .catch(async (e) => {
+      console.error("scheduleNext failed:", e);
+      if (bookKey) {
+        await admin
+          .from("knowledge_books")
+          .update({
+            status: "error",
+            error_message: `Folgeaufruf-Netzwerkfehler: ${String(e).slice(0, 300)}`,
+          })
+          .eq("book_key", bookKey);
+      }
+    });
   // @ts-ignore EdgeRuntime is provided by Supabase
   try { EdgeRuntime.waitUntil(p); } catch { /* ignore */ }
 }
@@ -374,6 +402,52 @@ Deno.serve(async (req) => {
       }
       return new Response(JSON.stringify({ ok: true, phase: "embed", ...res }), {
         status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (phase === "resume") {
+      // User-initiated resume: if there are pending embeddings, kick off embed phase again.
+      const { count: pending } = await admin
+        .from("knowledge_chunks")
+        .select("id", { count: "exact", head: true })
+        .eq("book_key", bookKey)
+        .is("embedding", null);
+      const { count: total } = await admin
+        .from("knowledge_chunks")
+        .select("id", { count: "exact", head: true })
+        .eq("book_key", bookKey);
+      const t = total ?? 0;
+      const p = pending ?? 0;
+      if (t === 0) {
+        return new Response(JSON.stringify({ error: "Keine Chunks vorhanden — bitte neu indexieren." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (p === 0) {
+        await admin
+          .from("knowledge_books")
+          .update({
+            status: "ready",
+            chunk_count: t,
+            indexed_at: new Date().toISOString(),
+            error_message: null,
+            progress_phase: null,
+            progress_done: t,
+            progress_total: t,
+            progress_updated_at: new Date().toISOString(),
+          })
+          .eq("book_key", bookKey);
+        return new Response(JSON.stringify({ ok: true, phase: "resume", status: "ready" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      await setProgress(bookKey, "embedding", t - p, t);
+      scheduleNext({ book_key: bookKey, phase: "embed" });
+      return new Response(JSON.stringify({ ok: true, phase: "resume", pending: p, total: t }), {
+        status: 202,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
