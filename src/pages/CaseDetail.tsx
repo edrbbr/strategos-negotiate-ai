@@ -105,6 +105,7 @@ const CaseDetail = () => {
   const [loading, setLoading] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [tonalityKey, setTonalityKey] = useState<string>("standard");
+  const [escalationLevel, setEscalationLevel] = useState<"auto" | "soft" | "neutral" | "hard">("auto");
   const [stageState, setStageState] = useState<{ analysis: StageState; strategy: StageState; draft: StageState }>({
     analysis: "pending",
     strategy: "pending",
@@ -136,10 +137,12 @@ const CaseDetail = () => {
     const langCode = (caseRow as unknown as { language_code?: string }).language_code;
     const langLabel = (caseRow as unknown as { language_label?: string }).language_label;
     const tonality = (caseRow as unknown as { tonality_profile_key?: string }).tonality_profile_key;
+    const esc = (caseRow as unknown as { escalation_level?: typeof escalationLevel }).escalation_level;
     if (mediumVal) setMedium(mediumVal);
     if (langCode) setLanguageCode(langCode);
     if (langLabel) setLanguageLabel(langLabel);
     if (tonality) setTonalityKey(tonality);
+    if (esc) setEscalationLevel(esc);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseRow?.id]);
 
@@ -292,6 +295,7 @@ const CaseDetail = () => {
           language_code: languageCode,
           language_label: languageLabel,
           attachment_ids: attachmentIds,
+          escalation_level: escalationLevel,
         },
       });
 
@@ -553,6 +557,49 @@ const CaseDetail = () => {
               onLockedClick={() => setShowUpgrade(true)}
               disabled={loading}
             />
+          </div>
+
+          <div>
+            <div className="flex items-baseline justify-between mb-2">
+              <p className="font-mono-label text-muted-foreground">Eskalations-Stufe</p>
+              <span className="font-mono-label text-muted-foreground/60 text-[10px]">
+                Auto = KI entscheidet (Soft-First, außer Gegenseite aggressiv)
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {([
+                { k: "auto", label: "Auto" },
+                { k: "soft", label: "Soft" },
+                { k: "neutral", label: "Neutral" },
+                { k: "hard", label: "Hart" },
+              ] as const).map((opt) => {
+                const active = escalationLevel === opt.k;
+                return (
+                  <button
+                    key={opt.k}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => {
+                      setEscalationLevel(opt.k);
+                      if (caseId) {
+                        updateMut.mutate({
+                          id: caseId,
+                          patch: { escalation_level: opt.k } as Partial<typeof caseRow> as never,
+                        });
+                      }
+                    }}
+                    className={cn(
+                      "px-3 py-2.5 rounded-sm border font-mono-label text-xs transition-colors",
+                      active
+                        ? "border-primary/60 bg-primary/10 text-primary"
+                        : "border-border/40 text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div>

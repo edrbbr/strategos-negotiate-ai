@@ -9,25 +9,52 @@ import {
 } from "../prompts.ts";
 import {
   ProviderError,
+  type EscalationLevel,
   type IconHint,
+  type KnowledgeSource,
   type PipelineConfig,
   type StageMeta,
   type StrategosResult,
+  type SystemMode,
+  type VariantKey,
 } from "../types.ts";
+
+const VARIANT_KEYS: VariantKey[] = ["soft", "neutral", "hard"];
+const MODE_KEYS: SystemMode[] = ["information", "positioning", "negotiation", "closing", "defensive"];
 
 const ANALYSIS_SCHEMA = {
   type: "object",
   properties: {
+    goal_analysis: { type: "string" },
+    counterparty_model: { type: "string" },
+    power_analysis: { type: "string" },
+    power_position: { type: "string", enum: ["weak", "balanced", "strong"] },
+    counterparty_aggression: { type: "string", enum: ["low", "medium", "high"] },
+    risk_analysis: { type: "string" },
+    mode: { type: "string", enum: MODE_KEYS },
+    clarifying_questions: { type: "array", items: { type: "string" } },
     analysis: { type: "array", items: { type: "string" } },
   },
-  required: ["analysis"],
+  required: [
+    "goal_analysis",
+    "counterparty_model",
+    "power_analysis",
+    "power_position",
+    "counterparty_aggression",
+    "risk_analysis",
+    "mode",
+    "analysis",
+  ],
   additionalProperties: false,
 } as const;
 
 const STRATEGY_SCHEMA = {
   type: "object",
-  properties: { strategy: { type: "string" } },
-  required: ["strategy"],
+  properties: {
+    strategy: { type: "string" },
+    recommended_variant: { type: "string", enum: VARIANT_KEYS },
+  },
+  required: ["strategy", "recommended_variant"],
   additionalProperties: false,
 } as const;
 
@@ -39,9 +66,20 @@ const DRAFT_SCHEMA = {
       type: "string",
       enum: ["car", "home", "cash", "document", "briefcase", "handshake"],
     },
+    variants: {
+      type: "object",
+      properties: {
+        soft: { type: "string" },
+        neutral: { type: "string" },
+        hard: { type: "string" },
+      },
+      required: ["soft", "neutral", "hard"],
+      additionalProperties: false,
+    },
     draft: { type: "string" },
+    plan_steps: { type: "array", items: { type: "string" } },
   },
-  required: ["title", "icon_hint", "draft"],
+  required: ["title", "icon_hint", "variants", "draft", "plan_steps"],
   additionalProperties: false,
 } as const;
 
@@ -80,6 +118,12 @@ export interface StageCompletePayload {
     icon_hint?: IconHint;
     draft?: string;
     model_used?: string;
+    mode?: SystemMode | null;
+    clarifying_questions?: string[] | null;
+    recommended_variant?: VariantKey | null;
+    variants?: { soft: string; neutral: string; hard: string } | null;
+    plan_steps?: string[] | null;
+    knowledge_sources?: KnowledgeSource[] | null;
   };
 }
 
@@ -96,6 +140,9 @@ export interface MultiStageParams {
   allowedStrategies?: { key: string; label: string; prompt_hint: string | null }[];
   tonalityInstruction?: string | null;
   enableDeepDocAnalysis?: boolean;
+  escalationLevel?: EscalationLevel;
+  knowledgeContext?: string;
+  knowledgeSources?: KnowledgeSource[];
 }
 
 export interface MultiStageResult {
@@ -113,6 +160,12 @@ export async function runMultiStagePipeline(
   params: MultiStageParams,
 ): Promise<MultiStageResult> {
   const { config, situationText, anthropicKey, openaiKey, lovableKey, onStageComplete, medium, languageLabel, attachmentsContext } = params;
+  const escalation: EscalationLevel = params.escalationLevel ?? "auto";
+  const sources = params.knowledgeSources ?? [];
+  const escalationLine = `User-chosen escalation_level: ${escalation}`;
+  const knowledgeBlock = params.knowledgeContext
+    ? `\n\nRetrieved book passages (background only, do not quote verbatim):\n"""\n${params.knowledgeContext}\n"""`
+    : "";
   const tierAddendum = buildTierAddendum({
     allowedStrategies: params.allowedStrategies ?? [],
     tonalityInstruction: params.tonalityInstruction ?? null,
@@ -125,6 +178,7 @@ export async function runMultiStagePipeline(
   const langLine = `Target language: ${languageLabel ?? "Deutsch"}`;
   const mediumLine = `Medium: ${medium ?? "email"}`;
   const attachLine = attachmentsContext ? `\n\nReference documents:\n"""\n${attachmentsContext}\n"""` : "";
+  const baseHeader = `${langLine}\n${mediumLine}\n${escalationLine}`;
   const stageMetas: StageMeta[] = [];
 
   // ---- Stage 1: Analysis ----
@@ -139,7 +193,7 @@ export async function runMultiStagePipeline(
       apiKey: anthropicKey!,
       model: s1.model,
       systemPrompt: promptAnalysis,
-      userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""${attachLine}`,
+      userMessage: `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""${attachLine}${knowledgeBlock}`,
       tool: {
         name: "return_analysis",
         description: "Return the analysis bullets.",
@@ -151,8 +205,21 @@ export async function runMultiStagePipeline(
   }
   const lat1 = Date.now() - t1;
   const analysis = (Array.isArray(analysisOut.analysis) ? analysisOut.analysis : []).map(String);
+  const mode = MODE_KEYS.includes(analysisOut.mode as SystemMode) ? (analysisOut.mode as SystemMode) : null;
+  const clarifying = Array.isArray(analysisOut.clarifying_questions)
+    ? analysisOut.clarifying_questions.map(String)
+    : [];
   stageMetas.push({ stage: "analysis", model: s1.model, latency_ms: lat1 });
-  await onStageComplete?.({ stage: "analysis", data: { analysis, model_used: `multi:${s1.model}` } });
+  await onStageComplete?.({
+    stage: "analysis",
+    data: {
+      analysis,
+      mode,
+      clarifying_questions: clarifying,
+      knowledge_sources: sources.length > 0 ? sources : null,
+      model_used: `multi:${s1.model}`,
+    },
+  });
 
   // ---- Stage 2: Strategy ----
   const s2 = getStage(config, "strategy");
@@ -162,7 +229,11 @@ export async function runMultiStagePipeline(
   const t2 = Date.now();
   let strategyOut: Record<string, unknown>;
   try {
-    const strategyUserMessage = `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.map((b) => "- " + b).join("\n")}${attachLine}`;
+    const analysisJson = JSON.stringify({
+      ...analysisOut,
+      analysis,
+    });
+    const strategyUserMessage = `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis (JSON):\n${analysisJson}${attachLine}${knowledgeBlock}`;
     try {
       strategyOut = await callOpenAI({
         apiKey: openaiKey!,
@@ -196,7 +267,9 @@ export async function runMultiStagePipeline(
       });
       stageMetas.push({ stage: "strategy", model: "google/gemini-2.5-flash", latency_ms: Date.now() - t2 });
       const strategy = unwrapStrategy(strategyOut.strategy);
-      await onStageComplete?.({ stage: "strategy", data: { strategy } });
+      const recFallback = (strategyOut.recommended_variant as VariantKey) ?? "soft";
+      const recommendedVariant: VariantKey = VARIANT_KEYS.includes(recFallback) ? recFallback : "soft";
+      await onStageComplete?.({ stage: "strategy", data: { strategy, recommended_variant: recommendedVariant } });
 
       const s3 = getStage(config, "draft");
       const t3 = Date.now();
@@ -206,7 +279,7 @@ export async function runMultiStagePipeline(
           apiKey: anthropicKey!,
           model: s3.model,
           systemPrompt: promptDraft,
-          userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}${attachLine}`,
+          userMessage: `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}\n\nrecommended_variant: ${recommendedVariant}${attachLine}${knowledgeBlock}`,
           tool: {
             name: "return_draft",
             description: "Return the final draft, title and icon hint.",
@@ -217,38 +290,33 @@ export async function runMultiStagePipeline(
         throw stageError("draft", ["analysis", "strategy"], draftError);
       }
       const lat3 = Date.now() - t3;
-      const icon = String(draftOut.icon_hint ?? "briefcase") as IconHint;
-      const title = String(draftOut.title ?? "Neuer Fall").slice(0, 80);
-      const draft = String(draftOut.draft ?? "");
+      const fbResult = finalizeDraft({
+        draftOut, analysis, strategy, recommendedVariant, mode, clarifying, sources,
+      });
       stageMetas.push({ stage: "draft", model: s3.model, latency_ms: lat3 });
       await onStageComplete?.({
         stage: "draft",
         data: {
-          title,
-          icon_hint: VALID_ICONS.includes(icon) ? icon : "briefcase",
-          draft,
+          title: fbResult.title,
+          icon_hint: fbResult.icon_hint,
+          draft: fbResult.draft,
+          variants: fbResult.variants,
+          plan_steps: fbResult.plan_steps,
+          recommended_variant: recommendedVariant,
           model_used: "multi_stage_elite",
         },
       });
-
-      return {
-        result: {
-          title,
-          icon_hint: VALID_ICONS.includes(icon) ? icon : "briefcase",
-          analysis,
-          strategy,
-          draft,
-        },
-        stageMetas,
-      };
+      return { result: fbResult, stageMetas };
     }
   } catch (e) {
     throw stageError("strategy", ["analysis"], e);
   }
   const lat2 = Date.now() - t2;
   const strategy = unwrapStrategy(strategyOut.strategy);
+  const recRaw = (strategyOut.recommended_variant as VariantKey) ?? "soft";
+  const recommendedVariant: VariantKey = VARIANT_KEYS.includes(recRaw) ? recRaw : "soft";
   stageMetas.push({ stage: "strategy", model: s2.model, latency_ms: lat2 });
-  await onStageComplete?.({ stage: "strategy", data: { strategy } });
+  await onStageComplete?.({ stage: "strategy", data: { strategy, recommended_variant: recommendedVariant } });
 
   // ---- Stage 3: Draft ----
   const s3 = getStage(config, "draft");
@@ -259,7 +327,7 @@ export async function runMultiStagePipeline(
       apiKey: anthropicKey!,
       model: s3.model,
       systemPrompt: promptDraft,
-      userMessage: `${langLine}\n${mediumLine}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}${attachLine}`,
+      userMessage: `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}\n\nrecommended_variant: ${recommendedVariant}${attachLine}${knowledgeBlock}`,
       tool: {
         name: "return_draft",
         description: "Return the final draft, title and icon hint.",
@@ -270,29 +338,59 @@ export async function runMultiStagePipeline(
     throw stageError("draft", ["analysis", "strategy"], e);
   }
   const lat3 = Date.now() - t3;
-  const icon = String(draftOut.icon_hint ?? "briefcase") as IconHint;
-  const title = String(draftOut.title ?? "Neuer Fall").slice(0, 80);
-  const draft = String(draftOut.draft ?? "");
+  const finalized = finalizeDraft({
+    draftOut, analysis, strategy, recommendedVariant, mode, clarifying, sources,
+  });
   stageMetas.push({ stage: "draft", model: s3.model, latency_ms: lat3 });
   await onStageComplete?.({
     stage: "draft",
     data: {
-      title,
-      icon_hint: VALID_ICONS.includes(icon) ? icon : "briefcase",
-      draft,
+      title: finalized.title,
+      icon_hint: finalized.icon_hint,
+      draft: finalized.draft,
+      variants: finalized.variants,
+      plan_steps: finalized.plan_steps,
+      recommended_variant: recommendedVariant,
       model_used: "multi_stage_elite",
     },
   });
+  return { result: finalized, stageMetas };
+}
 
+function finalizeDraft(args: {
+  draftOut: Record<string, unknown>;
+  analysis: string[];
+  strategy: string;
+  recommendedVariant: VariantKey;
+  mode: SystemMode | null;
+  clarifying: string[];
+  sources: KnowledgeSource[];
+}): StrategosResult {
+  const { draftOut, analysis, strategy, recommendedVariant, mode, clarifying, sources } = args;
+  const icon = String(draftOut.icon_hint ?? "briefcase") as IconHint;
+  const title = String(draftOut.title ?? "Neuer Fall").slice(0, 80);
+  const rawVariants = (draftOut.variants ?? null) as Record<string, unknown> | null;
+  const variants = rawVariants
+    ? {
+        soft: String(rawVariants.soft ?? ""),
+        neutral: String(rawVariants.neutral ?? ""),
+        hard: String(rawVariants.hard ?? ""),
+      }
+    : null;
+  const draft = String(draftOut.draft ?? (variants ? variants[recommendedVariant] : ""));
+  const planSteps = Array.isArray(draftOut.plan_steps) ? draftOut.plan_steps.map(String) : null;
   return {
-    result: {
-      title,
-      icon_hint: VALID_ICONS.includes(icon) ? icon : "briefcase",
-      analysis,
-      strategy,
-      draft,
-    },
-    stageMetas,
+    title,
+    icon_hint: VALID_ICONS.includes(icon) ? icon : "briefcase",
+    analysis,
+    strategy,
+    draft,
+    mode,
+    variants,
+    recommended_variant: recommendedVariant,
+    plan_steps: planSteps,
+    clarifying_questions: clarifying.length > 0 ? clarifying : null,
+    knowledge_sources: sources.length > 0 ? sources : null,
   };
 }
 

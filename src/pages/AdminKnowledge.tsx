@@ -1,11 +1,13 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock } from "lucide-react";
+import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { extractKnowledgeChunksFromPdf } from "@/lib/knowledgeChunking";
 
 type Book = {
@@ -58,6 +60,49 @@ const AdminKnowledge = () => {
   const qc = useQueryClient();
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [newKey, setNewKey] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+  const [newAuthor, setNewAuthor] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const slugify = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60);
+
+  const handleAddBook = async () => {
+    const key = (newKey || slugify(newTitle)).trim();
+    const title = newTitle.trim();
+    if (!key || !title) {
+      toast.error("Titel ist erforderlich.");
+      return;
+    }
+    setAdding(true);
+    try {
+      const { error } = await supabase.from("knowledge_books").insert({
+        book_key: key,
+        title,
+        author: newAuthor.trim() || null,
+        status: "pending",
+      });
+      if (error) throw error;
+      toast.success(`„${title}“ angelegt. Jetzt PDF hochladen und indexieren.`);
+      setAddOpen(false);
+      setNewKey("");
+      setNewTitle("");
+      setNewAuthor("");
+      qc.invalidateQueries({ queryKey: ["knowledge-books"] });
+    } catch (e) {
+      toast.error(`Anlegen fehlgeschlagen: ${(e as Error).message}`);
+    } finally {
+      setAdding(false);
+    }
+  };
 
   const ingest = useMutation({
     mutationFn: async (book: Book) => {
@@ -169,7 +214,58 @@ const AdminKnowledge = () => {
       <main className="max-w-5xl mx-auto px-8 py-12">
         <div className="mb-10">
           <p className="font-mono-label text-primary mb-2">◆ RAG-Wissensbasis</p>
-          <h1 className="font-serif text-4xl md:text-5xl">Verhandlungs-Bibliothek</h1>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <h1 className="font-serif text-4xl md:text-5xl">Verhandlungs-Bibliothek</h1>
+            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+              <DialogTrigger asChild>
+                <Button variant="gold-outline" size="sm">
+                  <Plus className="w-3.5 h-3.5 mr-2" /> Buch hinzufügen
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-card border border-primary/30">
+                <DialogHeader>
+                  <DialogTitle className="font-serif text-2xl">Neues Buch anlegen</DialogTitle>
+                  <DialogDescription className="font-sans text-sm text-muted-foreground">
+                    Erstelle einen Eintrag. Danach kannst du in der Liste die PDF hochladen und indexieren.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div>
+                    <p className="font-mono-label text-muted-foreground text-xs mb-1.5">Titel *</p>
+                    <Input
+                      value={newTitle}
+                      onChange={(e) => {
+                        setNewTitle(e.target.value);
+                        if (!newKey) setNewKey(slugify(e.target.value));
+                      }}
+                      placeholder="z. B. Pre-Suasion"
+                    />
+                  </div>
+                  <div>
+                    <p className="font-mono-label text-muted-foreground text-xs mb-1.5">Autor</p>
+                    <Input value={newAuthor} onChange={(e) => setNewAuthor(e.target.value)} placeholder="z. B. Robert Cialdini" />
+                  </div>
+                  <div>
+                    <p className="font-mono-label text-muted-foreground text-xs mb-1.5">Book-Key (Slug)</p>
+                    <Input
+                      value={newKey}
+                      onChange={(e) => setNewKey(slugify(e.target.value))}
+                      placeholder="cialdini_pre_suasion"
+                    />
+                    <p className="font-mono-label text-muted-foreground/60 text-[10px] mt-1">
+                      Eindeutiger interner Schlüssel. Wird auch als PDF-Dateiname genutzt.
+                    </p>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setAddOpen(false)} disabled={adding}>Abbrechen</Button>
+                  <Button variant="gold" onClick={handleAddBook} disabled={adding || !newTitle.trim()}>
+                    {adding && <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />} Anlegen
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
           <p className="text-muted-foreground mt-3 max-w-2xl">
             Lade Buch-PDFs hoch und indexiere sie. Die ELITE-Pipeline retrievt vor jeder Analyse relevante Passagen aus diesen Quellen.
           </p>
