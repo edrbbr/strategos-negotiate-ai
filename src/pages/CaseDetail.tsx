@@ -561,6 +561,49 @@ const CaseDetail = () => {
 
           <div>
             <div className="flex items-baseline justify-between mb-2">
+              <p className="font-mono-label text-muted-foreground">Eskalations-Stufe</p>
+              <span className="font-mono-label text-muted-foreground/60 text-[10px]">
+                Auto = KI entscheidet (Soft-First, außer Gegenseite aggressiv)
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {([
+                { k: "auto", label: "Auto" },
+                { k: "soft", label: "Soft" },
+                { k: "neutral", label: "Neutral" },
+                { k: "hard", label: "Hart" },
+              ] as const).map((opt) => {
+                const active = escalationLevel === opt.k;
+                return (
+                  <button
+                    key={opt.k}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => {
+                      setEscalationLevel(opt.k);
+                      if (caseId) {
+                        updateMut.mutate({
+                          id: caseId,
+                          patch: { escalation_level: opt.k } as Partial<typeof caseRow> as never,
+                        });
+                      }
+                    }}
+                    className={cn(
+                      "px-3 py-2.5 rounded-sm border font-mono-label text-xs transition-colors",
+                      active
+                        ? "border-primary/60 bg-primary/10 text-primary"
+                        : "border-border/40 text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-baseline justify-between mb-2">
               <p className="font-mono-label text-muted-foreground">Referenz-Dokumente</p>
               <p className="font-mono-label text-muted-foreground/60 text-[10px]">
                 {(serverAttachments?.length ?? 0) + pendingFiles.length}/{maxAttachments}
