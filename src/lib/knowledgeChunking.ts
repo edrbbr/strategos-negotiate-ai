@@ -93,6 +93,10 @@ async function extractPageText(page: PdfPageLike) {
 }
 
 export async function extractKnowledgeChunksFromPdf(file: Blob) {
+export async function extractKnowledgeChunksFromPdf(
+  file: Blob,
+  onPage?: (pageNumber: number, totalPages: number) => void,
+) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const loadingTask = pdfjs.getDocument({ data: bytes });
   const pdf = await loadingTask.promise;
@@ -112,6 +116,7 @@ export async function extractKnowledgeChunksFromPdf(file: Blob) {
       chunkIndex += result.chunks.length;
 
       page.cleanup();
+      onPage?.(pageNumber, pdf.numPages);
     }
   } finally {
     await loadingTask.destroy();
