@@ -1,52 +1,54 @@
-# Plan
+# Plan: PDF-Indexierung hängt bei „PDF wird gelesen“ beheben
 
-## Was ich gefunden habe
-- Das Backend selbst wirkt gesund; die hängende Indexierung kommt aktuell nicht von einem allgemeinen Backend-Ausfall.
-- Beim betroffenen Buch `kahneman_fast_slow` steht der Datensatz auf `indexing`, aber es existieren **0 Chunks** in `knowledge_chunks`.
-- In den Logs der Function gibt es für diesen Lauf praktisch keine eigentliche Verarbeitungsaktivität. Das spricht dafür, dass der Prozess **vor dem Seed/Embed-Schritt** hängen bleibt oder abbricht.
-- Die gemeldeten `devserver_websocket_error`- und `/_sandbox/dev-server 404`-Meldungen sind sehr wahrscheinlich **Preview-/Hot-Reload-Signale** und nicht die eigentliche Ursache der Fachlogik. Ich werde sie nicht als Root Cause behandeln.
+## Was ich festgestellt habe
+- Das gehostete Backend wirkt gesund; das Problem ist nicht ein genereller Backend-Ausfall.
+- Für `the_psychology_of_persuasion` steht der Datensatz auf `indexing` mit `progress_phase = extracting_pdf`, aber es gibt **0 Chunks** in der Datenbank.
+- Für `kahneman_fast_slow` steht der Datensatz bereits wieder auf `uploaded`, ebenfalls mit **0 Chunks**.
+- In den Function-Logs von `ingest-knowledge-base` sieht man für diese Versuche praktisch **keine eigentliche Verarbeitungsaktivität**. Das heißt: Der Lauf bleibt sehr wahrscheinlich **vor dem ersten Seed-Request** hängen.
+- Die aktuelle Implementierung liest und zerlegt die PDF im **Admin-Browser**. Wenn `pdfjs-dist/webpack.mjs` bei bestimmten PDFs hängenbleibt oder extrem langsam wird, bleibt die UI auf „PDF wird gelesen“ stehen, ohne dass der Backend-Worker überhaupt startet.
 
 ## Umsetzung
-1. **Indexierungs-Flow im Admin-Frontend robuster machen**
-   - Den Start-Flow in klaren Phasen führen: `Extrahiere PDF`, `Sende Chunks`, `Erzeuge Embeddings`, `Fertig`.
-   - Solange noch keine Chunks in der DB sind, nicht mehr nur „Warte auf Chunks…“ zeigen, sondern die echte Vorphase im Browser sichtbar machen.
-   - Beim Retry alte Fehlermeldungen und hängende Zustände zuverlässig zurücksetzen.
+1. **PDF-Extraktion aus dem Browser herauslösen**
+   - Die Extraktion der PDF nicht mehr im Admin-Frontend ausführen.
+   - Stattdessen die PDF im Backend aus dem Storage laden und dort mit einer Deno-kompatiblen PDF-Extraktion verarbeiten.
+   - Danach Chunks direkt serverseitig erzeugen und speichern, damit der Flow nicht mehr vom Browser-Tab abhängt.
 
-2. **Fehler beim clientseitigen PDF-Extract sauber abfangen**
-   - `extractKnowledgeChunksFromPdf()` und den gesamten Upload-/Seed-Ablauf mit harter Fehlerbehandlung absichern.
-   - Wenn die Extraktion fehlschlägt, zu lange hängt oder 0 verwertbare Inhalte liefert, den Buchstatus aktiv auf `error` setzen statt auf `indexing` stehen zu lassen.
-   - Eine verständliche Fehlermeldung pro Buch speichern und im UI anzeigen.
+2. **Indexierungs-Function in echte Phasen aufteilen**
+   - `download_pdf` → `extract_text` → `chunking` → `embedding` → `done`
+   - Jede Phase schreibt laufend Fortschritt und Heartbeats in `knowledge_books`.
+   - Die UI zeigt dann echten Server-Fortschritt statt nur einen lokalen Platzhalter.
 
-3. **Fortschritt und Heartbeat serverseitig verlässlich machen**
-   - Die Buch-/Indexierungsdaten um echte Laufzeitinformationen ergänzen, damit der Status nicht nur aus vorhandenen Chunks abgeleitet wird.
-   - Geplante Felder: aktuelle Phase, verarbeitete/gesamte Einheiten, letzter Heartbeat, Fehlerstufe.
-   - So kann das UI unterscheiden zwischen „extrahiert gerade“, „Seed läuft“, „Embedding läuft“, „steckt fest“, „fehlgeschlagen“.
+3. **Harte Fehler- und Timeout-Behandlung einbauen**
+   - Zeitlimit pro Extraktionsphase.
+   - Wenn aus der PDF kein Text extrahiert werden kann oder die Extraktion hängenbleibt, wird der Buchstatus aktiv auf `error` gesetzt.
+   - Zusätzlich wird die Fehlerstufe gespeichert, damit klar ist, ob das Problem bei Download, PDF-Parsing, Chunking oder Embedding lag.
 
-4. **Stall-/Timeout-Erkennung einbauen**
-   - Wenn ein Buch auf `indexing` steht, aber über eine definierte Zeit weder Heartbeat noch Fortschritt bekommt, automatisch als Fehler markieren.
-   - Im UI dazu klare Aktion anbieten: `Erneut starten` statt nur einen scheinbar laufenden Zustand anzuzeigen.
+4. **Abbrechen/Neustarten robust machen**
+   - Beim Abbrechen werden Fortschritt, Fehlermeldung und eventuell angelegte Chunks konsistent zurückgesetzt.
+   - Ein Neustart beginnt immer aus einem sauberen Zustand und überschreibt alte Hänger zuverlässig.
 
-5. **Edge Function gegen stille Hänger härten**
-   - Die Function so anpassen, dass jede Phase ihren Status zurückmeldet und Fehler mit Stufe/Grund persistiert.
-   - Beim Embed-Fortsetzen die nächste Ausführung nur dann planen, wenn es wirklich noch offene Chunks gibt.
-   - Bei Fehlern keine stillen Zwischenzustände hinterlassen.
+5. **Admin-UI an den serverseitigen Flow anpassen**
+   - „Indexieren“ startet nur noch den Backend-Job.
+   - Fortschrittsanzeige liest ausschließlich die Phasen-/Zählerdaten aus `knowledge_books`.
+   - Bei Fehlern erscheint eine klare Meldung mit passender Aktion: erneut starten oder abbrechen.
 
-6. **UI für Kontrolle und Recovery verbessern**
-   - Fortschrittsanzeige pro Buch mit echter Phasenbeschreibung plus Prozent/Rest.
-   - Deutliche Zustände für `läuft`, `wartet`, `steckt fest`, `fehlgeschlagen`, `abgebrochen`.
-   - Aktionen passend zum Zustand: `Abbrechen`, `Neu starten`, `PDF ersetzen`, `Löschen`.
+6. **Betroffene Bücher direkt reparieren**
+   - Nach dem Umbau die beiden Bücher `kahneman_fast_slow` und `the_psychology_of_persuasion` mit dem neuen Flow erneut anstoßen.
+   - Prüfen, ob Chunks angelegt werden, der Embedding-Schritt läuft und der Status auf `ready` wechselt.
 
 ## Technische Details
-- **Frontend-Datei:** `src/pages/AdminKnowledge.tsx`
-  - Start-Flow umbauen, lokale Phasen anzeigen, Retry-/Error-Reset ergänzen.
-- **PDF-Extraktion:** `src/lib/knowledgeChunking.ts`
-  - Robustere Fehlerbehandlung, Schutz gegen Hänger/leer extrahierte PDFs.
-- **Edge Function:** `supabase/functions/ingest-knowledge-base/index.ts`
-  - Status-/Heartbeat-Updates, bessere Fehlerpersistenz, saubere Folgeläufe.
-- **Datenbank:** neue Migration für zusätzliche Status-/Progress-Felder auf `knowledge_books` oder eine dedizierte Job-Status-Struktur.
+- **Frontend:** `src/pages/AdminKnowledge.tsx`
+  - Browser-seitige PDF-Zerlegung entfernen
+  - Statusanzeige auf reine Backend-Phasen umstellen
+- **Backend Function:** `supabase/functions/ingest-knowledge-base/index.ts`
+  - PDF aus Storage laden
+  - serverseitig Text extrahieren
+  - Chunks erzeugen, speichern und Embeddings fortsetzen
+- **Datenmodell:** `knowledge_books`
+  - vorhandene Progress-Felder weiterverwenden
+  - optional um Fehlerstufe/Job-Metadaten ergänzen, falls für Diagnose sinnvoll
 
-## Ergebnis nach dem Fix
-- Ein Klick auf `Indexieren` zeigt sofort eine sinnvolle Phase statt dauerhaft `0%`.
-- Wenn die PDF-Extraktion oder das Seeding scheitert, bleibt das Buch nicht mehr endlos auf `indexing`.
-- Hängende Jobs werden als Fehler erkennbar und können sauber neu gestartet oder abgebrochen werden.
-- Die Preview-WebSocket-Fehler werden von der eigentlichen Indexierungsdiagnose entkoppelt.
+## Ergebnis
+- Die Indexierung bleibt nicht mehr stumm bei „PDF wird gelesen“ hängen.
+- Auch problematische PDFs laufen entweder durch oder enden sauber mit verwertbarer Fehlermeldung.
+- Fortschritt, Abbruch und Neustart funktionieren verlässlich für weitere Bücher ebenfalls.
