@@ -329,25 +329,27 @@ export async function runMultiStagePipeline(
         },
       });
       stageMetas.push({ stage: "strategy", model: "google/gemini-2.5-flash", latency_ms: Date.now() - t2 });
-      const strategy = unwrapStrategy(strategyOut.strategy);
-      const recFallback = (strategyOut.recommended_variant as VariantKey) ?? "soft";
-      const recommendedVariant: VariantKey = VARIANT_KEYS.includes(recFallback) ? recFallback : "soft";
+      let strategy: string;
+      let recommendedVariant: VariantKey;
+      try {
+        const composed = composeStrategyText(strategyOut);
+        strategy = composed.text;
+        recommendedVariant = composed.recommendedVariant;
+      } catch (validationErr) {
+        throw stageError("strategy", ["analysis"], validationErr);
+      }
       await onStageComplete?.({ stage: "strategy", data: { strategy, recommended_variant: recommendedVariant } });
 
       const s3 = getStage(config, "draft");
       const t3 = Date.now();
       let draftOut: Record<string, unknown>;
       try {
-        draftOut = await callAnthropic({
-          apiKey: anthropicKey!,
+        draftOut = await runDraftWithFallback({
+          anthropicKey: anthropicKey!,
+          lovableKey,
           model: s3.model,
-          systemPrompt: promptDraft,
+          promptDraft,
           userMessage: `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}\n\nrecommended_variant: ${recommendedVariant}${attachLine}${knowledgeBlock}`,
-          tool: {
-            name: "return_draft",
-            description: "Return the final draft, title and icon hint.",
-            input_schema: DRAFT_SCHEMA,
-          },
         });
       } catch (draftError) {
         throw stageError("draft", ["analysis", "strategy"], draftError);
@@ -375,9 +377,15 @@ export async function runMultiStagePipeline(
     throw stageError("strategy", ["analysis"], e);
   }
   const lat2 = Date.now() - t2;
-  const strategy = unwrapStrategy(strategyOut.strategy);
-  const recRaw = (strategyOut.recommended_variant as VariantKey) ?? "soft";
-  const recommendedVariant: VariantKey = VARIANT_KEYS.includes(recRaw) ? recRaw : "soft";
+  let strategy: string;
+  let recommendedVariant: VariantKey;
+  try {
+    const composed = composeStrategyText(strategyOut);
+    strategy = composed.text;
+    recommendedVariant = composed.recommendedVariant;
+  } catch (validationErr) {
+    throw stageError("strategy", ["analysis"], validationErr);
+  }
   stageMetas.push({ stage: "strategy", model: s2.model, latency_ms: lat2 });
   await onStageComplete?.({ stage: "strategy", data: { strategy, recommended_variant: recommendedVariant } });
 
@@ -386,16 +394,12 @@ export async function runMultiStagePipeline(
   const t3 = Date.now();
   let draftOut: Record<string, unknown>;
   try {
-    draftOut = await callAnthropic({
-      apiKey: anthropicKey!,
+    draftOut = await runDraftWithFallback({
+      anthropicKey: anthropicKey!,
+      lovableKey,
       model: s3.model,
-      systemPrompt: promptDraft,
+      promptDraft,
       userMessage: `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}\n\nrecommended_variant: ${recommendedVariant}${attachLine}${knowledgeBlock}`,
-      tool: {
-        name: "return_draft",
-        description: "Return the final draft, title and icon hint.",
-        input_schema: DRAFT_SCHEMA,
-      },
     });
   } catch (e) {
     throw stageError("draft", ["analysis", "strategy"], e);
