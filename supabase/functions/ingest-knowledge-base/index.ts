@@ -387,7 +387,12 @@ Deno.serve(async (req) => {
     const phase = (body.phase as string | undefined) ?? "seed";
     const reset = body.reset === true;
     const chunks = Array.isArray(body.chunks) ? (body.chunks as Chunk[]) : [];
-    const isInternal = req.headers.get("x-internal-continue") === "1";
+    const authHeaderRaw = req.headers.get("Authorization") ?? "";
+    const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const isInternal =
+      req.headers.get("x-internal-continue") === "1" &&
+      SERVICE_ROLE_KEY.length > 0 &&
+      authHeaderRaw === `Bearer ${SERVICE_ROLE_KEY}`;
 
     if (!bookKey) {
       return new Response(JSON.stringify({ error: "book_key required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
