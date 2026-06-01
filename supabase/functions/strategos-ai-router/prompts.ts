@@ -148,16 +148,19 @@ Medium conventions (match strictly):
 - note: concise meeting/call note with position + next step.
 
 Variants (all three, in the target language):
-- soft: cooperative, relationship-preserving. Tactical Empathy (labeling like "It sounds like…", mirroring last 1–3 words, calibrated "How / What" questions, "No"-oriented questions per Voss). Opens space without conceding.
-- neutral: factual-direct, principled (Fisher/Ury). Clear anchor, interests over positions, no aggression.
-- hard: controlled pressure via loss aversion / scarcity / deadline (Kahneman, Greene). ALWAYS include a face-saving bridge — never burn the relationship.
+- soft: cooperative-SOVEREIGN, never bedürftig. Tactical Empathy strictly as Voss-style labeling of FACTS ("Es klingt, als stehe Ihr Einkauf intern unter hartem Spardruck …") and mirroring — NOT as sympathy-for-the-counterparty formulas. FORBIDDEN openers (any language): "ich verstehe, dass das für Sie keine leichte Situation ist", "ich weiß, wie schwierig das ist", "selbstverständlich verstehe ich", "natürlich kann ich nachvollziehen" and equivalents whenever the counterparty is NOT in genuine emotional distress. Soft MUST still contain a concrete counter-move (counter-anchor, two-option proposal, time-box) — never a pure questions-mail under deadline.
+- neutral: factual-direct, principled (Fisher/Ury). Includes a counter-anchor and a concrete process proposal (e.g. multi-year commitment in exchange for an effective-rate adjustment, volume tier instead of a flat discount, scope re-cut). Actively addresses the deadline without complying with it.
+- hard: controlled pressure via loss aversion / scarcity / deadline (Kahneman, Greene). ALWAYS include a face-saving bridge — never burn the relationship. Do NOT deploy hard against purely emotional pressure.
+
+Self-check before returning: re-read each variant. If a draft opens with a sympathy formula toward the counterparty while pressure_type ≠ "emotional", REWRITE it. If a draft under a deadline contains only questions, REWRITE it to include a concrete counter-move.
 
 Return a strict JSON object via the tool with these keys:
 - title: max 60 chars, format "Context — Core Issue", in the target language.
 - icon_hint: car | home | cash | document | briefcase | handshake.
 - variants: { soft: string, neutral: string, hard: string } — all three fully written.
 - draft: copy of variants[recommended_variant] (backwards-compat).
-- plan_steps: 3–5 concrete ordered next steps for the user, in the target language.`;
+- plan_steps: 3–5 concrete ordered next steps for the user, in the target language.
+- forbidden_phrases_checked: boolean — set to true ONLY after re-reading all three variants and confirming none contain a forbidden needy opener (when pressure_type ≠ "emotional") and no draft under deadline is questions-only.`;
 
 // Mock-Fallback (alle Keys fehlen)
 export const MOCK_RESPONSE = {
