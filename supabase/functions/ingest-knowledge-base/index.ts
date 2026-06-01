@@ -248,7 +248,16 @@ Deno.serve(async (req) => {
       if (delErr) throw new Error(`Delete chunks: ${delErr.message}`);
       await admin
         .from("knowledge_books")
-        .update({ status: "uploaded", chunk_count: 0, indexed_at: null, error_message: null })
+        .update({
+          status: "uploaded",
+          chunk_count: 0,
+          indexed_at: null,
+          error_message: null,
+          progress_phase: null,
+          progress_done: 0,
+          progress_total: 0,
+          progress_updated_at: new Date().toISOString(),
+        })
         .eq("book_key", bookKey);
       return new Response(JSON.stringify({ ok: true, phase: "cancel" }), {
         status: 200,
