@@ -200,36 +200,55 @@ async function phaseExtractRange(
 }
 
 // Self-invoke the same function to continue processing in a fresh CPU budget.
-function scheduleNext(payload: Record<string, unknown>) {
+// Retries on transient WORKER_RESOURCE_LIMIT (546) with exponential backoff
+// so a single momentary CPU overload doesn't kill the whole job.
+function scheduleNext(payload: Record<string, unknown>, attempt = 0) {
   const url = `${SUPABASE_URL}/functions/v1/ingest-knowledge-base`;
   const bookKey = (payload as { book_key?: string }).book_key;
-  const p = fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SERVICE_ROLE}`,
-      apikey: SERVICE_ROLE,
-      "x-internal-continue": "1",
-    },
-    body: JSON.stringify(payload),
-  })
-    .then(async (r) => {
-      if (!r.ok) {
-        const text = await r.text().catch(() => "");
-        console.error(`scheduleNext non-ok ${r.status}: ${text}`);
+  const doFetch = async () => {
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SERVICE_ROLE}`,
+          apikey: SERVICE_ROLE,
+          "x-internal-continue": "1",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (r.ok) return;
+      const text = await r.text().catch(() => "");
+      const isResourceLimit = r.status === 546 || text.includes("WORKER_RESOURCE_LIMIT");
+      console.error(`scheduleNext non-ok ${r.status} (attempt ${attempt}): ${text}`);
+      if (isResourceLimit && attempt < MAX_SCHEDULE_RETRIES) {
+        const delayMs = 1500 * Math.pow(2, attempt); // 1.5s, 3s, 6s, 12s
         if (bookKey) {
           await admin
             .from("knowledge_books")
-            .update({
-              status: "error",
-              error_message: `Folgeaufruf fehlgeschlagen (${r.status}): ${text.slice(0, 300)}`,
-            })
+            .update({ progress_updated_at: new Date().toISOString() })
             .eq("book_key", bookKey);
         }
+        await new Promise((res) => setTimeout(res, delayMs));
+        scheduleNext(payload, attempt + 1);
+        return;
       }
-    })
-    .catch(async (e) => {
+      if (bookKey) {
+        await admin
+          .from("knowledge_books")
+          .update({
+            status: "error",
+            error_message: `Folgeaufruf fehlgeschlagen (${r.status}): ${text.slice(0, 300)}`,
+          })
+          .eq("book_key", bookKey);
+      }
+    } catch (e) {
       console.error("scheduleNext failed:", e);
+      if (attempt < MAX_SCHEDULE_RETRIES) {
+        await new Promise((res) => setTimeout(res, 1500 * Math.pow(2, attempt)));
+        scheduleNext(payload, attempt + 1);
+        return;
+      }
       if (bookKey) {
         await admin
           .from("knowledge_books")
@@ -239,9 +258,10 @@ function scheduleNext(payload: Record<string, unknown>) {
           })
           .eq("book_key", bookKey);
       }
-    });
+    }
+  };
   // @ts-ignore EdgeRuntime is provided by Supabase
-  try { EdgeRuntime.waitUntil(p); } catch { /* ignore */ }
+  try { EdgeRuntime.waitUntil(doFetch()); } catch { doFetch(); }
 }
 
 async function phaseSeed(bookKey: string, chunks: Chunk[], reset: boolean): Promise<{ total: number }> {
