@@ -65,7 +65,6 @@ function chunkPageText(pageText: string, page: number, startIndex: number, curre
   return { chunks, chapter };
 }
 
-async function extractPageText(page: Awaited<ReturnType<ReturnType<typeof pdfjs.getDocument>["promise"]>["getPage"]>) {
 type PdfTextItem = { str?: string; hasEOL?: boolean };
 type PdfPageLike = { getTextContent: () => Promise<{ items: PdfTextItem[] }> };
 
