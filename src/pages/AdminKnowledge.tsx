@@ -333,6 +333,16 @@ const AdminKnowledge = () => {
             {(books ?? []).map((b) => {
               const isUploading = uploadingKey === b.book_key;
               const isProcessing = (ingest.isPending && ingest.variables?.book_key === b.book_key) || b.status === "indexing";
+              const s = chunkStats?.[b.book_key];
+              const pendingEmbeds = s?.pending ?? 0;
+              const heartbeatAge = b.progress_updated_at
+                ? Date.now() - new Date(b.progress_updated_at).getTime()
+                : Infinity;
+              const stalled = b.status === "indexing" && heartbeatAge > STALL_THRESHOLD_MS;
+              const canResume =
+                (b.status === "error" || stalled) &&
+                (s?.total ?? b.chunk_count) > 0 &&
+                pendingEmbeds >= 0;
 
               return (
                 <article key={b.book_key} className="border border-border/30 rounded-sm p-6 hover:border-primary/30 transition-colors">
@@ -436,6 +446,21 @@ const AdminKnowledge = () => {
                           <XCircle className="w-3.5 h-3.5 mr-2" />
                         )}
                         Abbrechen
+                      </Button>
+                    )}
+                    {canResume && (
+                      <Button
+                        variant="gold-outline"
+                        size="sm"
+                        onClick={() => resume.mutate(b)}
+                        disabled={resume.isPending}
+                      >
+                        {resume.isPending && resume.variables?.book_key === b.book_key ? (
+                          <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+                        ) : (
+                          <Play className="w-3.5 h-3.5 mr-2" />
+                        )}
+                        Fortsetzen
                       </Button>
                     )}
                     <Button
