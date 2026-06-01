@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, XCircle } from "lucide-react";
+import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, XCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
@@ -98,6 +98,8 @@ const AdminKnowledge = () => {
   const [newTitle, setNewTitle] = useState("");
   const [newAuthor, setNewAuthor] = useState("");
   const [adding, setAdding] = useState(false);
+  const [deleteBook, setDeleteBook] = useState<Book | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   const slugify = (s: string) =>
     s
@@ -207,6 +209,22 @@ const AdminKnowledge = () => {
       qc.invalidateQueries({ queryKey: ["knowledge-books"] });
     },
     onError: (e: Error) => toast.error(`Abbruch fehlgeschlagen: ${e.message}`),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (book: Book) => {
+      const { error } = await supabase.functions.invoke("ingest-knowledge-base", {
+        body: { book_key: book.book_key, phase: "delete" },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Buch und alle Indizes entfernt.");
+      setDeleteBook(null);
+      setDeleteConfirm("");
+      qc.invalidateQueries({ queryKey: ["knowledge-books"] });
+    },
+    onError: (e: Error) => toast.error(`Löschen fehlgeschlagen: ${e.message}`),
   });
 
   const handleUpload = async (book: Book, file: File) => {
