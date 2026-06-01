@@ -1,12 +1,13 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus } from "lucide-react";
+import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { extractKnowledgeChunksFromPdf } from "@/lib/knowledgeChunking";
 
@@ -40,6 +41,37 @@ const STATUS_LABEL: Record<Book["status"], string> = {
 
 const CHUNK_UPLOAD_BATCH_SIZE = 100;
 
+type ChunkStats = { total: number; embedded: number; pending: number };
+
+function useChunkStats(books: Book[] | undefined) {
+  const indexingKeys = (books ?? [])
+    .filter((b) => b.status === "indexing")
+    .map((b) => b.book_key)
+    .sort()
+    .join(",");
+
+  return useQuery({
+    queryKey: ["knowledge-chunk-stats", indexingKeys],
+    enabled: indexingKeys.length > 0,
+    refetchInterval: 2500,
+    queryFn: async (): Promise<Record<string, ChunkStats>> => {
+      const keys = indexingKeys.split(",").filter(Boolean);
+      const results = await Promise.all(
+        keys.map(async (key) => {
+          const [{ count: total }, { count: pending }] = await Promise.all([
+            supabase.from("knowledge_chunks").select("id", { count: "exact", head: true }).eq("book_key", key),
+            supabase.from("knowledge_chunks").select("id", { count: "exact", head: true }).eq("book_key", key).is("embedding", null),
+          ]);
+          const t = total ?? 0;
+          const p = pending ?? 0;
+          return [key, { total: t, embedded: t - p, pending: p }] as const;
+        }),
+      );
+      return Object.fromEntries(results);
+    },
+  });
+}
+
 function useBooks() {
   return useQuery({
     queryKey: ["knowledge-books"],
@@ -57,6 +89,7 @@ function useBooks() {
 
 const AdminKnowledge = () => {
   const { data: books, isLoading } = useBooks();
+  const { data: chunkStats } = useChunkStats(books);
   const qc = useQueryClient();
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
@@ -160,6 +193,20 @@ const AdminKnowledge = () => {
       qc.invalidateQueries({ queryKey: ["knowledge-books"] });
     },
     onError: (e: Error) => toast.error(`Indexierung fehlgeschlagen: ${e.message}`),
+  });
+
+  const cancel = useMutation({
+    mutationFn: async (book: Book) => {
+      const { error } = await supabase.functions.invoke("ingest-knowledge-base", {
+        body: { book_key: book.book_key, phase: "cancel" },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Indexierung abgebrochen.");
+      qc.invalidateQueries({ queryKey: ["knowledge-books"] });
+    },
+    onError: (e: Error) => toast.error(`Abbruch fehlgeschlagen: ${e.message}`),
   });
 
   const handleUpload = async (book: Book, file: File) => {
@@ -316,6 +363,26 @@ const AdminKnowledge = () => {
                     </div>
                   )}
 
+                  {b.status === "indexing" && (() => {
+                    const s = chunkStats?.[b.book_key];
+                    const total = s?.total ?? 0;
+                    const embedded = s?.embedded ?? 0;
+                    const pct = total > 0 ? Math.round((embedded / total) * 100) : 0;
+                    return (
+                      <div className="mb-4 space-y-2">
+                        <div className="flex justify-between font-mono-label text-xs">
+                          <span className="text-muted-foreground">
+                            {total > 0
+                              ? `${embedded.toLocaleString("de-DE")} / ${total.toLocaleString("de-DE")} Chunks eingebettet`
+                              : "Warte auf Chunks…"}
+                          </span>
+                          <span className="text-primary">{pct}%</span>
+                        </div>
+                        <Progress value={pct} className="h-1.5" />
+                      </div>
+                    );
+                  })()}
+
                   <div className="flex flex-wrap gap-3 justify-end">
                     <input
                       ref={(el) => { fileInputs.current[b.book_key] = el; }}
@@ -337,6 +404,22 @@ const AdminKnowledge = () => {
                       {isUploading ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Upload className="w-3.5 h-3.5 mr-2" />}
                       {b.file_path ? "PDF ersetzen" : "PDF hochladen"}
                     </Button>
+                    {b.status === "indexing" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => cancel.mutate(b)}
+                        disabled={cancel.isPending}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        {cancel.isPending && cancel.variables?.book_key === b.book_key ? (
+                          <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+                        ) : (
+                          <XCircle className="w-3.5 h-3.5 mr-2" />
+                        )}
+                        Abbrechen
+                      </Button>
+                    )}
                     <Button
                       variant="gold-outline"
                       size="sm"
