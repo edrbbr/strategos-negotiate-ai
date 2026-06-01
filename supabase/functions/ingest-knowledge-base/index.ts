@@ -121,9 +121,8 @@ function chunkPageText(pageText: string, page: number, startIndex: number, curre
   return { chunks, chapter };
 }
 
-// Phase: download PDF, extract text, chunk it, insert rows, then schedule embedding.
-async function phaseStart(bookKey: string): Promise<{ total: number }> {
-  // 1) Load book row
+// Download the PDF for the given book from storage. Returns the raw bytes.
+async function downloadBook(bookKey: string): Promise<{ buf: ArrayBuffer; filePath: string }> {
   const { data: book, error: bookErr } = await admin
     .from("knowledge_books")
     .select("book_key, file_path")
@@ -132,62 +131,72 @@ async function phaseStart(bookKey: string): Promise<{ total: number }> {
   if (bookErr || !book) throw new Error(`Book not found: ${bookKey}`);
   if (!book.file_path) throw new Error("Book has no file_path. Upload PDF first.");
 
-  // 2) Reset state
-  await admin.from("knowledge_chunks").delete().eq("book_key", bookKey);
-  await setProgress(bookKey, "downloading", 0, 0, { chunk_count: 0, indexed_at: null });
-
-  // 3) Download from storage
   const { data: file, error: dlErr } = await admin.storage.from("knowledge-base").download(book.file_path);
   if (dlErr || !file) throw new Error(`Download PDF: ${dlErr?.message ?? "unknown"}`);
   const buf = await file.arrayBuffer();
   if (buf.byteLength > MAX_PDF_BYTES) {
     throw new Error(`PDF too large: ${(buf.byteLength / 1024 / 1024).toFixed(1)}MB (max ${MAX_PDF_BYTES / 1024 / 1024}MB)`);
   }
+  return { buf, filePath: book.file_path };
+}
 
-  // 4) Extract text per page
-  await setProgress(bookKey, "extracting", 0, 0);
+// Phase 1: just initialize the book, then schedule the first page-range extraction.
+// Keeps this invocation extremely light to avoid CPU limit on big PDFs.
+async function phaseStart(bookKey: string): Promise<{ scheduled: boolean }> {
+  // Verify the file exists in storage
+  await downloadBook(bookKey);
+  // Reset previous data
+  await admin.from("knowledge_chunks").delete().eq("book_key", bookKey);
+  await setProgress(bookKey, "preparing", 0, 0, { chunk_count: 0, indexed_at: null });
+  scheduleNext({ book_key: bookKey, phase: "extract_range", from: 0, chunk_index: 0, chapter: null });
+  return { scheduled: true };
+}
+
+// Phase: extract a contiguous page range using unpdf+pdfjs, chunk it, insert chunks.
+// Each invocation handles PAGES_PER_INVOCATION pages, then schedules the next range or moves to embed.
+async function phaseExtractRange(
+  bookKey: string,
+  from: number,
+  startChunkIndex: number,
+  startChapter: string | null,
+): Promise<{ done: boolean; nextFrom: number; chunkIndex: number; chapter: string | null; totalPages: number }> {
+  const { buf } = await downloadBook(bookKey);
   const pdf = await getDocumentProxy(new Uint8Array(buf));
   const totalPages = pdf.numPages;
-  await setProgress(bookKey, "extracting", 0, totalPages);
+  const to = Math.min(from + PAGES_PER_INVOCATION, totalPages);
 
-  const { text: pageTexts } = await extractText(pdf, { mergePages: false });
-  await setProgress(bookKey, "extracting", totalPages, totalPages);
+  await setProgress(bookKey, "extracting", from, totalPages);
 
-  // 5) Chunk
-  await setProgress(bookKey, "chunking", 0, totalPages);
-  const allChunks: Chunk[] = [];
-  let chapter: string | null = null;
-  let chunkIndex = 0;
-  for (let p = 0; p < pageTexts.length; p++) {
-    const result = chunkPageText(pageTexts[p] ?? "", p + 1, chunkIndex, chapter);
-    for (const c of result.chunks) {
-      allChunks.push({ book_key: bookKey, ...c });
-    }
+  let chapter = startChapter;
+  let chunkIndex = startChunkIndex;
+  const collected: Chunk[] = [];
+
+  for (let i = from + 1; i <= to; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    // deno-lint-ignore no-explicit-any
+    const pageText = (content.items as any[])
+      .map((it) => (typeof it.str === "string" ? it.str : ""))
+      .join(" ");
+    const result = chunkPageText(pageText, i, chunkIndex, chapter);
+    for (const c of result.chunks) collected.push({ book_key: bookKey, ...c });
     chapter = result.chapter;
     chunkIndex += result.chunks.length;
-    if (p % 25 === 0) {
-      await setProgress(bookKey, "chunking", p + 1, totalPages);
-      if (await isCancelled(bookKey)) throw new Error("Cancelled");
+  }
+
+  // Insert the chunks for this range
+  if (collected.length > 0) {
+    for (let i = 0; i < collected.length; i += CHUNK_INSERT_BATCH) {
+      const batch = collected.slice(i, i + CHUNK_INSERT_BATCH).map((c) => ({ ...c, embedding: null }));
+      const { error: insErr } = await admin.from("knowledge_chunks").insert(batch);
+      if (insErr) throw new Error(`Insert chunks: ${insErr.message}`);
     }
   }
-  if (allChunks.length === 0) throw new Error("PDF enthält keinen extrahierbaren Text.");
 
-  // 6) Insert chunks in batches
-  await setProgress(bookKey, "seeding", 0, allChunks.length);
-  for (let i = 0; i < allChunks.length; i += CHUNK_INSERT_BATCH) {
-    const batch = allChunks.slice(i, i + CHUNK_INSERT_BATCH).map((c) => ({ ...c, embedding: null }));
-    const { error: insErr } = await admin.from("knowledge_chunks").insert(batch);
-    if (insErr) throw new Error(`Insert chunks: ${insErr.message}`);
-    await setProgress(bookKey, "seeding", Math.min(i + batch.length, allChunks.length), allChunks.length, {
-      chunk_count: Math.min(i + batch.length, allChunks.length),
-    });
-    if (await isCancelled(bookKey)) throw new Error("Cancelled");
-  }
+  await setProgress(bookKey, "extracting", to, totalPages, { chunk_count: chunkIndex });
 
-  // 7) Kick off embedding
-  await setProgress(bookKey, "embedding", 0, allChunks.length);
-  scheduleNext({ book_key: bookKey, phase: "embed" });
-  return { total: allChunks.length };
+  const done = to >= totalPages;
+  return { done, nextFrom: to, chunkIndex, chapter, totalPages };
 }
 
 // Self-invoke the same function to continue processing in a fresh CPU budget.
