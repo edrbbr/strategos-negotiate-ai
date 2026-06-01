@@ -443,18 +443,32 @@ const AdminKnowledge = () => {
 
                   {b.status === "indexing" && (() => {
                     const s = chunkStats?.[b.book_key];
-                    const total = s?.total ?? 0;
+                    const chunkTotal = s?.total ?? 0;
                     const embedded = s?.embedded ?? 0;
-                    const pct = total > 0 ? Math.round((embedded / total) * 100) : 0;
+
+                    const phase = b.progress_phase ?? (chunkTotal > 0 ? "embedding" : "extracting_pdf");
+                    const isEmbedPhase = phase === "embedding";
+
+                    // Während des Embeddings sind DB-Counts (chunk_stats) die Wahrheit,
+                    // davor zeigen wir den lokal gemeldeten Fortschritt aus knowledge_books.
+                    const done = isEmbedPhase ? embedded : b.progress_done ?? 0;
+                    const total = isEmbedPhase ? chunkTotal : b.progress_total ?? 0;
+                    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+                    const lastHeartbeat = b.progress_updated_at ? new Date(b.progress_updated_at).getTime() : 0;
+                    const ageMs = lastHeartbeat ? Date.now() - lastHeartbeat : Infinity;
+                    const isStalled = ageMs > STALL_THRESHOLD_MS;
+
+                    const label = isStalled ? PHASE_LABEL.stalled : (PHASE_LABEL[phase] ?? "Indexierung läuft…");
+
                     return (
                       <div className="mb-4 space-y-2">
                         <div className="flex justify-between font-mono-label text-xs">
-                          <span className="text-muted-foreground">
-                            {total > 0
-                              ? `${embedded.toLocaleString("de-DE")} / ${total.toLocaleString("de-DE")} Chunks eingebettet`
-                              : "Warte auf Chunks…"}
+                          <span className={isStalled ? "text-destructive" : "text-muted-foreground"}>
+                            {label}
+                            {total > 0 && ` · ${done.toLocaleString("de-DE")} / ${total.toLocaleString("de-DE")}`}
                           </span>
-                          <span className="text-primary">{pct}%</span>
+                          <span className={isStalled ? "text-destructive" : "text-primary"}>{pct}%</span>
                         </div>
                         <Progress value={pct} className="h-1.5" />
                       </div>
