@@ -12,12 +12,14 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const EMBED_MODEL = "google/gemini-embedding-001";
 const EMBED_DIMS = 3072;
-const EMBED_BATCH = 4;
-const EMBED_BATCHES_PER_INVOCATION = 6;
+const EMBED_BATCH = 8;
+const EMBED_BATCHES_PER_INVOCATION = 1;
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
 const CHUNK_INSERT_BATCH = 200;
 const MAX_PDF_BYTES = 30 * 1024 * 1024; // 30MB hard cap
+const PAGES_PER_INVOCATION = 20; // Extract this many PDF pages per edge call to stay under CPU limit
+const MAX_SCHEDULE_RETRIES = 4;
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
