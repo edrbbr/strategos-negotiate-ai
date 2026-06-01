@@ -1,83 +1,75 @@
-# Plan: Prompt-Schärfung in der Pipeline
+# Analyse: Warum die Pipeline bei „strategy" abbricht
 
-Ziel: Die KI soll Soft-First weiterhin als Default behalten, aber **kalkulierten wirtschaftlichen Druck** (mit künstlicher Deadline, Abhängigkeitshebel) klar von **emotionalem Schmerz** trennen und in solchen Situationen nicht defensiv/bedürftig agieren. Wissensquellen sollen B2B-scharf statt lehrbuchartig übersetzt werden.
+## Symptom
+- Analyse läuft komplett durch und wird im Case persistiert (rechts sichtbar).
+- Strategy bleibt „Unterbrochen / Stage abgebrochen".
+- Toast: **„Pipeline-Fehler: Failed to send a request to the Edge Function"**.
 
-Alle Änderungen passieren in **`supabase/functions/strategos-ai-router/prompts.ts`** — keine Logik-Änderungen am Router, kein UI-Eingriff.
+## Root Cause
+Edge-Function-Logs zeigen: `Http: connection closed before message completed`. Das ist kein Modell-Fehler — die Edge-Function wurde **mitten in der Bearbeitung abgeschnitten**, weil das Wall-/CPU-Limit der Edge-Runtime erreicht wurde.
 
-## 1) ELITE_PERSONA — Anti-Bedürftigkeits-Regeln ergänzen
+Konkret in `strategos-ai-router`:
+1. **Alles läuft synchron in EINEM Request**: Analyse (Anthropic, ~30–60s) → Strategy (OpenAI gpt-5 Reasoning, bis zu 90s + bis zu 4 Retries bei 429/5xx) → Draft (Anthropic).
+2. `providers/openai.ts`: `TIMEOUT_MS = 90_000`, `maxRetries = 4`. Worst-Case allein für Strategy = mehrere Minuten.
+3. Die neuen, deutlich umfangreicheren Prompts (`prompts.ts` nach der Sovereignty-Überarbeitung) erhöhen Input-/Reasoning-Last → Strategy-Stage tendenziell langsamer.
+4. Edge-Runtime kappt die HTTP-Verbindung deutlich vor 150 s realer Antwortzeit → Frontend bekommt „Failed to send a request". Die Strategy-Stage hatte noch nicht ins DB geschrieben, also bleibt sie im UI auf „running" und kippt dann via Catch auf „failed".
 
-Ergänzungen am Persona-Block:
+Sekundärer Befund in den Logs: `match_knowledge failed canceling statement due to statement timeout` (pgvector RPC) — wird im RAG-Pfad bereits sauber geschluckt (leere Sources), ist also nur ein Hinweis, kein Auslöser.
 
-- Neue Regel **"Sovereignty over Empathy"**: Empathie ist Werkzeug, nicht Reflex. Wenn die Gegenseite kalkulierten wirtschaftlichen Druck ausübt (kein emotionaler Schmerz), signalisiert mitfühlende Sprache Verlustangst und kippt die Machtbalance.
-- **Verbotsliste von Bedürftigkeits-Phrasen** (sprachunabhängig, mit deutschen Beispielen): "ich verstehe, dass das für Sie keine leichte Situation ist", "ich weiß, wie schwierig das ist", "selbstverständlich", "natürlich verstehe ich" als Eröffnung gegenüber Druck — explizit untersagt, wenn keine emotionale Notlage der Gegenseite vorliegt.
-- **Pressure-Type-Unterscheidung** wird Teil der vier Punkte: emotional vs. kalkuliert-wirtschaftlich vs. gemischt.
-- **Anti-Open-Question-Regel unter Deadline**: Offene Fragen per E-Mail an einen Gegner unter selbst gesetztem Zeitdruck geben ihm die Kontrolle zurück. Erlaubt sind dann nur: (a) kalibrierte Fragen, die den Druck zurückspiegeln, (b) konkrete Prozess-/Optionsangebote, (c) "No"-orientierte Fragen.
+## Lösung — Pipeline in den Hintergrund verlagern
 
-## 2) SOFT-FIRST-Prinzip präzisieren
+Kernidee: Die HTTP-Antwort an den Client darf **nicht** an den langsamsten Modellaufruf gekoppelt sein. Stattdessen:
 
-Statt pauschal "Soft-First bei weak/balanced" wird das Prinzip um eine Ausnahme erweitert:
+1. Router startet die Pipeline in `EdgeRuntime.waitUntil(...)`, schreibt Stages weiterhin per `writeStage` in `cases` (passiert bereits) und antwortet sofort mit `{ status: "started", case_id }`.
+2. Frontend zeigt die Stages live an, indem es per **Realtime auf die `cases`-Zeile subscribed** (mit Polling-Fallback, wie heute schon im `waitForVersionRecovery`-Pfad vorhanden).
+3. Fehler einer Stage werden als strukturiertes Feld (`pipeline_error`) in `cases` gespeichert, damit das UI „Stage abgebrochen + Grund" auch ohne offene HTTP-Verbindung anzeigen kann.
 
-```text
-SOFT-FIRST gilt NICHT als bedürftige Eröffnung. Soft = souverän-kooperativ, nicht weich.
-Ausnahme: pressure_type = "calculated_economic" UND artifizielle Deadline
-→ recommended_variant mindestens "neutral", auch bei weak position.
-Soft-Variante bleibt verfügbar, aber neu kalibriert: sachlich-warm, ohne Verlustangst-Signale.
-```
+## Umsetzung
 
-## 3) PROMPT_ANALYSIS — zwei neue Felder
+### 1) DB-Migration — Fehlerzustand pro Case persistieren
+Neue Migration:
+- `ALTER TABLE public.cases ADD COLUMN pipeline_error jsonb;`
+  Form: `{ stage: 'analysis'|'strategy'|'draft', code, message, at }`.
+- `ALTER PUBLICATION supabase_realtime ADD TABLE public.cases;` (falls noch nicht aktiv) und `ALTER TABLE public.cases REPLICA IDENTITY FULL;` damit Updates pro Stage als Realtime-Event ankommen.
 
-Im JSON-Schema der Analyse-Stage ergänzen:
+Keine RLS-Änderungen nötig (bestehende Policies decken `cases` ab).
 
-- `pressure_type`: `"emotional" | "calculated_economic" | "mixed" | "none"` — Klassifiziert die Druckart der Gegenseite.
-- `dependency_risk`: `"low" | "medium" | "high"` — Erfasst Abhängigkeitshebel (z. B. Umsatzanteil eines Kunden, Single-Source-Lieferant).
-- `counterparty_model` muss künstliche Deadlines, Anker und Abhängigkeitshebel explizit benennen.
+### 2) `supabase/functions/strategos-ai-router/index.ts` — Background-Run
+- Multi-Stage-Branch: bisherigen `await runMultiStagePipeline(...)`-Block in eine async-Funktion `runInBackground()` extrahieren.
+- `EdgeRuntime.waitUntil(runInBackground())` aufrufen.
+- **Sofort** `return json({ status: "started", case_id, plan: plan.id, cases_used: cases_used_after, case_limit: plan.case_limit, pipeline_meta: { type: "multi_stage", stages: [] } }, 202);`.
+- In `runInBackground`:
+  - `writeStage` wie heute pro Stage (Analyse/Strategy/Draft).
+  - Bei Erfolg: `persistInitialVersion` + `cases.pipeline_error = null`.
+  - Bei `StageFailure`: `cases.pipeline_error = { stage, code, message, at }`, **keine** Ausnahme nach oben (Connection ist eh zu).
+  - `consume_dossier` bleibt am Anfang (Quota wird schon vor dem Start gezählt — Verhalten unverändert).
+- Single-Call-Branch (Free/Pro) bleibt synchron (läuft in <60s, kein Problem).
 
-## 4) PROMPT_STRATEGY — Entscheidungsregeln ergänzen
+### 3) Per-Stage-Härtung gegen Worst-Case
+In `providers/openai.ts`:
+- `TIMEOUT_MS` von 90 → 60 s.
+- `maxRetries` von 4 → 2.
+- Bei `TIMEOUT` als ProviderError mit `code: "TIMEOUT"` werfen — wird im Multi-Stage bereits sauber als StageFailure persistiert.
 
-Neue Regeln zusätzlich zur bisherigen Logik:
+In `pipelines/multiStage.ts`:
+- Bereits vorhandener Gemini-Fallback bei OpenAI `RATE_LIMIT` zusätzlich auf `TIMEOUT` triggern (1 Versuch, dann fail).
 
-```text
-- pressure_type = "calculated_economic" AND künstliche Deadline
-  → recommended_variant MINDESTENS "neutral", unabhängig von power_position.
-  → Strategie MUSS einen Gegenzug zur Deadline enthalten
-    (Reframe, Counter-Anchor, Prozess-Vorschlag oder bewusstes Time-Boxing).
-- dependency_risk = "high"
-  → Strategie MUSS in 1 Satz die mittel-/langfristige BATNA-Stärkung adressieren
-    (Diversifikation), nicht nur den akuten Zug.
-- Unter Deadline KEINE offenen Fragen per Asynchron-Medium an die Gegenseite.
-  Stattdessen: kalibrierte Frage + konkretes Gegenangebot (z. B. zweistufige Option).
-```
+### 4) `src/pages/CaseDetail.tsx` — Realtime + Status-Quelle
+- Nach `supabase.functions.invoke(...)`: wenn die Antwort `{ status: "started" }` enthält, **nicht** auf das Response-Payload für die Stages warten.
+- Realtime-Subscription auf `cases:id=eq.{activeCaseId}` öffnen (UPDATE-Events). Bei jedem Update:
+  - `analysis` befüllt → `analysis: "complete"`, `strategy: "running"`.
+  - `strategy` befüllt → `strategy: "complete"`, `draft: "running"`.
+  - `draft`/`current_version_id` befüllt → alle drei `"complete"`, `refreshProfile()`, Success-Toast.
+  - `pipeline_error` befüllt → entsprechende Stage `"failed"`, Toast mit `pipeline_error.message`.
+- Watchdog: nach 4 min ohne Endzustand → `pipeline_error` aus DB nachladen und ggf. Timeout-Toast.
+- Bestehender `waitForVersionRecovery`-Fallback bleibt für ältere Cases / Offline-Tab.
 
-Im Strategie-Output zusätzlich:
-- `tactical_principles`: 2–3 kurze Bullet-Sätze, die die gewählten Frameworks **B2B-scharf** und situationsspezifisch übersetzen (nicht Lehrbuchzitate, sondern operative Handlungsanweisungen für genau diesen Fall).
-
-## 5) PROMPT_DRAFT — Variantenprofile neu kalibrieren
-
-Die Variantenbeschreibungen werden umgeschrieben:
-
-- **soft**: kooperativ-souverän. Tactical Empathy nur in Form von präzisem Labeling/Mirroring, NICHT als Mitgefühlsformel. Verbietet Bedürftigkeits-Phrasen explizit. Enthält immer mindestens einen konkreten Gegenzug — keine reinen Frage-E-Mails unter Deadline.
-- **neutral**: faktisch-direkt, mit Counter-Anchor und Prozess-Vorschlag (z. B. "Mehrjahres-Commitment gegen reduzierten Effektivsatz", "Volumenstaffel statt linearem Rabatt"). Adressiert die Deadline aktiv, ohne sie zu bedienen.
-- **hard**: kontrollierter Druck mit Gesichtswahrung — unverändert, aber mit Hinweis: nie als Reaktion auf rein emotionalen Druck einsetzen.
-
-Zusätzlich im Draft-Schema:
-- `forbidden_phrases_checked: true` als Selbstkontroll-Flag (zwingt das Modell zur expliziten Prüfung).
-
-## 6) Mock-Response anpassen
-
-`MOCK_RESPONSE` wird leicht angepasst, damit die neue Tonalität auch im Fallback sichtbar ist (kein "verständlich"-Reflex in der Soft-Variante).
-
----
+### 5) Validierung
+- Denselben Fall (15 % Rabatt, 30 % Umsatz, 3-Tages-Deadline) erneut starten.
+- Erwartung: HTTP-Antwort kommt in <2 s, Stages werden live nacheinander grün, **kein** „Failed to send a request" mehr — auch wenn Strategy 90 s+ braucht.
+- Negativtest: OpenAI-Key vorübergehend invalid setzen → `pipeline_error` mit `stage: "strategy"` erscheint im UI.
 
 ## Out of Scope
-
-- Keine Änderung an Router-Logik, Pipeline-Reihenfolge, Modellen, Wissensquellen-Retrieval.
-- Keine UI-Änderungen.
-- Keine Datenbank-Migration.
-
-## Validierung
-
-Nach Implementierung: Den genannten Beispielfall (15 %-Rabatt, 30 % Umsatzanteil, Deadline morgen Mittag) erneut durch die Pipeline schicken und prüfen, dass:
-1. `pressure_type = "calculated_economic"`, `dependency_risk = "high"`.
-2. `recommended_variant ≥ neutral`.
-3. Soft-Variante enthält keinen "ich verstehe, dass …"-Eröffner und keine reine Fragen-Mail.
-4. Strategie nennt explizit Counter-Anchor / Time-Box und einen BATNA-Diversifikationshinweis.
+- Keine Änderung an Prompts (`prompts.ts`), Wissensquellen-Retrieval oder UI-Design.
+- Kein neues Jobs-Table: `cases` selbst ist Single Source of Truth (vermeidet zusätzlichen Migrations-Footprint).
+- Single-Call-Pipeline (Free/Pro) unverändert.
