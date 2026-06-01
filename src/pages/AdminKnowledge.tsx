@@ -447,6 +447,16 @@ const AdminKnowledge = () => {
                       {isProcessing ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-2" />}
                       {b.status === "ready" ? "Neu indexieren" : "Indexieren"}
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setDeleteBook(b); setDeleteConfirm(""); }}
+                      disabled={isProcessing || isUploading}
+                      className="text-destructive hover:text-destructive"
+                      title="Buch und alle Indizes löschen"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-2" /> Löschen
+                    </Button>
                   </div>
                 </article>
               );
@@ -460,6 +470,49 @@ const AdminKnowledge = () => {
           </p>
         </div>
       </main>
+
+      <Dialog
+        open={!!deleteBook}
+        onOpenChange={(open) => {
+          if (!open) { setDeleteBook(null); setDeleteConfirm(""); }
+        }}
+      >
+        <DialogContent className="bg-card border border-destructive/40">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl text-destructive">Buch unwiderruflich löschen</DialogTitle>
+            <DialogDescription className="font-sans text-sm text-muted-foreground">
+              „{deleteBook?.title}" und alle zugehörigen Embeddings/Chunks sowie die hochgeladene PDF werden dauerhaft entfernt.
+              Die ELITE-Pipeline wird diese Quelle danach nicht mehr nutzen.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="font-mono-label text-muted-foreground text-xs">
+              Zur Bestätigung den Book-Key eingeben: <span className="text-destructive">{deleteBook?.book_key}</span>
+            </p>
+            <Input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={deleteBook?.book_key ?? ""}
+              autoFocus
+              maxLength={120}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setDeleteBook(null); setDeleteConfirm(""); }} disabled={remove.isPending}>
+              Abbrechen
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => deleteBook && remove.mutate(deleteBook)}
+              disabled={remove.isPending || deleteConfirm.trim() !== deleteBook?.book_key}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {remove.isPending ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-2" />}
+              Endgültig löschen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
