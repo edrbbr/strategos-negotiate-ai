@@ -241,6 +241,27 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (phase === "delete") {
+      // 1. Delete all embeddings/chunks
+      const { error: delChunks } = await admin.from("knowledge_chunks").delete().eq("book_key", bookKey);
+      if (delChunks) throw new Error(`Delete chunks: ${delChunks.message}`);
+
+      // 2. Delete the PDF from storage if present
+      const { data: bookRow } = await admin.from("knowledge_books").select("file_path").eq("book_key", bookKey).maybeSingle();
+      if (bookRow?.file_path) {
+        await admin.storage.from("knowledge-base").remove([bookRow.file_path]);
+      }
+
+      // 3. Delete the book row
+      const { error: delBook } = await admin.from("knowledge_books").delete().eq("book_key", bookKey);
+      if (delBook) throw new Error(`Delete book: ${delBook.message}`);
+
+      return new Response(JSON.stringify({ ok: true, phase: "delete" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (phase === "status") {
       const [{ count: total }, { count: pending }] = await Promise.all([
         admin.from("knowledge_chunks").select("id", { count: "exact", head: true }).eq("book_key", bookKey),
