@@ -105,6 +105,7 @@ const CaseDetail = () => {
   const [loading, setLoading] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [tonalityKey, setTonalityKey] = useState<string>("standard");
+  const [escalationLevel, setEscalationLevel] = useState<"auto" | "soft" | "neutral" | "hard">("auto");
   const [stageState, setStageState] = useState<{ analysis: StageState; strategy: StageState; draft: StageState }>({
     analysis: "pending",
     strategy: "pending",
@@ -136,10 +137,12 @@ const CaseDetail = () => {
     const langCode = (caseRow as unknown as { language_code?: string }).language_code;
     const langLabel = (caseRow as unknown as { language_label?: string }).language_label;
     const tonality = (caseRow as unknown as { tonality_profile_key?: string }).tonality_profile_key;
+    const esc = (caseRow as unknown as { escalation_level?: typeof escalationLevel }).escalation_level;
     if (mediumVal) setMedium(mediumVal);
     if (langCode) setLanguageCode(langCode);
     if (langLabel) setLanguageLabel(langLabel);
     if (tonality) setTonalityKey(tonality);
+    if (esc) setEscalationLevel(esc);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseRow?.id]);
 
@@ -292,6 +295,7 @@ const CaseDetail = () => {
           language_code: languageCode,
           language_label: languageLabel,
           attachment_ids: attachmentIds,
+          escalation_level: escalationLevel,
         },
       });
 
