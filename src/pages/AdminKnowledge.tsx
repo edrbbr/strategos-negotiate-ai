@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { extractKnowledgeChunksFromPdf } from "@/lib/knowledgeChunking";
 
 type Book = {
   book_key: string;
@@ -43,13 +42,13 @@ const STATUS_LABEL: Record<Book["status"], string> = {
   error: "Fehler",
 };
 
-const CHUNK_UPLOAD_BATCH_SIZE = 100;
-
-const STALL_THRESHOLD_MS = 90_000; // 90s ohne Fortschritt => festhängend
+const STALL_THRESHOLD_MS = 180_000; // 3 min ohne Fortschritt => festhängend
 
 const PHASE_LABEL: Record<string, string> = {
-  extracting_pdf: "PDF wird gelesen…",
-  seeding: "Chunks werden hochgeladen…",
+  downloading: "PDF wird geladen…",
+  extracting: "Text wird extrahiert…",
+  chunking: "Text wird zerlegt…",
+  seeding: "Chunks werden gespeichert…",
   embedding: "Embeddings werden erzeugt…",
   stalled: "Steckt fest — bitte abbrechen & neu starten",
 };
@@ -157,101 +156,14 @@ const AdminKnowledge = () => {
       if (!book.file_path) {
         throw new Error("Bitte zuerst eine PDF hochladen.");
       }
-
-      const setProgress = async (
-        phase: string,
-        done: number,
-        total: number,
-      ) => {
-        await supabase
-          .from("knowledge_books")
-          .update({
-            status: "indexing",
-            error_message: null,
-            progress_phase: phase,
-            progress_done: done,
-            progress_total: total,
-            progress_updated_at: new Date().toISOString(),
-          })
-          .eq("book_key", book.book_key);
-        qc.invalidateQueries({ queryKey: ["knowledge-books"] });
-      };
-
-      const markError = async (message: string) => {
-        await supabase
-          .from("knowledge_books")
-          .update({
-            status: "error",
-            error_message: message.slice(0, 500),
-            progress_phase: null,
-            progress_done: 0,
-            progress_total: 0,
-            progress_updated_at: new Date().toISOString(),
-          })
-          .eq("book_key", book.book_key);
-        qc.invalidateQueries({ queryKey: ["knowledge-books"] });
-      };
-
-      try {
-        // Phase 1: PDF laden
-        await setProgress("extracting_pdf", 0, 0);
-        const { data: file, error: downloadError } = await supabase.storage
-          .from("knowledge-base")
-          .download(book.file_path);
-        if (downloadError || !file) {
-          throw new Error(downloadError?.message ?? "PDF konnte nicht geladen werden.");
-        }
-
-        // Phase 2: lokal extrahieren mit Page-Heartbeat
-        let lastHeartbeat = 0;
-        const chunks = await extractKnowledgeChunksFromPdf(file, (page, total) => {
-          const now = Date.now();
-          if (now - lastHeartbeat > 1500) {
-            lastHeartbeat = now;
-            // fire and forget — keine await im inneren Loop, sonst bremst es die Extraktion
-            void setProgress("extracting_pdf", page, total);
-          }
-        });
-        if (chunks.length === 0) {
-          throw new Error("Die PDF enthält keinen extrahierbaren Text.");
-        }
-
-        // Phase 3: Chunks an Edge Function senden
-        await setProgress("seeding", 0, chunks.length);
-        for (let index = 0; index < chunks.length; index += CHUNK_UPLOAD_BATCH_SIZE) {
-          const batch = chunks.slice(index, index + CHUNK_UPLOAD_BATCH_SIZE);
-          const { error } = await supabase.functions.invoke("ingest-knowledge-base", {
-            body: {
-              book_key: book.book_key,
-              phase: "seed",
-              reset: index === 0,
-              chunks: batch,
-            },
-          });
-          if (error) throw error;
-          await setProgress("seeding", Math.min(index + batch.length, chunks.length), chunks.length);
-        }
-
-        // Phase 4: Embeddings starten
-        await setProgress("embedding", 0, chunks.length);
-        const { data, error } = await supabase.functions.invoke("ingest-knowledge-base", {
-          body: { book_key: book.book_key, phase: "embed" },
-        });
-        if (error) throw error;
-
-        return { ...(data ?? {}), total_chunks: chunks.length };
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        await markError(message);
-        throw e;
-      }
+      const { data, error } = await supabase.functions.invoke("ingest-knowledge-base", {
+        body: { book_key: book.book_key, phase: "start" },
+      });
+      if (error) throw error;
+      return data ?? {};
     },
-    onSuccess: (data: { done?: boolean; total_chunks?: number }) => {
-      toast.success(
-        data.done
-          ? `Indexierung abgeschlossen — ${data.total_chunks ?? 0} Chunks.`
-          : `Indexierung gestartet — ${data.total_chunks ?? 0} Chunks werden verarbeitet.`,
-      );
+    onSuccess: () => {
+      toast.success("Indexierung gestartet — der Fortschritt erscheint hier in Echtzeit.");
       qc.invalidateQueries({ queryKey: ["knowledge-books"] });
     },
     onError: (e: Error) => toast.error(`Indexierung fehlgeschlagen: ${e.message}`),
@@ -446,7 +358,7 @@ const AdminKnowledge = () => {
                     const chunkTotal = s?.total ?? 0;
                     const embedded = s?.embedded ?? 0;
 
-                    const phase = b.progress_phase ?? (chunkTotal > 0 ? "embedding" : "extracting_pdf");
+                    const phase = b.progress_phase ?? (chunkTotal > 0 ? "embedding" : "downloading");
                     const isEmbedPhase = phase === "embedding";
 
                     // Während des Embeddings sind DB-Counts (chunk_stats) die Wahrheit,
