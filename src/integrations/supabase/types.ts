@@ -174,6 +174,7 @@ export type Database = {
           medium: string
           mode: string | null
           model_used: string | null
+          pipeline_error: Json | null
           plan_steps: Json | null
           quick_suggestions: Json | null
           quick_suggestions_version_id: string | null
@@ -203,6 +204,7 @@ export type Database = {
           medium?: string
           mode?: string | null
           model_used?: string | null
+          pipeline_error?: Json | null
           plan_steps?: Json | null
           quick_suggestions?: Json | null
           quick_suggestions_version_id?: string | null
@@ -232,6 +234,7 @@ export type Database = {
           medium?: string
           mode?: string | null
           model_used?: string | null
+          pipeline_error?: Json | null
           plan_steps?: Json | null
           quick_suggestions?: Json | null
           quick_suggestions_version_id?: string | null
