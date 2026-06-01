@@ -358,7 +358,7 @@ const AdminKnowledge = () => {
                     const chunkTotal = s?.total ?? 0;
                     const embedded = s?.embedded ?? 0;
 
-                    const phase = b.progress_phase ?? (chunkTotal > 0 ? "embedding" : "extracting_pdf");
+                    const phase = b.progress_phase ?? (chunkTotal > 0 ? "embedding" : "downloading");
                     const isEmbedPhase = phase === "embedding";
 
                     // Während des Embeddings sind DB-Counts (chunk_stats) die Wahrheit,
