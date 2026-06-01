@@ -571,7 +571,7 @@ export type Database = {
           chunk_index: number
           content: string
           created_at: string
-          embedding: string
+          embedding: string | null
           id: string
           page: number | null
         }
@@ -581,7 +581,7 @@ export type Database = {
           chunk_index: number
           content: string
           created_at?: string
-          embedding: string
+          embedding?: string | null
           id?: string
           page?: number | null
         }
@@ -591,7 +591,7 @@ export type Database = {
           chunk_index?: number
           content?: string
           created_at?: string
-          embedding?: string
+          embedding?: string | null
           id?: string
           page?: number | null
         }
