@@ -539,13 +539,16 @@ function VersionBlock({
             </p>
           </div>
           {/* Draft */}
-          <div className="bg-background/50 border-l-2 sm:border-l border-secondary/60 rounded-sm p-4 sm:p-3">
-            <p className="font-mono-label text-secondary text-[11px] sm:text-[10px] mb-3 sm:mb-2">ENTWURF</p>
-            <p className="font-sans text-[16px] sm:text-[14px] leading-7 sm:leading-6 text-foreground/90 whitespace-pre-line">
-              {version.draft ?? "—"}
-            </p>
-          </div>
+          <DraftBlock version={version} />
         </div>
+
+        {version.plan_steps && version.plan_steps.length > 0 && (
+          <PlanStepsBlock steps={version.plan_steps} />
+        )}
+
+        {version.knowledge_sources && version.knowledge_sources.length > 0 && (
+          <KnowledgeSourcesBlock sources={version.knowledge_sources} />
+        )}
 
         {version.strategy_labels && version.strategy_labels.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-4">
