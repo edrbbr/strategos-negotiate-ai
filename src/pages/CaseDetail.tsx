@@ -309,6 +309,7 @@ const CaseDetail = () => {
     setLoading(true);
     setStageMeta({});
     track("case_started", { case_id: activeCaseId, tier, is_first: !caseId });
+    let backgroundStarted = false;
     if (isMultiStage) {
       setStageState({ analysis: "running", strategy: "pending", draft: "pending" });
     } else {
