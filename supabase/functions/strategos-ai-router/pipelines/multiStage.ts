@@ -51,10 +51,17 @@ const ANALYSIS_SCHEMA = {
 const STRATEGY_SCHEMA = {
   type: "object",
   properties: {
-    strategy: { type: "string" },
+    framework_label: { type: "string", minLength: 3 },
+    rationale: { type: "string", minLength: 80 },
+    tactical_principles: {
+      type: "array",
+      minItems: 2,
+      maxItems: 4,
+      items: { type: "string", minLength: 20 },
+    },
     recommended_variant: { type: "string", enum: VARIANT_KEYS },
   },
-  required: ["strategy", "recommended_variant"],
+  required: ["framework_label", "rationale", "tactical_principles", "recommended_variant"],
   additionalProperties: false,
 } as const;
 
