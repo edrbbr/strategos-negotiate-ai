@@ -145,6 +145,15 @@ const AdminKnowledge = () => {
         throw new Error("Bitte zuerst eine PDF hochladen.");
       }
 
+      // Optimistic: flip the book to "indexing" immediately so the progress UI
+      // and disabled-state appear right away (PDF extraction can take 10–30s
+      // before the first seed batch reaches the server).
+      await supabase
+        .from("knowledge_books")
+        .update({ status: "indexing", error_message: null, chunk_count: 0, indexed_at: null })
+        .eq("book_key", book.book_key);
+      qc.invalidateQueries({ queryKey: ["knowledge-books"] });
+
       const { data: file, error: downloadError } = await supabase.storage
         .from("knowledge-base")
         .download(book.file_path);
