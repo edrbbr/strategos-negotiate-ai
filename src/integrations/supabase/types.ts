@@ -96,45 +96,63 @@ export type Database = {
           analysis: Json | null
           case_id: string
           change_rationale: string | null
+          clarifying_questions: Json | null
           created_at: string
           draft: string | null
           id: string
           kind: string
+          knowledge_sources: Json | null
+          mode: string | null
           model_used: string | null
+          plan_steps: Json | null
+          recommended_variant: string | null
           strategy: string | null
           strategy_labels: string[]
           user_id: string
           user_prompt: string | null
+          variants: Json | null
           version_number: number
         }
         Insert: {
           analysis?: Json | null
           case_id: string
           change_rationale?: string | null
+          clarifying_questions?: Json | null
           created_at?: string
           draft?: string | null
           id?: string
           kind: string
+          knowledge_sources?: Json | null
+          mode?: string | null
           model_used?: string | null
+          plan_steps?: Json | null
+          recommended_variant?: string | null
           strategy?: string | null
           strategy_labels?: string[]
           user_id: string
           user_prompt?: string | null
+          variants?: Json | null
           version_number: number
         }
         Update: {
           analysis?: Json | null
           case_id?: string
           change_rationale?: string | null
+          clarifying_questions?: Json | null
           created_at?: string
           draft?: string | null
           id?: string
           kind?: string
+          knowledge_sources?: Json | null
+          mode?: string | null
           model_used?: string | null
+          plan_steps?: Json | null
+          recommended_variant?: string | null
           strategy?: string | null
           strategy_labels?: string[]
           user_id?: string
           user_prompt?: string | null
+          variants?: Json | null
           version_number?: number
         }
         Relationships: []
@@ -142,18 +160,24 @@ export type Database = {
       cases: {
         Row: {
           analysis: Json | null
+          clarifying_questions: Json | null
           created_at: string
           current_version_id: string | null
           draft: string | null
+          escalation_level: string
           icon_hint: string
           id: string
+          knowledge_sources: Json | null
           language_code: string
           language_label: string
           last_analyzed_at: string | null
           medium: string
+          mode: string | null
           model_used: string | null
+          plan_steps: Json | null
           quick_suggestions: Json | null
           quick_suggestions_version_id: string | null
+          recommended_variant: string | null
           situation_text: string | null
           status: string
           strategy: string | null
@@ -161,21 +185,28 @@ export type Database = {
           tonality_profile_key: string
           updated_at: string
           user_id: string
+          variants: Json | null
         }
         Insert: {
           analysis?: Json | null
+          clarifying_questions?: Json | null
           created_at?: string
           current_version_id?: string | null
           draft?: string | null
+          escalation_level?: string
           icon_hint?: string
           id?: string
+          knowledge_sources?: Json | null
           language_code?: string
           language_label?: string
           last_analyzed_at?: string | null
           medium?: string
+          mode?: string | null
           model_used?: string | null
+          plan_steps?: Json | null
           quick_suggestions?: Json | null
           quick_suggestions_version_id?: string | null
+          recommended_variant?: string | null
           situation_text?: string | null
           status?: string
           strategy?: string | null
@@ -183,21 +214,28 @@ export type Database = {
           tonality_profile_key?: string
           updated_at?: string
           user_id: string
+          variants?: Json | null
         }
         Update: {
           analysis?: Json | null
+          clarifying_questions?: Json | null
           created_at?: string
           current_version_id?: string | null
           draft?: string | null
+          escalation_level?: string
           icon_hint?: string
           id?: string
+          knowledge_sources?: Json | null
           language_code?: string
           language_label?: string
           last_analyzed_at?: string | null
           medium?: string
+          mode?: string | null
           model_used?: string | null
+          plan_steps?: Json | null
           quick_suggestions?: Json | null
           quick_suggestions_version_id?: string | null
+          recommended_variant?: string | null
           situation_text?: string | null
           status?: string
           strategy?: string | null
@@ -205,6 +243,7 @@ export type Database = {
           tonality_profile_key?: string
           updated_at?: string
           user_id?: string
+          variants?: Json | null
         }
         Relationships: []
       }
@@ -485,6 +524,86 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      knowledge_books: {
+        Row: {
+          author: string | null
+          book_key: string
+          chunk_count: number
+          created_at: string
+          error_message: string | null
+          file_path: string | null
+          indexed_at: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author?: string | null
+          book_key: string
+          chunk_count?: number
+          created_at?: string
+          error_message?: string | null
+          file_path?: string | null
+          indexed_at?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author?: string | null
+          book_key?: string
+          chunk_count?: number
+          created_at?: string
+          error_message?: string | null
+          file_path?: string | null
+          indexed_at?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      knowledge_chunks: {
+        Row: {
+          book_key: string
+          chapter: string | null
+          chunk_index: number
+          content: string
+          created_at: string
+          embedding: string
+          id: string
+          page: number | null
+        }
+        Insert: {
+          book_key: string
+          chapter?: string | null
+          chunk_index: number
+          content: string
+          created_at?: string
+          embedding: string
+          id?: string
+          page?: number | null
+        }
+        Update: {
+          book_key?: string
+          chapter?: string | null
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          embedding?: string
+          id?: string
+          page?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_chunks_book_key_fkey"
+            columns: ["book_key"]
+            isOneToOne: false
+            referencedRelation: "knowledge_books"
+            referencedColumns: ["book_key"]
+          },
+        ]
       }
       linkedin_pool: {
         Row: {
@@ -1126,6 +1245,22 @@ export type Database = {
         Returns: boolean
       }
       increment_cases_used: { Args: { p_user_id: string }; Returns: number }
+      match_knowledge: {
+        Args: {
+          filter_books?: string[]
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          book_key: string
+          book_title: string
+          chapter: string
+          content: string
+          id: string
+          page: number
+          similarity: number
+        }[]
+      }
       move_to_dlq: {
         Args: {
           dlq_name: string
