@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Send, X, Mail, Briefcase, TrendingUp, Crown } from "lucide-react";
+import { Loader2, Send, X, Mail, Briefcase, TrendingUp, Crown, BookOpen, BarChart3, Linkedin } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { useEliteRequests, useSendEliteOffer, useDeclineEliteRequest, type EliteRequest } from "@/hooks/useEliteRequests";
@@ -60,9 +60,12 @@ const Admin = () => {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border/30 px-8 py-5 flex items-center justify-between">
         <Logo subtitle="Imperial Console" />
-        <Link to="/app/dashboard" className="font-mono-label text-muted-foreground hover:text-foreground">
-          ← Zurück zur App
-        </Link>
+        <div className="flex items-center gap-6">
+          <Link to="/admin/knowledge" className="font-mono-label text-muted-foreground hover:text-foreground inline-flex items-center gap-2"><BookOpen className="w-3 h-3" /> Knowledge</Link>
+          <Link to="/admin/content" className="font-mono-label text-muted-foreground hover:text-foreground inline-flex items-center gap-2"><Linkedin className="w-3 h-3" /> Content</Link>
+          <Link to="/admin/analytics" className="font-mono-label text-muted-foreground hover:text-foreground inline-flex items-center gap-2"><BarChart3 className="w-3 h-3" /> Analytics</Link>
+          <Link to="/app/dashboard" className="font-mono-label text-muted-foreground hover:text-foreground">← App</Link>
+        </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-8 py-12">
