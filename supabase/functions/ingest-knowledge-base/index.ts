@@ -12,12 +12,14 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const EMBED_MODEL = "google/gemini-embedding-001";
 const EMBED_DIMS = 3072;
-const EMBED_BATCH = 4;
-const EMBED_BATCHES_PER_INVOCATION = 6;
+const EMBED_BATCH = 8;
+const EMBED_BATCHES_PER_INVOCATION = 1;
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
 const CHUNK_INSERT_BATCH = 200;
 const MAX_PDF_BYTES = 30 * 1024 * 1024; // 30MB hard cap
+const PAGES_PER_INVOCATION = 20; // Extract this many PDF pages per edge call to stay under CPU limit
+const MAX_SCHEDULE_RETRIES = 4;
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -119,9 +121,8 @@ function chunkPageText(pageText: string, page: number, startIndex: number, curre
   return { chunks, chapter };
 }
 
-// Phase: download PDF, extract text, chunk it, insert rows, then schedule embedding.
-async function phaseStart(bookKey: string): Promise<{ total: number }> {
-  // 1) Load book row
+// Download the PDF for the given book from storage. Returns the raw bytes.
+async function downloadBook(bookKey: string): Promise<{ buf: ArrayBuffer; filePath: string }> {
   const { data: book, error: bookErr } = await admin
     .from("knowledge_books")
     .select("book_key, file_path")
@@ -130,95 +131,124 @@ async function phaseStart(bookKey: string): Promise<{ total: number }> {
   if (bookErr || !book) throw new Error(`Book not found: ${bookKey}`);
   if (!book.file_path) throw new Error("Book has no file_path. Upload PDF first.");
 
-  // 2) Reset state
-  await admin.from("knowledge_chunks").delete().eq("book_key", bookKey);
-  await setProgress(bookKey, "downloading", 0, 0, { chunk_count: 0, indexed_at: null });
-
-  // 3) Download from storage
   const { data: file, error: dlErr } = await admin.storage.from("knowledge-base").download(book.file_path);
   if (dlErr || !file) throw new Error(`Download PDF: ${dlErr?.message ?? "unknown"}`);
   const buf = await file.arrayBuffer();
   if (buf.byteLength > MAX_PDF_BYTES) {
     throw new Error(`PDF too large: ${(buf.byteLength / 1024 / 1024).toFixed(1)}MB (max ${MAX_PDF_BYTES / 1024 / 1024}MB)`);
   }
+  return { buf, filePath: book.file_path };
+}
 
-  // 4) Extract text per page
-  await setProgress(bookKey, "extracting", 0, 0);
+// Phase 1: just initialize the book, then schedule the first page-range extraction.
+// Keeps this invocation extremely light to avoid CPU limit on big PDFs.
+async function phaseStart(bookKey: string): Promise<{ scheduled: boolean }> {
+  // Verify the file exists in storage
+  await downloadBook(bookKey);
+  // Reset previous data
+  await admin.from("knowledge_chunks").delete().eq("book_key", bookKey);
+  await setProgress(bookKey, "preparing", 0, 0, { chunk_count: 0, indexed_at: null });
+  scheduleNext({ book_key: bookKey, phase: "extract_range", from: 0, chunk_index: 0, chapter: null });
+  return { scheduled: true };
+}
+
+// Phase: extract a contiguous page range using unpdf+pdfjs, chunk it, insert chunks.
+// Each invocation handles PAGES_PER_INVOCATION pages, then schedules the next range or moves to embed.
+async function phaseExtractRange(
+  bookKey: string,
+  from: number,
+  startChunkIndex: number,
+  startChapter: string | null,
+): Promise<{ done: boolean; nextFrom: number; chunkIndex: number; chapter: string | null; totalPages: number }> {
+  const { buf } = await downloadBook(bookKey);
   const pdf = await getDocumentProxy(new Uint8Array(buf));
   const totalPages = pdf.numPages;
-  await setProgress(bookKey, "extracting", 0, totalPages);
+  const to = Math.min(from + PAGES_PER_INVOCATION, totalPages);
 
-  const { text: pageTexts } = await extractText(pdf, { mergePages: false });
-  await setProgress(bookKey, "extracting", totalPages, totalPages);
+  await setProgress(bookKey, "extracting", from, totalPages);
 
-  // 5) Chunk
-  await setProgress(bookKey, "chunking", 0, totalPages);
-  const allChunks: Chunk[] = [];
-  let chapter: string | null = null;
-  let chunkIndex = 0;
-  for (let p = 0; p < pageTexts.length; p++) {
-    const result = chunkPageText(pageTexts[p] ?? "", p + 1, chunkIndex, chapter);
-    for (const c of result.chunks) {
-      allChunks.push({ book_key: bookKey, ...c });
-    }
+  let chapter = startChapter;
+  let chunkIndex = startChunkIndex;
+  const collected: Chunk[] = [];
+
+  for (let i = from + 1; i <= to; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    // deno-lint-ignore no-explicit-any
+    const pageText = (content.items as any[])
+      .map((it) => (typeof it.str === "string" ? it.str : ""))
+      .join(" ");
+    const result = chunkPageText(pageText, i, chunkIndex, chapter);
+    for (const c of result.chunks) collected.push({ book_key: bookKey, ...c });
     chapter = result.chapter;
     chunkIndex += result.chunks.length;
-    if (p % 25 === 0) {
-      await setProgress(bookKey, "chunking", p + 1, totalPages);
-      if (await isCancelled(bookKey)) throw new Error("Cancelled");
+  }
+
+  // Insert the chunks for this range
+  if (collected.length > 0) {
+    for (let i = 0; i < collected.length; i += CHUNK_INSERT_BATCH) {
+      const batch = collected.slice(i, i + CHUNK_INSERT_BATCH).map((c) => ({ ...c, embedding: null }));
+      const { error: insErr } = await admin.from("knowledge_chunks").insert(batch);
+      if (insErr) throw new Error(`Insert chunks: ${insErr.message}`);
     }
   }
-  if (allChunks.length === 0) throw new Error("PDF enthält keinen extrahierbaren Text.");
 
-  // 6) Insert chunks in batches
-  await setProgress(bookKey, "seeding", 0, allChunks.length);
-  for (let i = 0; i < allChunks.length; i += CHUNK_INSERT_BATCH) {
-    const batch = allChunks.slice(i, i + CHUNK_INSERT_BATCH).map((c) => ({ ...c, embedding: null }));
-    const { error: insErr } = await admin.from("knowledge_chunks").insert(batch);
-    if (insErr) throw new Error(`Insert chunks: ${insErr.message}`);
-    await setProgress(bookKey, "seeding", Math.min(i + batch.length, allChunks.length), allChunks.length, {
-      chunk_count: Math.min(i + batch.length, allChunks.length),
-    });
-    if (await isCancelled(bookKey)) throw new Error("Cancelled");
-  }
+  await setProgress(bookKey, "extracting", to, totalPages, { chunk_count: chunkIndex });
 
-  // 7) Kick off embedding
-  await setProgress(bookKey, "embedding", 0, allChunks.length);
-  scheduleNext({ book_key: bookKey, phase: "embed" });
-  return { total: allChunks.length };
+  const done = to >= totalPages;
+  return { done, nextFrom: to, chunkIndex, chapter, totalPages };
 }
 
 // Self-invoke the same function to continue processing in a fresh CPU budget.
-function scheduleNext(payload: Record<string, unknown>) {
+// Retries on transient WORKER_RESOURCE_LIMIT (546) with exponential backoff
+// so a single momentary CPU overload doesn't kill the whole job.
+function scheduleNext(payload: Record<string, unknown>, attempt = 0) {
   const url = `${SUPABASE_URL}/functions/v1/ingest-knowledge-base`;
   const bookKey = (payload as { book_key?: string }).book_key;
-  const p = fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SERVICE_ROLE}`,
-      apikey: SERVICE_ROLE,
-      "x-internal-continue": "1",
-    },
-    body: JSON.stringify(payload),
-  })
-    .then(async (r) => {
-      if (!r.ok) {
-        const text = await r.text().catch(() => "");
-        console.error(`scheduleNext non-ok ${r.status}: ${text}`);
+  const doFetch = async () => {
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SERVICE_ROLE}`,
+          apikey: SERVICE_ROLE,
+          "x-internal-continue": "1",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (r.ok) return;
+      const text = await r.text().catch(() => "");
+      const isResourceLimit = r.status === 546 || text.includes("WORKER_RESOURCE_LIMIT");
+      console.error(`scheduleNext non-ok ${r.status} (attempt ${attempt}): ${text}`);
+      if (isResourceLimit && attempt < MAX_SCHEDULE_RETRIES) {
+        const delayMs = 1500 * Math.pow(2, attempt); // 1.5s, 3s, 6s, 12s
         if (bookKey) {
           await admin
             .from("knowledge_books")
-            .update({
-              status: "error",
-              error_message: `Folgeaufruf fehlgeschlagen (${r.status}): ${text.slice(0, 300)}`,
-            })
+            .update({ progress_updated_at: new Date().toISOString() })
             .eq("book_key", bookKey);
         }
+        await new Promise((res) => setTimeout(res, delayMs));
+        scheduleNext(payload, attempt + 1);
+        return;
       }
-    })
-    .catch(async (e) => {
+      if (bookKey) {
+        await admin
+          .from("knowledge_books")
+          .update({
+            status: "error",
+            error_message: `Folgeaufruf fehlgeschlagen (${r.status}): ${text.slice(0, 300)}`,
+          })
+          .eq("book_key", bookKey);
+      }
+    } catch (e) {
       console.error("scheduleNext failed:", e);
+      if (attempt < MAX_SCHEDULE_RETRIES) {
+        await new Promise((res) => setTimeout(res, 1500 * Math.pow(2, attempt)));
+        scheduleNext(payload, attempt + 1);
+        return;
+      }
       if (bookKey) {
         await admin
           .from("knowledge_books")
@@ -228,9 +258,10 @@ function scheduleNext(payload: Record<string, unknown>) {
           })
           .eq("book_key", bookKey);
       }
-    });
+    }
+  };
   // @ts-ignore EdgeRuntime is provided by Supabase
-  try { EdgeRuntime.waitUntil(p); } catch { /* ignore */ }
+  try { EdgeRuntime.waitUntil(doFetch()); } catch { doFetch(); }
 }
 
 async function phaseSeed(bookKey: string, chunks: Chunk[], reset: boolean): Promise<{ total: number }> {
@@ -465,8 +496,40 @@ Deno.serve(async (req) => {
     }
 
     if (phase === "ingest") {
-      const { total } = await phaseStart(bookKey);
-      return new Response(JSON.stringify({ ok: true, phase: "ingest", total_chunks: total }), {
+      await phaseStart(bookKey);
+      return new Response(JSON.stringify({ ok: true, phase: "ingest", scheduled: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (phase === "extract_range") {
+      if (await isCancelled(bookKey)) {
+        return new Response(JSON.stringify({ ok: true, phase: "extract_range", cancelled: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const from = typeof body.from === "number" ? body.from : 0;
+      const startChunkIndex = typeof body.chunk_index === "number" ? body.chunk_index : 0;
+      const startChapter = typeof body.chapter === "string" ? body.chapter : null;
+      const res = await phaseExtractRange(bookKey, from, startChunkIndex, startChapter);
+      if (res.done) {
+        if (res.chunkIndex === 0) {
+          throw new Error("PDF enthält keinen extrahierbaren Text.");
+        }
+        await setProgress(bookKey, "embedding", 0, res.chunkIndex, { chunk_count: res.chunkIndex });
+        scheduleNext({ book_key: bookKey, phase: "embed" });
+      } else {
+        scheduleNext({
+          book_key: bookKey,
+          phase: "extract_range",
+          from: res.nextFrom,
+          chunk_index: res.chunkIndex,
+          chapter: res.chapter,
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, phase: "extract_range", ...res }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
