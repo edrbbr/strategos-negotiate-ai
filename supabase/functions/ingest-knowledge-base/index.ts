@@ -496,8 +496,40 @@ Deno.serve(async (req) => {
     }
 
     if (phase === "ingest") {
-      const { total } = await phaseStart(bookKey);
-      return new Response(JSON.stringify({ ok: true, phase: "ingest", total_chunks: total }), {
+      await phaseStart(bookKey);
+      return new Response(JSON.stringify({ ok: true, phase: "ingest", scheduled: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (phase === "extract_range") {
+      if (await isCancelled(bookKey)) {
+        return new Response(JSON.stringify({ ok: true, phase: "extract_range", cancelled: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const from = typeof body.from === "number" ? body.from : 0;
+      const startChunkIndex = typeof body.chunk_index === "number" ? body.chunk_index : 0;
+      const startChapter = typeof body.chapter === "string" ? body.chapter : null;
+      const res = await phaseExtractRange(bookKey, from, startChunkIndex, startChapter);
+      if (res.done) {
+        if (res.chunkIndex === 0) {
+          throw new Error("PDF enthält keinen extrahierbaren Text.");
+        }
+        await setProgress(bookKey, "embedding", 0, res.chunkIndex, { chunk_count: res.chunkIndex });
+        scheduleNext({ book_key: bookKey, phase: "embed" });
+      } else {
+        scheduleNext({
+          book_key: bookKey,
+          phase: "extract_range",
+          from: res.nextFrom,
+          chunk_index: res.chunkIndex,
+          chapter: res.chapter,
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, phase: "extract_range", ...res }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
