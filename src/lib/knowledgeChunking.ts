@@ -92,7 +92,6 @@ async function extractPageText(page: PdfPageLike) {
   return lines.join("\n");
 }
 
-export async function extractKnowledgeChunksFromPdf(file: Blob) {
 export async function extractKnowledgeChunksFromPdf(
   file: Blob,
   onPage?: (pageNumber: number, totalPages: number) => void,
