@@ -461,6 +461,63 @@ function finalizeDraft(args: {
   };
 }
 
+/**
+ * Calls the draft stage with a generous token budget. If Claude truncates,
+ * times out, or returns empty variants, falls back once to Gemini (if a
+ * Lovable AI key is available). On final empty output throws ProviderError.
+ */
+async function runDraftWithFallback(args: {
+  anthropicKey: string;
+  lovableKey: string | null | undefined;
+  model: string;
+  promptDraft: string;
+  userMessage: string;
+}): Promise<Record<string, unknown>> {
+  const { anthropicKey, lovableKey, model, promptDraft, userMessage } = args;
+  const tryAnthropic = async (): Promise<Record<string, unknown>> => {
+    const out = await callAnthropic({
+      apiKey: anthropicKey,
+      model,
+      systemPrompt: promptDraft,
+      userMessage,
+      maxTokens: DRAFT_MAX_TOKENS,
+      tool: {
+        name: "return_draft",
+        description: "Return the final draft, title and icon hint.",
+        input_schema: DRAFT_SCHEMA,
+      },
+    });
+    validateDraftOut(out);
+    return out;
+  };
+
+  try {
+    return await tryAnthropic();
+  } catch (e) {
+    const isFallbackTrigger =
+      e instanceof ProviderError &&
+      (e.code === "TIMEOUT" || e.code === "EMPTY_OUTPUT" || e.code === "RATE_LIMIT" || e.code === "PARSE_ERROR");
+    if (!isFallbackTrigger || !lovableKey) throw e;
+    console.warn("draft stage falling back to Gemini", e.code);
+    const out = await callGemini({
+      apiKey: lovableKey,
+      model: "google/gemini-2.5-pro",
+      systemPrompt: promptDraft,
+      userMessage,
+      tool: {
+        type: "function",
+        function: {
+          name: "return_draft",
+          description: "Return the final draft, title and icon hint.",
+          parameters: DRAFT_SCHEMA,
+        },
+      },
+    });
+    validateDraftOut(out);
+    return out;
+  }
+}
+
 export interface StageFailure {
   isStageFailure: true;
   stage: 'analysis' | 'strategy' | 'draft';
