@@ -5,7 +5,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { runSingleCall } from "./pipelines/singleCall.ts";
 import { isStageFailure, runMultiStagePipeline, type StageCompletePayload } from "./pipelines/multiStage.ts";
 import { MOCK_RESPONSE } from "./prompts.ts";
-import { ProviderError, type PipelineConfig, type PlanRow, type StageMeta } from "./types.ts";
+import {
+  ProviderError,
+  type EscalationLevel,
+  type PipelineConfig,
+  type PlanRow,
+  type StageMeta,
+} from "./types.ts";
+import { retrieveKnowledge } from "./knowledge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,6 +57,10 @@ Deno.serve(async (req: Request) => {
     const attachment_ids: string[] = Array.isArray(body?.attachment_ids)
       ? body.attachment_ids.filter((x: unknown) => typeof x === "string")
       : [];
+    const escRaw = typeof body?.escalation_level === "string" ? body.escalation_level : "auto";
+    const escalation_level: EscalationLevel = (
+      ["auto", "soft", "neutral", "hard"].includes(escRaw) ? escRaw : "auto"
+    ) as EscalationLevel;
 
     if (!situation_text || typeof situation_text !== "string" || situation_text.trim().length < 10) {
       return json({ error: "situation_text muss mindestens 10 Zeichen enthalten." }, 400);
@@ -169,7 +180,7 @@ Deno.serve(async (req: Request) => {
     if (case_id) {
       await serviceClient
         .from("cases")
-        .update({ medium, language_code, language_label })
+        .update({ medium, language_code, language_label, escalation_level })
         .eq("id", case_id)
         .eq("user_id", userId)
         .then(() => undefined, (e) => console.warn("meta update failed", e));
@@ -251,6 +262,10 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ---- RAG: Retrieve relevant book passages ----
+    const { contextBlock: knowledgeContext, sources: knowledgeSources } =
+      await retrieveKnowledge(serviceClient, LOVABLE_API_KEY, situation_text, attachmentsContext);
+
     // Helper: writes a stage payload to the case row (only if case_id provided)
     const writeStage = async (payload: StageCompletePayload) => {
       if (!case_id) return;
@@ -290,6 +305,8 @@ Deno.serve(async (req: Request) => {
     // Persist a v1 (or vN+1) initial snapshot in case_versions and update cases.current_version_id.
     const persistInitialVersion = async (data: {
       analysis: unknown; strategy: string; draft: string; model_used: string;
+      mode?: unknown; variants?: unknown; recommended_variant?: unknown;
+      plan_steps?: unknown; clarifying_questions?: unknown; knowledge_sources?: unknown;
     }) => {
       if (!case_id) return;
       const { data: latest } = await serviceClient
@@ -313,6 +330,12 @@ Deno.serve(async (req: Request) => {
           draft: data.draft,
           strategy_labels: labels,
           model_used: data.model_used,
+          mode: data.mode ?? null,
+          variants: data.variants ?? null,
+          recommended_variant: data.recommended_variant ?? null,
+          plan_steps: data.plan_steps ?? null,
+          clarifying_questions: data.clarifying_questions ?? null,
+          knowledge_sources: data.knowledge_sources ?? null,
         })
         .select("id")
         .single();
@@ -379,6 +402,9 @@ Deno.serve(async (req: Request) => {
           allowedStrategies,
           tonalityInstruction,
           enableDeepDocAnalysis,
+          escalationLevel: escalation_level,
+          knowledgeContext,
+          knowledgeSources,
         });
         const total = Date.now() - t0;
         const cases_used = await incrementCounter();
@@ -387,6 +413,12 @@ Deno.serve(async (req: Request) => {
           strategy: result.strategy,
           draft: result.draft,
           model_used: "multi_stage_elite",
+          mode: result.mode,
+          variants: result.variants,
+          recommended_variant: result.recommended_variant,
+          plan_steps: result.plan_steps,
+          clarifying_questions: result.clarifying_questions,
+          knowledge_sources: result.knowledge_sources,
         });
         return json({
           ...result,
@@ -434,12 +466,30 @@ Deno.serve(async (req: Request) => {
         allowedStrategies,
         tonalityInstruction,
         enableDeepDocAnalysis,
+        escalationLevel: escalation_level,
+        knowledgeContext,
+        knowledgeSources,
       });
       const total = Date.now() - t0;
 
       // For single-call we still write the case once, atomically
-      await writeStage({ stage: "analysis", data: { analysis: result.analysis, model_used: plan.model_id } });
-      await writeStage({ stage: "strategy", data: { strategy: result.strategy } });
+      await writeStage({
+        stage: "analysis",
+        data: {
+          analysis: result.analysis,
+          model_used: plan.model_id,
+          mode: result.mode ?? undefined,
+          clarifying_questions: result.clarifying_questions ?? undefined,
+          knowledge_sources: result.knowledge_sources ?? undefined,
+        },
+      });
+      await writeStage({
+        stage: "strategy",
+        data: {
+          strategy: result.strategy,
+          recommended_variant: result.recommended_variant ?? undefined,
+        },
+      });
       await writeStage({
         stage: "draft",
         data: {
@@ -447,6 +497,8 @@ Deno.serve(async (req: Request) => {
           icon_hint: result.icon_hint,
           draft: result.draft,
           model_used: plan.model_id,
+          variants: result.variants ?? undefined,
+          plan_steps: result.plan_steps ?? undefined,
         },
       });
 
@@ -459,6 +511,12 @@ Deno.serve(async (req: Request) => {
         strategy: result.strategy,
         draft: result.draft,
         model_used: plan.model_id,
+        mode: result.mode,
+        variants: result.variants,
+        recommended_variant: result.recommended_variant,
+        plan_steps: result.plan_steps,
+        clarifying_questions: result.clarifying_questions,
+        knowledge_sources: result.knowledge_sources,
       });
 
       // Fire-and-forget: generate Pro upgrade preview for Free users
