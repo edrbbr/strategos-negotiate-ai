@@ -32,6 +32,7 @@ import {
 } from "@/hooks/useCaseAttachments";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 
 interface NegStrategy {
   key: string;
