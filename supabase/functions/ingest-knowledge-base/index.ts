@@ -13,7 +13,7 @@ const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const EMBED_MODEL = "google/gemini-embedding-001";
 const EMBED_DIMS = 3072;
 const EMBED_BATCH = 4;
-const EMBED_BATCHES_PER_INVOCATION = 1;
+const EMBED_BATCHES_PER_INVOCATION = 6;
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
 const CHUNK_INSERT_BATCH = 200;
@@ -191,6 +191,7 @@ async function phaseStart(bookKey: string): Promise<{ total: number }> {
 // Self-invoke the same function to continue processing in a fresh CPU budget.
 function scheduleNext(payload: Record<string, unknown>) {
   const url = `${SUPABASE_URL}/functions/v1/ingest-knowledge-base`;
+  const bookKey = (payload as { book_key?: string }).book_key;
   const p = fetch(url, {
     method: "POST",
     headers: {
@@ -200,7 +201,34 @@ function scheduleNext(payload: Record<string, unknown>) {
       "x-internal-continue": "1",
     },
     body: JSON.stringify(payload),
-  }).then((r) => r.text()).catch((e) => console.error("scheduleNext failed:", e));
+  })
+    .then(async (r) => {
+      if (!r.ok) {
+        const text = await r.text().catch(() => "");
+        console.error(`scheduleNext non-ok ${r.status}: ${text}`);
+        if (bookKey) {
+          await admin
+            .from("knowledge_books")
+            .update({
+              status: "error",
+              error_message: `Folgeaufruf fehlgeschlagen (${r.status}): ${text.slice(0, 300)}`,
+            })
+            .eq("book_key", bookKey);
+        }
+      }
+    })
+    .catch(async (e) => {
+      console.error("scheduleNext failed:", e);
+      if (bookKey) {
+        await admin
+          .from("knowledge_books")
+          .update({
+            status: "error",
+            error_message: `Folgeaufruf-Netzwerkfehler: ${String(e).slice(0, 300)}`,
+          })
+          .eq("book_key", bookKey);
+      }
+    });
   // @ts-ignore EdgeRuntime is provided by Supabase
   try { EdgeRuntime.waitUntil(p); } catch { /* ignore */ }
 }
