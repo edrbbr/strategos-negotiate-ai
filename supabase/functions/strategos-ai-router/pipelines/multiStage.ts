@@ -51,10 +51,17 @@ const ANALYSIS_SCHEMA = {
 const STRATEGY_SCHEMA = {
   type: "object",
   properties: {
-    strategy: { type: "string" },
+    framework_label: { type: "string", minLength: 3 },
+    rationale: { type: "string", minLength: 80 },
+    tactical_principles: {
+      type: "array",
+      minItems: 2,
+      maxItems: 4,
+      items: { type: "string", minLength: 20 },
+    },
     recommended_variant: { type: "string", enum: VARIANT_KEYS },
   },
-  required: ["strategy", "recommended_variant"],
+  required: ["framework_label", "rationale", "tactical_principles", "recommended_variant"],
   additionalProperties: false,
 } as const;
 
@@ -84,6 +91,58 @@ const DRAFT_SCHEMA = {
 } as const;
 
 const VALID_ICONS: IconHint[] = ["car", "home", "cash", "document", "briefcase", "handshake"];
+
+const DRAFT_MAX_TOKENS = 8000;
+
+/**
+ * Compose the final persisted strategy text from the structured tool output.
+ * Validates that all required fields contain real content; throws ProviderError
+ * with code "EMPTY_OUTPUT" when the model returned a stub (e.g. only the label).
+ */
+function composeStrategyText(out: Record<string, unknown>): {
+  text: string;
+  recommendedVariant: VariantKey;
+} {
+  const label = String(out.framework_label ?? "").trim();
+  const rationale = String(out.rationale ?? "").trim();
+  const principlesRaw = Array.isArray(out.tactical_principles) ? out.tactical_principles : [];
+  const principles = principlesRaw.map((p) => String(p).trim()).filter((p) => p.length > 0);
+
+  if (!label || rationale.length < 40 || principles.length < 2) {
+    throw new ProviderError(
+      `EMPTY_STRATEGY_OUTPUT label=${!!label} rationaleLen=${rationale.length} principles=${principles.length}`,
+      502,
+      "EMPTY_OUTPUT",
+      "openai",
+    );
+  }
+
+  const recRaw = (out.recommended_variant as VariantKey) ?? "soft";
+  const recommendedVariant: VariantKey = VARIANT_KEYS.includes(recRaw) ? recRaw : "soft";
+  const text = `${label}\n\n${rationale}\n\nTaktische Prinzipien:\n• ${principles.join("\n• ")}`;
+  return { text, recommendedVariant };
+}
+
+/**
+ * Validate the draft tool output before persisting. Throws ProviderError
+ * "EMPTY_OUTPUT" if any of the three variants is missing/blank — this allows
+ * the caller to surface a clean StageFailure instead of silently saving an
+ * empty draft (root cause of the "leerer Entwurf" bug).
+ */
+function validateDraftOut(out: Record<string, unknown>): void {
+  const v = (out?.variants ?? null) as Record<string, unknown> | null;
+  const soft = v ? String(v.soft ?? "").trim() : "";
+  const neutral = v ? String(v.neutral ?? "").trim() : "";
+  const hard = v ? String(v.hard ?? "").trim() : "";
+  if (!soft || !neutral || !hard) {
+    throw new ProviderError(
+      `EMPTY_DRAFT_VARIANTS soft=${soft.length} neutral=${neutral.length} hard=${hard.length}`,
+      502,
+      "EMPTY_OUTPUT",
+      "anthropic",
+    );
+  }
+}
 
 /**
  * Defensive unwrapping for strategy strings.
@@ -270,25 +329,27 @@ export async function runMultiStagePipeline(
         },
       });
       stageMetas.push({ stage: "strategy", model: "google/gemini-2.5-flash", latency_ms: Date.now() - t2 });
-      const strategy = unwrapStrategy(strategyOut.strategy);
-      const recFallback = (strategyOut.recommended_variant as VariantKey) ?? "soft";
-      const recommendedVariant: VariantKey = VARIANT_KEYS.includes(recFallback) ? recFallback : "soft";
+      let strategy: string;
+      let recommendedVariant: VariantKey;
+      try {
+        const composed = composeStrategyText(strategyOut);
+        strategy = composed.text;
+        recommendedVariant = composed.recommendedVariant;
+      } catch (validationErr) {
+        throw stageError("strategy", ["analysis"], validationErr);
+      }
       await onStageComplete?.({ stage: "strategy", data: { strategy, recommended_variant: recommendedVariant } });
 
       const s3 = getStage(config, "draft");
       const t3 = Date.now();
       let draftOut: Record<string, unknown>;
       try {
-        draftOut = await callAnthropic({
-          apiKey: anthropicKey!,
+        draftOut = await runDraftWithFallback({
+          anthropicKey: anthropicKey!,
+          lovableKey,
           model: s3.model,
-          systemPrompt: promptDraft,
+          promptDraft,
           userMessage: `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}\n\nrecommended_variant: ${recommendedVariant}${attachLine}${knowledgeBlock}`,
-          tool: {
-            name: "return_draft",
-            description: "Return the final draft, title and icon hint.",
-            input_schema: DRAFT_SCHEMA,
-          },
         });
       } catch (draftError) {
         throw stageError("draft", ["analysis", "strategy"], draftError);
@@ -316,9 +377,15 @@ export async function runMultiStagePipeline(
     throw stageError("strategy", ["analysis"], e);
   }
   const lat2 = Date.now() - t2;
-  const strategy = unwrapStrategy(strategyOut.strategy);
-  const recRaw = (strategyOut.recommended_variant as VariantKey) ?? "soft";
-  const recommendedVariant: VariantKey = VARIANT_KEYS.includes(recRaw) ? recRaw : "soft";
+  let strategy: string;
+  let recommendedVariant: VariantKey;
+  try {
+    const composed = composeStrategyText(strategyOut);
+    strategy = composed.text;
+    recommendedVariant = composed.recommendedVariant;
+  } catch (validationErr) {
+    throw stageError("strategy", ["analysis"], validationErr);
+  }
   stageMetas.push({ stage: "strategy", model: s2.model, latency_ms: lat2 });
   await onStageComplete?.({ stage: "strategy", data: { strategy, recommended_variant: recommendedVariant } });
 
@@ -327,16 +394,12 @@ export async function runMultiStagePipeline(
   const t3 = Date.now();
   let draftOut: Record<string, unknown>;
   try {
-    draftOut = await callAnthropic({
-      apiKey: anthropicKey!,
+    draftOut = await runDraftWithFallback({
+      anthropicKey: anthropicKey!,
+      lovableKey,
       model: s3.model,
-      systemPrompt: promptDraft,
+      promptDraft,
       userMessage: `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}\n\nrecommended_variant: ${recommendedVariant}${attachLine}${knowledgeBlock}`,
-      tool: {
-        name: "return_draft",
-        description: "Return the final draft, title and icon hint.",
-        input_schema: DRAFT_SCHEMA,
-      },
     });
   } catch (e) {
     throw stageError("draft", ["analysis", "strategy"], e);
@@ -396,6 +459,63 @@ function finalizeDraft(args: {
     clarifying_questions: clarifying.length > 0 ? clarifying : null,
     knowledge_sources: sources.length > 0 ? sources : null,
   };
+}
+
+/**
+ * Calls the draft stage with a generous token budget. If Claude truncates,
+ * times out, or returns empty variants, falls back once to Gemini (if a
+ * Lovable AI key is available). On final empty output throws ProviderError.
+ */
+async function runDraftWithFallback(args: {
+  anthropicKey: string;
+  lovableKey: string | null | undefined;
+  model: string;
+  promptDraft: string;
+  userMessage: string;
+}): Promise<Record<string, unknown>> {
+  const { anthropicKey, lovableKey, model, promptDraft, userMessage } = args;
+  const tryAnthropic = async (): Promise<Record<string, unknown>> => {
+    const out = await callAnthropic({
+      apiKey: anthropicKey,
+      model,
+      systemPrompt: promptDraft,
+      userMessage,
+      maxTokens: DRAFT_MAX_TOKENS,
+      tool: {
+        name: "return_draft",
+        description: "Return the final draft, title and icon hint.",
+        input_schema: DRAFT_SCHEMA,
+      },
+    });
+    validateDraftOut(out);
+    return out;
+  };
+
+  try {
+    return await tryAnthropic();
+  } catch (e) {
+    const isFallbackTrigger =
+      e instanceof ProviderError &&
+      (e.code === "TIMEOUT" || e.code === "EMPTY_OUTPUT" || e.code === "RATE_LIMIT" || e.code === "PARSE_ERROR");
+    if (!isFallbackTrigger || !lovableKey) throw e;
+    console.warn("draft stage falling back to Gemini", e.code);
+    const out = await callGemini({
+      apiKey: lovableKey,
+      model: "google/gemini-2.5-pro",
+      systemPrompt: promptDraft,
+      userMessage,
+      tool: {
+        type: "function",
+        function: {
+          name: "return_draft",
+          description: "Return the final draft, title and icon hint.",
+          parameters: DRAFT_SCHEMA,
+        },
+      },
+    });
+    validateDraftOut(out);
+    return out;
+  }
 }
 
 export interface StageFailure {

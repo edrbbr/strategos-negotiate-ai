@@ -1,75 +1,117 @@
-# Analyse: Warum die Pipeline bei „strategy" abbricht
+## Befund (aus DB + Logs)
 
-## Symptom
-- Analyse läuft komplett durch und wird im Case persistiert (rechts sichtbar).
-- Strategy bleibt „Unterbrochen / Stage abgebrochen".
-- Toast: **„Pipeline-Fehler: Failed to send a request to the Edge Function"**.
+DB-Zeile `case_versions` v1 dieses Falls:
+- `strategy` = `"Zugeständnis- und Gegenforderungslogik"` (38 Zeichen — nur das Label aus der Whitelist, keine 2 Sätze, keine `tactical_principles`)
+- `draft` = `""` (leer, 0 Zeichen)
+- `variants` = `null`
+- `recommended_variant` = `"neutral"`
 
-## Root Cause
-Edge-Function-Logs zeigen: `Http: connection closed before message completed`. Das ist kein Modell-Fehler — die Edge-Function wurde **mitten in der Bearbeitung abgeschnitten**, weil das Wall-/CPU-Limit der Edge-Runtime erreicht wurde.
+Edge-Function-Logs: `multi-stage pipeline complete total_ms: 128659` — kein Fehler, kein Retry, kein Fallback ausgelöst. Vorher nur die bekannte `match_knowledge` Statement-Timeout-Warnung (RAG-Treffer leer, nicht ursächlich).
 
-Konkret in `strategos-ai-router`:
-1. **Alles läuft synchron in EINEM Request**: Analyse (Anthropic, ~30–60s) → Strategy (OpenAI gpt-5 Reasoning, bis zu 90s + bis zu 4 Retries bei 429/5xx) → Draft (Anthropic).
-2. `providers/openai.ts`: `TIMEOUT_MS = 90_000`, `maxRetries = 4`. Worst-Case allein für Strategy = mehrere Minuten.
-3. Die neuen, deutlich umfangreicheren Prompts (`prompts.ts` nach der Sovereignty-Überarbeitung) erhöhen Input-/Reasoning-Last → Strategy-Stage tendenziell langsamer.
-4. Edge-Runtime kappt die HTTP-Verbindung deutlich vor 150 s realer Antwortzeit → Frontend bekommt „Failed to send a request". Die Strategy-Stage hatte noch nicht ins DB geschrieben, also bleibt sie im UI auf „running" und kippt dann via Catch auf „failed".
+## Root Causes
 
-Sekundärer Befund in den Logs: `match_knowledge failed canceling statement due to statement timeout` (pgvector RPC) — wird im RAG-Pfad bereits sauber geschluckt (leere Sources), ist also nur ein Hinweis, kein Auslöser.
+**1. Strategie-Stage — Schema zu weich.**
+`STRATEGY_SCHEMA` verlangt nur `{ strategy: string, recommended_variant: enum }`. Kein `minLength`, kein `tactical_principles`. Der Prompt fordert „Framework + 2 Sätze + tactical_principles" — das Modell hat trotzdem nur das Whitelist-Label zurückgegeben und damit das Schema formal erfüllt. Wir validieren danach nicht und schreiben den Stub in die DB.
 
-## Lösung — Pipeline in den Hintergrund verlagern
+**2. Draft-Stage — `max_tokens: 2048` zu klein.**
+In `providers/anthropic.ts` ist `max_tokens` für ALLE Anthropic-Calls hart auf 2048 gedeckelt. Drei vollständige deutsche Varianten (soft/neutral/hard, jede mit Betreff, Anrede, mehreren Absätzen, Closing) + `title` + `plan_steps` passen nicht in 2048 Token. Folge: Claude liefert ein `tool_use`-Block, dessen `input.variants` entweder leer ist oder schlicht fehlt — Schema "required" wird vom Modell unter Token-Druck nicht zuverlässig erzwungen. `finalizeDraft` baut daraus klaglos `variants: null, draft: ""`.
 
-Kernidee: Die HTTP-Antwort an den Client darf **nicht** an den langsamsten Modellaufruf gekoppelt sein. Stattdessen:
+**3. Keine Output-Validierung.**
+`multiStage.ts` schreibt jede Stage roh in die DB. Ein leerer `draft` oder fehlende `variants` lösen weder `StageFailure` aus noch werden Fallbacks (Gemini) gezogen. Pipeline „endet erfolgreich" mit leerem Ergebnis → UI zeigt nichts.
 
-1. Router startet die Pipeline in `EdgeRuntime.waitUntil(...)`, schreibt Stages weiterhin per `writeStage` in `cases` (passiert bereits) und antwortet sofort mit `{ status: "started", case_id }`.
-2. Frontend zeigt die Stages live an, indem es per **Realtime auf die `cases`-Zeile subscribed** (mit Polling-Fallback, wie heute schon im `waitForVersionRecovery`-Pfad vorhanden).
-3. Fehler einer Stage werden als strukturiertes Feld (`pipeline_error`) in `cases` gespeichert, damit das UI „Stage abgebrochen + Grund" auch ohne offene HTTP-Verbindung anzeigen kann.
+## Lösung
 
-## Umsetzung
+### A. Strategie-Schema + Persistierung härten
 
-### 1) DB-Migration — Fehlerzustand pro Case persistieren
-Neue Migration:
-- `ALTER TABLE public.cases ADD COLUMN pipeline_error jsonb;`
-  Form: `{ stage: 'analysis'|'strategy'|'draft', code, message, at }`.
-- `ALTER PUBLICATION supabase_realtime ADD TABLE public.cases;` (falls noch nicht aktiv) und `ALTER TABLE public.cases REPLICA IDENTITY FULL;` damit Updates pro Stage als Realtime-Event ankommen.
+In `supabase/functions/strategos-ai-router/pipelines/multiStage.ts`:
 
-Keine RLS-Änderungen nötig (bestehende Policies decken `cases` ab).
+```ts
+const STRATEGY_SCHEMA = {
+  type: "object",
+  properties: {
+    framework_label: { type: "string", minLength: 3 },     // Whitelist-Tactic-Name
+    rationale: { type: "string", minLength: 80 },          // 2 Sätze, warum dieses Framework
+    tactical_principles: {                                  // konkrete B2B-Moves
+      type: "array", minItems: 2, maxItems: 4,
+      items: { type: "string", minLength: 20 },
+    },
+    recommended_variant: { type: "string", enum: VARIANT_KEYS },
+  },
+  required: ["framework_label", "rationale", "tactical_principles", "recommended_variant"],
+  additionalProperties: false,
+}
+```
 
-### 2) `supabase/functions/strategos-ai-router/index.ts` — Background-Run
-- Multi-Stage-Branch: bisherigen `await runMultiStagePipeline(...)`-Block in eine async-Funktion `runInBackground()` extrahieren.
-- `EdgeRuntime.waitUntil(runInBackground())` aufrufen.
-- **Sofort** `return json({ status: "started", case_id, plan: plan.id, cases_used: cases_used_after, case_limit: plan.case_limit, pipeline_meta: { type: "multi_stage", stages: [] } }, 202);`.
-- In `runInBackground`:
-  - `writeStage` wie heute pro Stage (Analyse/Strategy/Draft).
-  - Bei Erfolg: `persistInitialVersion` + `cases.pipeline_error = null`.
-  - Bei `StageFailure`: `cases.pipeline_error = { stage, code, message, at }`, **keine** Ausnahme nach oben (Connection ist eh zu).
-  - `consume_dossier` bleibt am Anfang (Quota wird schon vor dem Start gezählt — Verhalten unverändert).
-- Single-Call-Branch (Free/Pro) bleibt synchron (läuft in <60s, kein Problem).
+Vor `writeStage` zusammensetzen:
 
-### 3) Per-Stage-Härtung gegen Worst-Case
-In `providers/openai.ts`:
-- `TIMEOUT_MS` von 90 → 60 s.
-- `maxRetries` von 4 → 2.
-- Bei `TIMEOUT` als ProviderError mit `code: "TIMEOUT"` werfen — wird im Multi-Stage bereits sauber als StageFailure persistiert.
+```
+strategy = `${framework_label}\n\n${rationale}\n\nTaktische Prinzipien:\n• ${tactical_principles.join("\n• ")}`
+```
 
-In `pipelines/multiStage.ts`:
-- Bereits vorhandener Gemini-Fallback bei OpenAI `RATE_LIMIT` zusätzlich auf `TIMEOUT` triggern (1 Versuch, dann fail).
+Bonus: minLength im Schema zwingt OpenAI in der Tool-Antwort zu echtem Inhalt — keine reinen Labels mehr.
 
-### 4) `src/pages/CaseDetail.tsx` — Realtime + Status-Quelle
-- Nach `supabase.functions.invoke(...)`: wenn die Antwort `{ status: "started" }` enthält, **nicht** auf das Response-Payload für die Stages warten.
-- Realtime-Subscription auf `cases:id=eq.{activeCaseId}` öffnen (UPDATE-Events). Bei jedem Update:
-  - `analysis` befüllt → `analysis: "complete"`, `strategy: "running"`.
-  - `strategy` befüllt → `strategy: "complete"`, `draft: "running"`.
-  - `draft`/`current_version_id` befüllt → alle drei `"complete"`, `refreshProfile()`, Success-Toast.
-  - `pipeline_error` befüllt → entsprechende Stage `"failed"`, Toast mit `pipeline_error.message`.
-- Watchdog: nach 4 min ohne Endzustand → `pipeline_error` aus DB nachladen und ggf. Timeout-Toast.
-- Bestehender `waitForVersionRecovery`-Fallback bleibt für ältere Cases / Offline-Tab.
+`PROMPT_STRATEGY` (`prompts.ts`) entsprechend auf die neuen Feldnamen umstellen (statt `strategy:` jetzt `framework_label`/`rationale`/`tactical_principles`).
 
-### 5) Validierung
-- Denselben Fall (15 % Rabatt, 30 % Umsatz, 3-Tages-Deadline) erneut starten.
-- Erwartung: HTTP-Antwort kommt in <2 s, Stages werden live nacheinander grün, **kein** „Failed to send a request" mehr — auch wenn Strategy 90 s+ braucht.
-- Negativtest: OpenAI-Key vorübergehend invalid setzen → `pipeline_error` mit `stage: "strategy"` erscheint im UI.
+### B. Draft-Token-Limit erhöhen
+
+In `providers/anthropic.ts`: `TIMEOUT_MS` und Default `max_tokens` so lassen, aber `AnthropicCallParams.maxTokens` für den Draft-Call in `multiStage.ts` explizit setzen:
+
+```ts
+draftOut = await callAnthropic({
+  ...,
+  maxTokens: 8000,   // drei volle Varianten DE + plan_steps passen sicher rein
+});
+```
+
+Analyse- und Strategie-Calls bleiben bei 2048 (ausreichend).
+
+### C. Output-Validierung pro Stage
+
+In `multiStage.ts` nach jedem Stage-Call vor `writeStage`:
+
+```ts
+// Strategie
+if (!framework_label || !rationale || !Array.isArray(tactical_principles) || tactical_principles.length < 2) {
+  throw stageError("strategy", ["analysis"], new ProviderError("EMPTY_STRATEGY_OUTPUT", 502, "EMPTY_OUTPUT", "openai"));
+}
+
+// Draft
+const v = draftOut.variants as Record<string, string> | null;
+const ok = v && v.soft?.trim() && v.neutral?.trim() && v.hard?.trim();
+if (!ok) {
+  throw stageError("draft", ["analysis","strategy"], new ProviderError("EMPTY_DRAFT_VARIANTS", 502, "EMPTY_OUTPUT", "anthropic"));
+}
+```
+
+`StageFailure` wird vom bestehenden Top-Level-Catch in `index.ts` in `cases.pipeline_error` geschrieben — UI zeigt damit endlich „Stage failed" statt eines leeren Drafts.
+
+### D. Draft-Fallback (analog zu Strategy)
+
+Wenn `callAnthropic` für Draft `TIMEOUT` / `EMPTY_OUTPUT` wirft und `lovableKey` vorhanden ist, einmal mit `google/gemini-2.5-pro` über `callGemini` retryen (gleicher Prompt, gleiches Schema-Tool). Verhindert künftiges stilles Scheitern, wenn Claude wieder truncates.
+
+### E. (Optional, klein) RAG-Statement-Timeout
+
+`match_knowledge` läuft regelmäßig in Postgres-`statement_timeout`. Nicht Ursache hier, aber Folgeticket: `match_count` runter (8 → 5) und in `knowledge.ts` Try/Catch sauber als „keine Quellen" propagieren (bereits passiert, hier nur erwähnt — nicht Teil dieses Fixes).
+
+## Validierung
+
+1. Migration nicht nötig (alles in Edge-Function-Code).
+2. Denselben Fall (`e88cfc29-…`) erneut über „Pipeline neu starten" anstoßen.
+3. Erwartung:
+   - `case_versions.strategy` enthält Framework-Label + Begründung + Bullet-Liste (mehrere hundert Zeichen).
+   - `case_versions.draft` und `variants.soft/neutral/hard` sind alle befüllt.
+   - In der UI sind alle drei Stages grün, Draft-Tab zeigt Text.
+4. Negativtest: in `multiStage.ts` temporär Anthropic-Aufruf auf `maxTokens: 200` zwingen → Stage-Failure muss in `cases.pipeline_error` landen und in der UI als rote Draft-Stage erscheinen (kein stiller Leerlauf mehr).
 
 ## Out of Scope
-- Keine Änderung an Prompts (`prompts.ts`), Wissensquellen-Retrieval oder UI-Design.
-- Kein neues Jobs-Table: `cases` selbst ist Single Source of Truth (vermeidet zusätzlichen Migrations-Footprint).
-- Single-Call-Pipeline (Free/Pro) unverändert.
+
+- Prompt-Inhalte (Soft/Neutral/Hard-Stil) — unverändert, du hattest sie zuletzt gerade neu kalibriert.
+- UI/Design.
+- `match_knowledge`-Tuning (separates Ticket).
+- Persistenz von `tactical_principles` als eigene Spalte — wir hängen sie an `strategy` an, um ohne Migration auszukommen.
+
+## Geänderte Dateien
+
+- `supabase/functions/strategos-ai-router/pipelines/multiStage.ts` (Schemas, Validierung, Fallback, Token-Limit-Param)
+- `supabase/functions/strategos-ai-router/providers/anthropic.ts` (`maxTokens` weiterleiten — bereits Param, nur Default-Check)
+- `supabase/functions/strategos-ai-router/prompts.ts` (PROMPT_STRATEGY auf neue Feldnamen)

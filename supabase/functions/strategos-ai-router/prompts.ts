@@ -128,11 +128,12 @@ Strategy MUST contain:
 - Under deadline + asynchronous medium: explicitly forbid a questions-only reply; require a concrete counter-move embedded in the draft.
 
 Return a strict JSON object via the tool with these keys:
-- strategy: Framework name with source attribution (e.g. "Voss — Labeling", "Fisher/Ury — Interest-based", "Greene — Law 33", "Kahneman — Loss Aversion") + 2 sentences in the target language explaining why this framework fits THIS power dynamic. If overridden, briefly state the trade-off.
-- tactical_principles: 2–3 short bullet sentences in the target language that translate the chosen framework into operative B2B moves for THIS exact case (no textbook language, no generic citations — concrete, paste-ready guidance).
+- framework_label: the chosen tactic name. MUST be picked from the strategy whitelist (if provided) and include source attribution where natural (e.g. "Voss — Labeling", "Fisher/Ury — Interest-based", "Greene — Law 33", "Kahneman — Loss Aversion"). Just the label — no explanation here.
+- rationale: 2–3 sentences in the target language explaining why this framework fits THIS exact power dynamic, pressure_type and dependency_risk. If escalation_level was overridden, briefly state the trade-off. Must be substantive (≥ ~80 characters), never a one-liner.
+- tactical_principles: 2–4 short bullet sentences in the target language that translate the chosen framework into operative B2B moves for THIS exact case (no textbook language, no generic citations — concrete, paste-ready guidance). Each bullet ≥ ~20 characters.
 - recommended_variant: "soft" | "neutral" | "hard".
 
-No drafts. Strategy only.`;
+No drafts. Strategy only. NEVER return only the framework label without rationale and tactical_principles — the schema enforces all three.`;
 
 // Stage 3 — Draft (Claude)
 export const PROMPT_DRAFT = `${ELITE_PERSONA}
