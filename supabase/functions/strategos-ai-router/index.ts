@@ -47,6 +47,18 @@ Deno.serve(async (req: Request) => {
     if (userErr || !userData?.user?.id) return json({ error: "Unauthorized" }, 401);
     const userId = userData.user.id;
 
+    // ---- ADMIN CHECK (knowledge sources are admin-only) ----
+    let isAdmin = false;
+    {
+      const SUPABASE_SERVICE_ROLE_KEY_EARLY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, SUPABASE_SERVICE_ROLE_KEY_EARLY);
+      const { data: adminCheck } = await adminClient.rpc("has_role", {
+        _user_id: userId,
+        _role: "admin",
+      });
+      isAdmin = adminCheck === true;
+    }
+
     // ---- INPUT ----
     const body = await req.json().catch(() => ({}));
     const situation_text: string = body?.situation_text;
@@ -270,6 +282,10 @@ Deno.serve(async (req: Request) => {
     const writeStage = async (payload: StageCompletePayload) => {
       if (!case_id) return;
       const update: Record<string, unknown> = { ...payload.data };
+      // Knowledge sources are proprietary — never persist for non-admin users
+      if (!isAdmin && "knowledge_sources" in update) {
+        update.knowledge_sources = null;
+      }
       if (payload.stage === "analysis") {
         update.status = "active";
         update.last_analyzed_at = new Date().toISOString();
@@ -309,6 +325,7 @@ Deno.serve(async (req: Request) => {
       plan_steps?: unknown; clarifying_questions?: unknown; knowledge_sources?: unknown;
     }) => {
       if (!case_id) return;
+      const knowledgeSourcesForDb = isAdmin ? (data.knowledge_sources ?? null) : null;
       const { data: latest } = await serviceClient
         .from("case_versions")
         .select("version_number")
@@ -335,7 +352,7 @@ Deno.serve(async (req: Request) => {
           recommended_variant: data.recommended_variant ?? null,
           plan_steps: data.plan_steps ?? null,
           clarifying_questions: data.clarifying_questions ?? null,
-          knowledge_sources: data.knowledge_sources ?? null,
+          knowledge_sources: knowledgeSourcesForDb,
         })
         .select("id")
         .single();
