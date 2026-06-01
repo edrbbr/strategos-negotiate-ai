@@ -1,61 +1,52 @@
-# Plan: Hänger bei 868 / 934 Embeddings beheben
 
-## Was ich bestätigt habe
-- Das gehostete Backend ist grundsätzlich gesund.
-- `the_psychology_of_persuasion` hängt aktuell bei:
-  - Status: `indexing`
-  - Phase: `embedding`
-  - Fortschritt: `868 / 934`
-  - Offene Embeddings: `66`
-  - Keine gespeicherte Fehlermeldung
-- `kahneman_fast_slow` steht derzeit wieder auf `uploaded` und wurde nicht neu gestartet.
-- Für den Hänger gibt es keine verwertbare Fehlermeldung in den Function-Logs.
+## Befund Fehleranalyse
 
-## Wahrscheinliche Ursache
-Die Embedding-Kette läuft über interne Selbstaufrufe der Function. Wenn ein Folgeaufruf oder eine externe Embedding-Anfrage scheitert oder nicht mehr weiterläuft, bleibt der Datensatz einfach auf `indexing` stehen. Aktuell wird dieser Zustand nicht sauber in einen Fehler oder einen wiederaufnehmbaren Status überführt.
+Ich habe Edge-Function-Logs (`strategos-ai-router`, `strategos-suggest-refinements`, `ingest-knowledge-base`), Postgres-Logs und den Status des konkreten Falls `f336cdbb-…` geprüft:
 
-## Umsetzung
-1. **Fortsetzung der Embedding-Jobs robust machen**
-   - Den internen Folgeaufruf nicht mehr „fire-and-forget“ behandeln.
-   - Antwortstatus und Fehler des Folgeaufrufs explizit prüfen.
-   - Wenn die Fortsetzung nicht gestartet werden kann, den Buchstatus aktiv auf `error` setzen und die Ursache speichern.
+- Der Fall wurde sauber bis `status = active`, `model_used = multi_stage_elite` durchgespielt.
+- Alle HTTP-Aufrufe an die Edge Functions seit dem Pipeline-Start liefen mit **Status 200** durch.
+- Es gibt im Zeitraum **keine Postgres-Fehler** (ERROR/FATAL/PANIC) und **keine 4xx/5xx-Antworten** der Functions.
+- Auch im aktuellen Browser-Console-/Network-Snapshot tauchen keine Fehler zur Pipeline auf.
 
-2. **Embedding-Schritt fehlertolerant machen**
-   - Pro Batch sauberes Logging ergänzen.
-   - Fehler aus der Embedding-API, Update-Fehler einzelner Chunks und Zähl-/Statusfehler getrennt behandeln.
-   - Wiederholbare Fehler in klare Fehlermeldungen übersetzen statt still hängen zu bleiben.
+Das heißt: serverseitig ist der Lauf erfolgreich gewesen. Die Fehlermeldungen, die du gesehen hast, kommen sehr wahrscheinlich aus der **UI** (Toasts, Modals, Inline-Hinweise) und nicht aus einem echten Pipeline-Fehler — oder sie betreffen eine andere Aktion (z. B. Verfeinerungen, Anhänge-Upload, Cool-down). Ohne den genauen Wortlaut bzw. einen Screenshot kann ich nicht seriös sagen, welche Komponente sie ausgelöst hat.
 
-3. **Stall-Erkennung serverseitig absichern**
-   - Nicht nur im UI warnen, sondern festhängende Jobs serverseitig als Fehler markieren oder für Wiederaufnahme kennzeichnen.
-   - Damit bleibt kein Buch dauerhaft ohne Rückmeldung auf `indexing` stehen.
+**→ Bitte schick mir kurz**: Wortlaut der Fehlermeldung(en) oder Screenshot, und an welcher Stelle sie erschienen (während „Analyse läuft", nach Klick auf Verfeinern, beim Öffnen des Falls, …). Damit kann ich die Ursache präzise benennen und beheben.
 
-4. **Gezielte Wiederaufnahme statt kompletter Neuerstellung**
-   - Einen Resume-/Retry-Pfad ergänzen, der bei vorhandenen Chunks nur die fehlenden Embeddings weiterverarbeitet.
-   - So müssen bereits erzeugte 868 Embeddings nicht verworfen werden.
+## Geheimhaltung der Wissensquellen (Admin-only Anzeige)
 
-5. **Admin-UI klarer machen**
-   - Bei festhängendem Embedding statt nur Warntext zusätzlich eine passende Aktion anzeigen: `Fortsetzen` oder `Neu starten`.
-   - Fehlermeldungen aus dem Backend sichtbar machen, damit klar ist, ob der Hänger bei Fortsetzung, Embedding-API oder Datenbank lag.
+Aktuell rendert `CaseChatView.tsx` den Block `KnowledgeSourcesBlock` (Buchtitel, Kapitel, Seite, Snippet) für **jeden** Nutzer, sobald `version.knowledge_sources` Einträge enthält. Das ist die Stelle, an der Pallanx-Wissen aktuell „durchsickert".
 
-6. **Stale Browser-PDF-Reste aufräumen**
-   - Die übrig gebliebenen `pdf.worker`-/`knowledgeChunking`-Reste aus dem Frontend bereinigen, damit keine irreführenden Dev-Fehler mehr auftauchen.
+### Änderung
 
-7. **Betroffene Bücher reparieren und verifizieren**
-   - `the_psychology_of_persuasion` über den neuen Resume-Pfad fertigstellen.
-   - `kahneman_fast_slow` anschließend neu starten und prüfen, dass die Phasen sauber weiterlaufen.
+1. **Frontend — Sichtbarkeit auf Admin einschränken**
+   - In `src/components/CaseChatView.tsx` `useUserRole()` einbinden und den `KnowledgeSourcesBlock` nur rendern, wenn `isAdmin === true`.
+   - Sicherheitshinweis: Die Daten kommen weiterhin im API-Response zurück (sind also technisch im Netzwerk-Tab sichtbar). Echte Geheimhaltung erfordert Schritt 2. Schritt 1 entfernt die Anzeige für alle Nicht-Admins sofort.
+
+2. **Backend — Wissensquellen nicht mehr an Nicht-Admins ausliefern**
+   - `supabase/functions/strategos-ai-router/index.ts`: vor `return json({...result, ...})` und vor `persistInitialVersion(...)` prüfen, ob der eingeloggte User Admin ist (`user_roles`-Check via `has_role(userId, 'admin')`).
+   - Wenn **nicht** Admin:
+     - `knowledge_sources` aus dem Response-Payload entfernen.
+     - In `case_versions` ebenfalls `knowledge_sources: null` speichern, damit beim späteren Reload nichts nachgereicht werden kann.
+   - Das gleiche Stripping auch in `onStageComplete`/`writeStage` für die Analyse-Stage (dort wird `knowledge_sources` aktuell mitgeschrieben).
+   - Optional: Auch in `strategos-restore-version` / `strategos-refinement` / Read-Pfaden (`useCaseVersions`) sicherstellen, dass Nicht-Admins kein `knowledge_sources` zurückbekommen. Da die Daten in der Tabelle liegen, ist sauberer Weg eine **RLS-Spaltenmaskierung** über eine View — Aufwand größer. Schlanke Variante: Hook `useCaseVersions` filtert `knowledge_sources` clientseitig raus, wenn nicht Admin (kosmetisch, wirkt aber konsistent mit Schritt 1).
+
+3. **Bestehende Daten**
+   - Optional: Für bereits gespeicherte `case_versions` von Nicht-Admin-Usern `knowledge_sources` per Migration auf `NULL` setzen, damit Altbestand nicht weiterhin im DB-Row liegt. Bestätige bitte, ob du das willst — sonst lasse ich Altdaten unverändert.
+
+### Was sich für dich (Admin) nicht ändert
+- Wenn du als Admin eingeloggt bist, siehst du `WISSENSQUELLEN · n` wie bisher inkl. Buchtitel, Kapitel, Seite und Snippet.
 
 ## Technische Details
-- **Frontend:** `src/pages/AdminKnowledge.tsx`
-  - Stall-/Error-UI
-  - Resume-/Retry-Action
-  - klarere Statusdarstellung
-- **Backend Function:** `supabase/functions/ingest-knowledge-base/index.ts`
-  - robuste Continuation
-  - explizite Fehlerpersistenz
-  - Resume-Phase für offene Embeddings
-- **Optionales Datenmodell:** nur falls nötig kleine Ergänzung für Fehlerstufe oder Retry-Zeitpunkt
 
-## Ergebnis
-- Kein Buch bleibt mehr kommentarlos bei 93% oder einem anderen Stand hängen.
-- Bereits erzeugte Embeddings können fortgesetzt werden.
-- Admin sieht sofort, ob ein Lauf aktiv ist, festhängt, neu gestartet wurde oder mit konkretem Fehler beendet wurde.
+- Admin-Erkennung im Frontend: `useUserRole()` (existiert bereits, nutzt `user_roles` + Client-Query).
+- Admin-Erkennung im Edge-Function-Backend: `serviceClient.rpc('has_role', { _user_id: userId, _role: 'admin' })` (SECURITY DEFINER, existiert).
+- Betroffene Dateien:
+  - `src/components/CaseChatView.tsx` (Render-Gate)
+  - `supabase/functions/strategos-ai-router/index.ts` (Response- und Persistenz-Stripping)
+  - optional `src/hooks/useCaseVersions.ts` (clientseitiger Filter)
+  - optional Migration zum Bereinigen historischer `knowledge_sources` bei Nicht-Admin-Cases
+
+## Offene Frage an dich
+
+1. Schick mir bitte die konkreten Fehlermeldungen / Screenshots — dann ergänze ich hier die Ursachenanalyse und Fix-Schritte, bevor wir bauen.
+2. Soll ich Altbestand `knowledge_sources` für Nicht-Admin-User per Migration auf NULL setzen, oder nur ab jetzt strippen?
