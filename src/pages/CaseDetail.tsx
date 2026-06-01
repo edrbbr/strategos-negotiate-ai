@@ -375,6 +375,35 @@ const CaseDetail = () => {
       if (payload?.error === "CASE_LIMIT_REACHED") { setShowUpgrade(true); return; }
       if (payload?.error) throw new Error(String(payload.error));
 
+      // Multi-stage now runs in the background; the function returns immediately
+      // with { status: "started" } and the UI advances via realtime updates on
+      // the cases row (handled by the effect that watches `caseRow`).
+      if (payload?.status === "started") {
+        // Safety watchdog: if no terminal state in 5 min, surface a timeout.
+        if (activeCaseId) {
+          const watchdogId = activeCaseId;
+          setTimeout(async () => {
+            // Only act if we're still loading on the same case.
+            const { data: row } = await supabase
+              .from("cases")
+              .select("current_version_id, pipeline_error")
+              .eq("id", watchdogId)
+              .maybeSingle();
+            const done = !!row?.current_version_id || !!row?.pipeline_error;
+            if (!done) {
+              toast.error("Pipeline hat nicht innerhalb von 5 Minuten geantwortet.");
+              setStageState((s) => ({
+                analysis: s.analysis === "running" ? "failed" : s.analysis,
+                strategy: s.strategy === "running" ? "failed" : s.strategy,
+                draft: s.draft === "running" ? "failed" : s.draft,
+              }));
+              setLoading(false);
+            }
+          }, 5 * 60_000);
+        }
+        return;
+      }
+
       setStageState({ analysis: "complete", strategy: "complete", draft: "complete" });
       refreshProfile();
 
