@@ -1,5 +1,4 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,10 +11,8 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const EMBED_MODEL = "google/gemini-embedding-001";
 const EMBED_DIMS = 3072;
-const CHUNK_SIZE = 1000;
-const CHUNK_OVERLAP = 200;
-const EMBED_BATCH = 8;
-const EMBED_BATCHES_PER_INVOCATION = 2; // small to stay under CPU limit
+const EMBED_BATCH = 4;
+const EMBED_BATCHES_PER_INVOCATION = 1;
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -25,35 +22,6 @@ interface Chunk {
   chapter: string | null;
   chunk_index: number;
   content: string;
-}
-
-function chunkPageText(pageText: string, page: number, startIndex: number, bookKey: string, currentChapter: string | null): { chunks: Chunk[]; chapter: string | null } {
-  const out: Chunk[] = [];
-  let chapter = currentChapter;
-  const lines = pageText.split(/\r?\n/);
-  // naive chapter heuristic: line that matches "Chapter N" or is fully uppercase short
-  for (const line of lines.slice(0, 5)) {
-    const t = line.trim();
-    if (/^(chapter|kapitel|law)\s+\d+/i.test(t) || (t.length > 3 && t.length < 60 && t === t.toUpperCase() && /[A-Z]/.test(t))) {
-      chapter = t.slice(0, 80);
-      break;
-    }
-  }
-  const clean = pageText.replace(/\s+/g, " ").trim();
-  if (!clean) return { chunks: out, chapter };
-  let i = 0;
-  let idx = startIndex;
-  while (i < clean.length) {
-    const end = Math.min(i + CHUNK_SIZE, clean.length);
-    const content = clean.slice(i, end).trim();
-    if (content.length > 80) {
-      out.push({ book_key: bookKey, page, chapter, chunk_index: idx, content });
-      idx++;
-    }
-    if (end >= clean.length) break;
-    i = end - CHUNK_OVERLAP;
-  }
-  return { chunks: out, chapter };
 }
 
 async function embedBatch(inputs: string[]): Promise<number[][]> {
@@ -95,56 +63,49 @@ function scheduleNext(payload: Record<string, unknown>) {
   try { EdgeRuntime.waitUntil(p); } catch { /* ignore */ }
 }
 
-// Phase 1: download PDF, extract text, chunk, insert chunks with NULL embedding.
-async function phaseExtract(bookKey: string): Promise<{ total: number }> {
+async function phaseSeed(bookKey: string, chunks: Chunk[], reset: boolean): Promise<{ total: number }> {
   const { data: book, error: bookErr } = await admin
     .from("knowledge_books")
-    .select("*")
+    .select("book_key, file_path")
     .eq("book_key", bookKey)
     .single();
+
   if (bookErr || !book) throw new Error(`Book not found: ${bookKey}`);
-  if (!book.file_path) throw new Error(`Book has no file_path. Upload PDF first.`);
+  if (!book.file_path) throw new Error("Book has no file_path. Upload PDF first.");
+  if (!Array.isArray(chunks) || chunks.length === 0) throw new Error("chunks required for seed phase.");
 
-  await admin.from("knowledge_books").update({ status: "indexing", error_message: null, chunk_count: 0 }).eq("book_key", bookKey);
+  if (reset) {
+    await admin
+      .from("knowledge_books")
+      .update({ status: "indexing", error_message: null, chunk_count: 0, indexed_at: null })
+      .eq("book_key", bookKey);
 
-  const { data: file, error: dlErr } = await admin.storage.from("knowledge-base").download(book.file_path);
-  if (dlErr || !file) throw new Error(`Download failed: ${dlErr?.message}`);
-  const buf = new Uint8Array(await file.arrayBuffer());
-
-  const pdf = await getDocumentProxy(buf);
-  const { text: pages } = await extractText(pdf, { mergePages: false });
-  const pageTexts = Array.isArray(pages) ? pages : [String(pages)];
-
-  const chunks: Chunk[] = [];
-  let chapter: string | null = null;
-  let chunkIdx = 0;
-  for (let p = 0; p < pageTexts.length; p++) {
-    const result = chunkPageText(pageTexts[p], p + 1, chunkIdx, bookKey, chapter);
-    chunks.push(...result.chunks);
-    chapter = result.chapter;
-    chunkIdx += result.chunks.length;
-  }
-  if (chunks.length === 0) throw new Error("No extractable text in PDF.");
-
-  // Replace existing chunks
-  await admin.from("knowledge_chunks").delete().eq("book_key", bookKey);
-
-  // Insert all chunks WITHOUT embeddings (NULL). Bulk insert in DB-sized batches.
-  const DB_BATCH = 200;
-  for (let i = 0; i < chunks.length; i += DB_BATCH) {
-    const slice = chunks.slice(i, i + DB_BATCH).map((c) => ({
-      book_key: c.book_key,
-      page: c.page,
-      chapter: c.chapter,
-      chunk_index: c.chunk_index,
-      content: c.content,
-      embedding: null,
-    }));
-    const { error: insErr } = await admin.from("knowledge_chunks").insert(slice);
-    if (insErr) throw new Error(`Insert chunks: ${insErr.message}`);
+    const { error: deleteError } = await admin.from("knowledge_chunks").delete().eq("book_key", bookKey);
+    if (deleteError) throw new Error(`Delete existing chunks: ${deleteError.message}`);
   }
 
-  return { total: chunks.length };
+  const rows = chunks.map((chunk) => ({
+    book_key: bookKey,
+    page: chunk.page,
+    chapter: chunk.chapter,
+    chunk_index: chunk.chunk_index,
+    content: chunk.content,
+    embedding: null,
+  }));
+
+  const { error: insertError } = await admin.from("knowledge_chunks").insert(rows);
+  if (insertError) throw new Error(`Insert chunks: ${insertError.message}`);
+
+  const { count, error: countError } = await admin
+    .from("knowledge_chunks")
+    .select("id", { count: "exact", head: true })
+    .eq("book_key", bookKey);
+
+  if (countError) throw new Error(`Count chunks: ${countError.message}`);
+
+  await admin.from("knowledge_books").update({ chunk_count: count ?? 0 }).eq("book_key", bookKey);
+
+  return { total: count ?? rows.length };
 }
 
 // Phase 2: take up to EMBED_BATCHES_PER_INVOCATION * EMBED_BATCH pending chunks, embed, then continue.
@@ -207,7 +168,9 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const bookKey = body.book_key as string | undefined;
-    const phase = (body.phase as string | undefined) ?? "start";
+    const phase = (body.phase as string | undefined) ?? "seed";
+    const reset = body.reset === true;
+    const chunks = Array.isArray(body.chunks) ? (body.chunks as Chunk[]) : [];
     const isInternal = req.headers.get("x-internal-continue") === "1";
 
     if (!bookKey) {
@@ -233,12 +196,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (phase === "start") {
-      const { total } = await phaseExtract(bookKey);
-      // Kick off embedding in background
-      scheduleNext({ book_key: bookKey, phase: "embed" });
-      return new Response(JSON.stringify({ ok: true, phase: "extract_done", total_chunks: total, status: "indexing" }), {
-        status: 202,
+    if (phase === "seed") {
+      const { total } = await phaseSeed(bookKey, chunks, reset);
+      return new Response(JSON.stringify({ ok: true, phase: "seed", total_chunks: total, status: "indexing" }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -250,6 +211,19 @@ Deno.serve(async (req) => {
       }
       return new Response(JSON.stringify({ ok: true, phase: "embed", ...res }), {
         status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (phase === "start") {
+      const { count, error: countError } = await admin
+        .from("knowledge_chunks")
+        .select("id", { count: "exact", head: true })
+        .eq("book_key", bookKey);
+      if (countError) throw new Error(`Count chunks: ${countError.message}`);
+      scheduleNext({ book_key: bookKey, phase: "embed" });
+      return new Response(JSON.stringify({ ok: true, phase: "start", total_chunks: count ?? 0, status: "indexing" }), {
+        status: 202,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
