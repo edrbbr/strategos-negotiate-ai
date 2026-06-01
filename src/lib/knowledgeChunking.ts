@@ -66,11 +66,15 @@ function chunkPageText(pageText: string, page: number, startIndex: number, curre
 }
 
 async function extractPageText(page: Awaited<ReturnType<ReturnType<typeof pdfjs.getDocument>["promise"]>["getPage"]>) {
+type PdfTextItem = { str?: string; hasEOL?: boolean };
+type PdfPageLike = { getTextContent: () => Promise<{ items: PdfTextItem[] }> };
+
+async function extractPageText(page: PdfPageLike) {
   const textContent = await page.getTextContent();
   const lines: string[] = [];
   let currentLine = "";
 
-  for (const item of textContent.items as Array<{ str?: string; hasEOL?: boolean }>) {
+  for (const item of textContent.items) {
     const value = item.str?.trim();
     if (value) {
       currentLine += `${currentLine ? " " : ""}${value}`;
