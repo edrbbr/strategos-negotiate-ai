@@ -491,7 +491,7 @@ const AdminKnowledge = () => {
 
         <div className="mt-12 border-t border-border/20 pt-6 text-xs text-muted-foreground font-mono-label">
           <p>
-            Hinweis: Die PDF wird im Admin-Browser in Text-Chunks zerlegt. Der Backend-Worker erzeugt danach nur noch die 3072-dimensionalen Embeddings via google/gemini-embedding-001.
+            Hinweis: Die PDF wird komplett im Backend extrahiert, zerlegt und über google/gemini-embedding-001 (3072-dim) eingebettet. Bei einem Hänger bleibt der Fortschritt erhalten — „Fortsetzen" macht direkt weiter, ohne bereits erzeugte Chunks zu verwerfen.
           </p>
         </div>
       </main>
