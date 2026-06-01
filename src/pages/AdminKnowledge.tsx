@@ -21,6 +21,10 @@ type Book = {
   error_message: string | null;
   indexed_at: string | null;
   updated_at: string;
+  progress_phase: string | null;
+  progress_done: number;
+  progress_total: number;
+  progress_updated_at: string | null;
 };
 
 const STATUS_STYLE: Record<Book["status"], string> = {
@@ -40,6 +44,15 @@ const STATUS_LABEL: Record<Book["status"], string> = {
 };
 
 const CHUNK_UPLOAD_BATCH_SIZE = 100;
+
+const STALL_THRESHOLD_MS = 90_000; // 90s ohne Fortschritt => festhängend
+
+const PHASE_LABEL: Record<string, string> = {
+  extracting_pdf: "PDF wird gelesen…",
+  seeding: "Chunks werden hochgeladen…",
+  embedding: "Embeddings werden erzeugt…",
+  stalled: "Steckt fest — bitte abbrechen & neu starten",
+};
 
 type ChunkStats = { total: number; embedded: number; pending: number };
 
