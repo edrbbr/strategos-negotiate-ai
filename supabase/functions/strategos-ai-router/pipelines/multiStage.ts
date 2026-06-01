@@ -92,6 +92,58 @@ const DRAFT_SCHEMA = {
 
 const VALID_ICONS: IconHint[] = ["car", "home", "cash", "document", "briefcase", "handshake"];
 
+const DRAFT_MAX_TOKENS = 8000;
+
+/**
+ * Compose the final persisted strategy text from the structured tool output.
+ * Validates that all required fields contain real content; throws ProviderError
+ * with code "EMPTY_OUTPUT" when the model returned a stub (e.g. only the label).
+ */
+function composeStrategyText(out: Record<string, unknown>): {
+  text: string;
+  recommendedVariant: VariantKey;
+} {
+  const label = String(out.framework_label ?? "").trim();
+  const rationale = String(out.rationale ?? "").trim();
+  const principlesRaw = Array.isArray(out.tactical_principles) ? out.tactical_principles : [];
+  const principles = principlesRaw.map((p) => String(p).trim()).filter((p) => p.length > 0);
+
+  if (!label || rationale.length < 40 || principles.length < 2) {
+    throw new ProviderError(
+      `EMPTY_STRATEGY_OUTPUT label=${!!label} rationaleLen=${rationale.length} principles=${principles.length}`,
+      502,
+      "EMPTY_OUTPUT",
+      "openai",
+    );
+  }
+
+  const recRaw = (out.recommended_variant as VariantKey) ?? "soft";
+  const recommendedVariant: VariantKey = VARIANT_KEYS.includes(recRaw) ? recRaw : "soft";
+  const text = `${label}\n\n${rationale}\n\nTaktische Prinzipien:\n• ${principles.join("\n• ")}`;
+  return { text, recommendedVariant };
+}
+
+/**
+ * Validate the draft tool output before persisting. Throws ProviderError
+ * "EMPTY_OUTPUT" if any of the three variants is missing/blank — this allows
+ * the caller to surface a clean StageFailure instead of silently saving an
+ * empty draft (root cause of the "leerer Entwurf" bug).
+ */
+function validateDraftOut(out: Record<string, unknown>): void {
+  const v = (out?.variants ?? null) as Record<string, unknown> | null;
+  const soft = v ? String(v.soft ?? "").trim() : "";
+  const neutral = v ? String(v.neutral ?? "").trim() : "";
+  const hard = v ? String(v.hard ?? "").trim() : "";
+  if (!soft || !neutral || !hard) {
+    throw new ProviderError(
+      `EMPTY_DRAFT_VARIANTS soft=${soft.length} neutral=${neutral.length} hard=${hard.length}`,
+      502,
+      "EMPTY_OUTPUT",
+      "anthropic",
+    );
+  }
+}
+
 /**
  * Defensive unwrapping for strategy strings.
  * Some providers occasionally return tool-call output where the inner field
