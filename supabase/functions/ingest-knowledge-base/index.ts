@@ -168,7 +168,9 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const bookKey = body.book_key as string | undefined;
-    const phase = (body.phase as string | undefined) ?? "start";
+    const phase = (body.phase as string | undefined) ?? "seed";
+    const reset = body.reset === true;
+    const chunks = Array.isArray(body.chunks) ? (body.chunks as Chunk[]) : [];
     const isInternal = req.headers.get("x-internal-continue") === "1";
 
     if (!bookKey) {
@@ -194,12 +196,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (phase === "start") {
-      const { total } = await phaseExtract(bookKey);
-      // Kick off embedding in background
-      scheduleNext({ book_key: bookKey, phase: "embed" });
-      return new Response(JSON.stringify({ ok: true, phase: "extract_done", total_chunks: total, status: "indexing" }), {
-        status: 202,
+    if (phase === "seed") {
+      const { total } = await phaseSeed(bookKey, chunks, reset);
+      return new Response(JSON.stringify({ ok: true, phase: "seed", total_chunks: total, status: "indexing" }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -211,6 +211,19 @@ Deno.serve(async (req) => {
       }
       return new Response(JSON.stringify({ ok: true, phase: "embed", ...res }), {
         status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (phase === "start") {
+      const { count, error: countError } = await admin
+        .from("knowledge_chunks")
+        .select("id", { count: "exact", head: true })
+        .eq("book_key", bookKey);
+      if (countError) throw new Error(`Count chunks: ${countError.message}`);
+      scheduleNext({ book_key: bookKey, phase: "embed" });
+      return new Response(JSON.stringify({ ok: true, phase: "start", total_chunks: count ?? 0, status: "indexing" }), {
+        status: 202,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
