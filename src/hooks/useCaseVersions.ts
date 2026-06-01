@@ -5,6 +5,16 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export type CaseVersionKind = "initial" | "refinement" | "restore";
 
+export type VariantKey = "soft" | "neutral" | "hard";
+
+export interface KnowledgeSource {
+  book_key: string;
+  book_title: string;
+  chapter: string | null;
+  page: number | null;
+  snippet: string;
+}
+
 export interface CaseVersionRow {
   id: string;
   case_id: string;
@@ -19,6 +29,12 @@ export interface CaseVersionRow {
   model_used: string | null;
   created_at: string;
   change_rationale: string | null;
+  mode?: string | null;
+  variants?: { soft: string; neutral: string; hard: string } | null;
+  recommended_variant?: VariantKey | null;
+  plan_steps?: string[] | null;
+  clarifying_questions?: string[] | null;
+  knowledge_sources?: KnowledgeSource[] | null;
 }
 
 export function useCaseVersions(caseId: string | undefined) {

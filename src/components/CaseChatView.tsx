@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, CheckCircle2, ChevronDown, Copy, Diamond, History, Info, Loader2, Lock, Maximize2, MessageSquare, Paperclip, Send, Sparkles, Star, X } from "lucide-react";
+import { BookMarked, Bot, CheckCircle2, ChevronDown, Copy, Diamond, History, Info, ListChecks, Loader2, Lock, Maximize2, MessageSquare, Paperclip, Send, Sparkles, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -538,13 +539,16 @@ function VersionBlock({
             </p>
           </div>
           {/* Draft */}
-          <div className="bg-background/50 border-l-2 sm:border-l border-secondary/60 rounded-sm p-4 sm:p-3">
-            <p className="font-mono-label text-secondary text-[11px] sm:text-[10px] mb-3 sm:mb-2">ENTWURF</p>
-            <p className="font-sans text-[16px] sm:text-[14px] leading-7 sm:leading-6 text-foreground/90 whitespace-pre-line">
-              {version.draft ?? "—"}
-            </p>
-          </div>
+          <DraftBlock version={version} />
         </div>
+
+        {version.plan_steps && version.plan_steps.length > 0 && (
+          <PlanStepsBlock steps={version.plan_steps} />
+        )}
+
+        {version.knowledge_sources && version.knowledge_sources.length > 0 && (
+          <KnowledgeSourcesBlock sources={version.knowledge_sources} />
+        )}
 
         {version.strategy_labels && version.strategy_labels.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-4">
@@ -592,6 +596,131 @@ function AttachmentsRow({
             <Paperclip className="w-2.5 h-2.5 text-tertiary shrink-0" />
             <span className="truncate">{a.file_name}</span>
           </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const VARIANT_META: Record<"soft" | "neutral" | "hard", { label: string; tone: string }> = {
+  soft: { label: "Soft", tone: "text-emerald-400 border-emerald-500/30" },
+  neutral: { label: "Neutral", tone: "text-primary border-primary/30" },
+  hard: { label: "Hart", tone: "text-destructive border-destructive/30" },
+};
+
+function DraftBlock({ version }: { version: CaseVersionRow }) {
+  const variants = version.variants;
+  const hasVariants =
+    !!variants &&
+    typeof variants === "object" &&
+    ["soft", "neutral", "hard"].some((k) => typeof (variants as Record<string, unknown>)[k] === "string" && (variants as Record<string, string>)[k].trim().length > 0);
+
+  if (!hasVariants) {
+    return (
+      <div className="bg-background/50 border-l-2 sm:border-l border-secondary/60 rounded-sm p-4 sm:p-3">
+        <p className="font-mono-label text-secondary text-[11px] sm:text-[10px] mb-3 sm:mb-2">ENTWURF</p>
+        <p className="font-sans text-[16px] sm:text-[14px] leading-7 sm:leading-6 text-foreground/90 whitespace-pre-line">
+          {version.draft ?? "—"}
+        </p>
+      </div>
+    );
+  }
+
+  const v = variants as { soft?: string; neutral?: string; hard?: string };
+  const recommended = version.recommended_variant ?? "neutral";
+  const tabs = (["soft", "neutral", "hard"] as const).filter((k) => typeof v[k] === "string" && v[k]!.trim().length > 0);
+  const defaultTab = tabs.includes(recommended) ? recommended : tabs[0];
+
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Entwurf kopiert");
+  };
+
+  return (
+    <div className="bg-background/50 border-l-2 sm:border-l border-secondary/60 rounded-sm p-4 sm:p-3">
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <p className="font-mono-label text-secondary text-[11px] sm:text-[10px]">ENTWURF · VARIANTEN</p>
+        <p className="font-mono-label text-tertiary text-[10px]">
+          Empfohlen: {VARIANT_META[recommended].label}
+        </p>
+      </div>
+      <Tabs defaultValue={defaultTab} className="w-full">
+        <TabsList className="w-full justify-start bg-card/50 h-8 p-0.5">
+          {tabs.map((k) => (
+            <TabsTrigger
+              key={k}
+              value={k}
+              className={`font-mono-label text-[10px] uppercase tracking-wider px-3 h-7 ${
+                k === recommended ? "ring-1 ring-tertiary/40" : ""
+              }`}
+            >
+              {VARIANT_META[k].label}
+              {k === recommended && <Star className="w-2.5 h-2.5 ml-1.5 text-tertiary" />}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {tabs.map((k) => (
+          <TabsContent key={k} value={k} className="mt-3 relative">
+            <button
+              type="button"
+              onClick={() => copy(v[k]!)}
+              className="absolute top-0 right-0 text-muted-foreground/60 hover:text-primary transition-colors p-1"
+              title="Variante kopieren"
+              aria-label="Variante kopieren"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+            <p className="font-sans text-[16px] sm:text-[14px] leading-7 sm:leading-6 text-foreground/90 whitespace-pre-line pr-6">
+              {v[k]}
+            </p>
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  );
+}
+
+function PlanStepsBlock({ steps }: { steps: string[] }) {
+  return (
+    <div className="mt-4 bg-background/40 border-l-2 border-primary/50 rounded-sm p-4 sm:p-3">
+      <p className="font-mono-label text-primary text-[11px] sm:text-[10px] mb-3 flex items-center gap-1.5">
+        <ListChecks className="w-3 h-3" /> NÄCHSTE SCHRITTE · {steps.length}
+      </p>
+      <ol className="space-y-2 sm:space-y-1.5 text-[15px] sm:text-[13px] leading-7 sm:leading-6 text-foreground/85">
+        {steps.map((s, i) => (
+          <li key={i} className="flex gap-3">
+            <span className="font-mono-label text-primary/80 text-[11px] shrink-0 mt-1">{String(i + 1).padStart(2, "0")}</span>
+            <span className="whitespace-pre-line">{s}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function KnowledgeSourcesBlock({ sources }: { sources: NonNullable<CaseVersionRow["knowledge_sources"]> }) {
+  return (
+    <div className="mt-4 bg-background/40 border-l-2 border-tertiary/50 rounded-sm p-4 sm:p-3">
+      <p className="font-mono-label text-tertiary text-[11px] sm:text-[10px] mb-3 flex items-center gap-1.5">
+        <BookMarked className="w-3 h-3" /> WISSENSQUELLEN · {sources.length}
+      </p>
+      <div className="space-y-3">
+        {sources.map((src, i) => (
+          <div key={`${src.book_key}-${i}`} className="border-l border-border/40 pl-3">
+            <div className="flex items-baseline gap-2 flex-wrap mb-1">
+              <span className="font-serif text-[14px] sm:text-[13px] text-foreground/90">{src.book_title}</span>
+              <span className="font-mono-label text-muted-foreground/70 text-[10px]">
+                {src.chapter ? `${src.chapter}` : ""}
+                {src.chapter && src.page ? " · " : ""}
+                {src.page ? `S. ${src.page}` : ""}
+              </span>
+            </div>
+            {src.snippet && (
+              <p className="font-sans text-[13px] sm:text-[12px] leading-6 text-foreground/70 italic line-clamp-3">
+                „{src.snippet}"
+              </p>
+            )}
+          </div>
         ))}
       </div>
     </div>

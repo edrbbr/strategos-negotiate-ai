@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, XCircle } from "lucide-react";
+import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, XCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
@@ -98,6 +98,8 @@ const AdminKnowledge = () => {
   const [newTitle, setNewTitle] = useState("");
   const [newAuthor, setNewAuthor] = useState("");
   const [adding, setAdding] = useState(false);
+  const [deleteBook, setDeleteBook] = useState<Book | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   const slugify = (s: string) =>
     s
@@ -207,6 +209,22 @@ const AdminKnowledge = () => {
       qc.invalidateQueries({ queryKey: ["knowledge-books"] });
     },
     onError: (e: Error) => toast.error(`Abbruch fehlgeschlagen: ${e.message}`),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (book: Book) => {
+      const { error } = await supabase.functions.invoke("ingest-knowledge-base", {
+        body: { book_key: book.book_key, phase: "delete" },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Buch und alle Indizes entfernt.");
+      setDeleteBook(null);
+      setDeleteConfirm("");
+      qc.invalidateQueries({ queryKey: ["knowledge-books"] });
+    },
+    onError: (e: Error) => toast.error(`Löschen fehlgeschlagen: ${e.message}`),
   });
 
   const handleUpload = async (book: Book, file: File) => {
@@ -429,6 +447,16 @@ const AdminKnowledge = () => {
                       {isProcessing ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-2" />}
                       {b.status === "ready" ? "Neu indexieren" : "Indexieren"}
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setDeleteBook(b); setDeleteConfirm(""); }}
+                      disabled={isProcessing || isUploading}
+                      className="text-destructive hover:text-destructive"
+                      title="Buch und alle Indizes löschen"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-2" /> Löschen
+                    </Button>
                   </div>
                 </article>
               );
@@ -442,6 +470,49 @@ const AdminKnowledge = () => {
           </p>
         </div>
       </main>
+
+      <Dialog
+        open={!!deleteBook}
+        onOpenChange={(open) => {
+          if (!open) { setDeleteBook(null); setDeleteConfirm(""); }
+        }}
+      >
+        <DialogContent className="bg-card border border-destructive/40">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl text-destructive">Buch unwiderruflich löschen</DialogTitle>
+            <DialogDescription className="font-sans text-sm text-muted-foreground">
+              „{deleteBook?.title}" und alle zugehörigen Embeddings/Chunks sowie die hochgeladene PDF werden dauerhaft entfernt.
+              Die ELITE-Pipeline wird diese Quelle danach nicht mehr nutzen.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="font-mono-label text-muted-foreground text-xs">
+              Zur Bestätigung den Book-Key eingeben: <span className="text-destructive">{deleteBook?.book_key}</span>
+            </p>
+            <Input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={deleteBook?.book_key ?? ""}
+              autoFocus
+              maxLength={120}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setDeleteBook(null); setDeleteConfirm(""); }} disabled={remove.isPending}>
+              Abbrechen
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => deleteBook && remove.mutate(deleteBook)}
+              disabled={remove.isPending || deleteConfirm.trim() !== deleteBook?.book_key}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {remove.isPending ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-2" />}
+              Endgültig löschen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
