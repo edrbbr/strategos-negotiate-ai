@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
+import { extractKnowledgeChunksFromPdf } from "@/lib/knowledgeChunking";
 
 type Book = {
   book_key: string;
@@ -35,14 +36,13 @@ const STATUS_LABEL: Record<Book["status"], string> = {
   error: "Fehler",
 };
 
+const CHUNK_UPLOAD_BATCH_SIZE = 100;
+
 function useBooks() {
   return useQuery({
     queryKey: ["knowledge-books"],
     queryFn: async (): Promise<Book[]> => {
-      const { data, error } = await supabase
-        .from("knowledge_books")
-        .select("*")
-        .order("title");
+      const { data, error } = await supabase.from("knowledge_books").select("*").order("title");
       if (error) throw error;
       return (data ?? []) as Book[];
     },
@@ -60,15 +60,58 @@ const AdminKnowledge = () => {
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
 
   const ingest = useMutation({
-    mutationFn: async (book_key: string) => {
+    mutationFn: async (book: Book) => {
+      if (!book.file_path) {
+        throw new Error("Bitte zuerst eine PDF hochladen.");
+      }
+
+      const { data: file, error: downloadError } = await supabase.storage
+        .from("knowledge-base")
+        .download(book.file_path);
+
+      if (downloadError || !file) {
+        throw new Error(downloadError?.message ?? "PDF konnte nicht geladen werden.");
+      }
+
+      const chunks = await extractKnowledgeChunksFromPdf(file);
+      if (chunks.length === 0) {
+        throw new Error("Die PDF enthält keinen extrahierbaren Text.");
+      }
+
+      for (let index = 0; index < chunks.length; index += CHUNK_UPLOAD_BATCH_SIZE) {
+        const batch = chunks.slice(index, index + CHUNK_UPLOAD_BATCH_SIZE);
+        const { error } = await supabase.functions.invoke("ingest-knowledge-base", {
+          body: {
+            book_key: book.book_key,
+            phase: "seed",
+            reset: index === 0,
+            chunks: batch,
+          },
+        });
+
+        if (error) throw error;
+      }
+
       const { data, error } = await supabase.functions.invoke("ingest-knowledge-base", {
-        body: { book_key },
+        body: {
+          book_key: book.book_key,
+          phase: "embed",
+        },
       });
+
       if (error) throw error;
-      return data;
+
+      return {
+        ...(data ?? {}),
+        total_chunks: chunks.length,
+      };
     },
-    onSuccess: (data: { chunks?: number }) => {
-      toast.success(`Indexierung abgeschlossen — ${data?.chunks ?? 0} Chunks.`);
+    onSuccess: (data: { done?: boolean; total_chunks?: number }) => {
+      toast.success(
+        data.done
+          ? `Indexierung abgeschlossen — ${data.total_chunks ?? 0} Chunks.`
+          : `Indexierung gestartet — ${data.total_chunks ?? 0} Chunks werden verarbeitet.`,
+      );
       qc.invalidateQueries({ queryKey: ["knowledge-books"] });
     },
     onError: (e: Error) => toast.error(`Indexierung fehlgeschlagen: ${e.message}`),
@@ -79,19 +122,25 @@ const AdminKnowledge = () => {
       toast.error("Bitte eine PDF-Datei wählen.");
       return;
     }
+
     setUploadingKey(book.book_key);
+
     try {
       const path = `${book.book_key}.pdf`;
       const { error: upErr } = await supabase.storage
         .from("knowledge-base")
         .upload(path, file, { upsert: true, contentType: "application/pdf" });
+
       if (upErr) throw upErr;
+
       const { error: dbErr } = await supabase
         .from("knowledge_books")
-        .update({ file_path: path, status: "uploaded", error_message: null })
+        .update({ file_path: path, status: "uploaded", error_message: null, chunk_count: 0, indexed_at: null })
         .eq("book_key", book.book_key);
+
       if (dbErr) throw dbErr;
-      toast.success(`„${book.title}" hochgeladen. Jetzt indexieren.`);
+
+      toast.success(`„${book.title}“ hochgeladen. PDF wird künftig lokal extrahiert und danach im Hintergrund eingebettet.`);
       qc.invalidateQueries({ queryKey: ["knowledge-books"] });
     } catch (e) {
       toast.error(`Upload fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
@@ -122,8 +171,7 @@ const AdminKnowledge = () => {
           <p className="font-mono-label text-primary mb-2">◆ RAG-Wissensbasis</p>
           <h1 className="font-serif text-4xl md:text-5xl">Verhandlungs-Bibliothek</h1>
           <p className="text-muted-foreground mt-3 max-w-2xl">
-            Lade Buch-PDFs hoch und indexiere sie. Die ELITE-Pipeline retrievt vor jeder Analyse
-            relevante Passagen aus diesen Quellen.
+            Lade Buch-PDFs hoch und indexiere sie. Die ELITE-Pipeline retrievt vor jeder Analyse relevante Passagen aus diesen Quellen.
           </p>
           <div className="flex gap-6 mt-5 font-mono-label text-xs">
             <span className="text-emerald-400">{readyCount}/{books?.length ?? 0} bereit</span>
@@ -137,7 +185,8 @@ const AdminKnowledge = () => {
           <div className="space-y-4">
             {(books ?? []).map((b) => {
               const isUploading = uploadingKey === b.book_key;
-              const isIngesting = b.status === "indexing" || (ingest.isPending && ingest.variables === b.book_key);
+              const isProcessing = (ingest.isPending && ingest.variables?.book_key === b.book_key) || b.status === "indexing";
+
               return (
                 <article key={b.book_key} className="border border-border/30 rounded-sm p-6 hover:border-primary/30 transition-colors">
                   <header className="flex items-start justify-between gap-4 mb-4">
@@ -178,8 +227,8 @@ const AdminKnowledge = () => {
                       accept="application/pdf,.pdf"
                       className="hidden"
                       onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleUpload(b, f);
+                        const file = e.target.files?.[0];
+                        if (file) handleUpload(b, file);
                         e.target.value = "";
                       }}
                     />
@@ -187,7 +236,7 @@ const AdminKnowledge = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => fileInputs.current[b.book_key]?.click()}
-                      disabled={isUploading || isIngesting}
+                      disabled={isUploading || isProcessing}
                     >
                       {isUploading ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Upload className="w-3.5 h-3.5 mr-2" />}
                       {b.file_path ? "PDF ersetzen" : "PDF hochladen"}
@@ -195,10 +244,10 @@ const AdminKnowledge = () => {
                     <Button
                       variant="gold-outline"
                       size="sm"
-                      disabled={!b.file_path || isIngesting || isUploading}
-                      onClick={() => ingest.mutate(b.book_key)}
+                      disabled={!b.file_path || isProcessing || isUploading}
+                      onClick={() => ingest.mutate(b)}
                     >
-                      {isIngesting ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-2" />}
+                      {isProcessing ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-2" />}
                       {b.status === "ready" ? "Neu indexieren" : "Indexieren"}
                     </Button>
                   </div>
@@ -210,8 +259,7 @@ const AdminKnowledge = () => {
 
         <div className="mt-12 border-t border-border/20 pt-6 text-xs text-muted-foreground font-mono-label">
           <p>
-            Hinweis: Die Indexierung erzeugt 3072-dimensionale Embeddings via google/gemini-embedding-001.
-            Für ein durchschnittliches Buch (~300 Seiten) dauert der Vorgang 1–3 Minuten.
+            Hinweis: Die PDF wird im Admin-Browser in Text-Chunks zerlegt. Der Backend-Worker erzeugt danach nur noch die 3072-dimensionalen Embeddings via google/gemini-embedding-001.
           </p>
         </div>
       </main>
