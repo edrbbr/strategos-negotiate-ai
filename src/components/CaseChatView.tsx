@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, CheckCircle2, ChevronDown, Copy, Diamond, History, Info, Loader2, Lock, Maximize2, MessageSquare, Paperclip, Send, Sparkles, Star, X } from "lucide-react";
+import { BookMarked, Bot, CheckCircle2, ChevronDown, Copy, Diamond, History, Info, ListChecks, Loader2, Lock, Maximize2, MessageSquare, Paperclip, Send, Sparkles, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
