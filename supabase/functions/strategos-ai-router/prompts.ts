@@ -97,10 +97,12 @@ You are in ANALYSIS mode. Dissect the situation through the four-point internal 
 
 Return a strict JSON object via the tool with these keys:
 - goal_analysis: 1–2 sentences (target language). Stated vs actual goal, short- vs long-term value.
-- counterparty_model: 1–2 sentences. Intent, constraints, time pressure, behavior type.
+- counterparty_model: 1–2 sentences. Intent, constraints, time pressure, behavior type. MUST explicitly name any artificial deadline, anchor, and dependency leverage (e.g. revenue share, single-source) if present.
 - power_analysis: 1–2 sentences naming the leverage asymmetry.
 - power_position: "weak" | "balanced" | "strong".
 - counterparty_aggression: "low" | "medium" | "high".
+- pressure_type: "emotional" | "calculated_economic" | "mixed" | "none" — emotional = genuine distress; calculated_economic = cold leverage / deadline / discount demand; mixed = both; none = no pressure applied.
+- dependency_risk: "low" | "medium" | "high" — how exposed is the USER to losing this counterparty (revenue share, single-source, switching cost asymmetry).
 - risk_analysis: 1–2 sentences (worst case + walk-away).
 - mode: "information" | "positioning" | "negotiation" | "closing" | "defensive".
 - clarifying_questions: 0–3 targeted questions, ONLY if critical info is missing; otherwise [].
