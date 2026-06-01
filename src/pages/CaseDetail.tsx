@@ -152,11 +152,25 @@ const CaseDetail = () => {
   // Derive stage states from realtime case row while running (multi-stage only)
   useEffect(() => {
     if (!loading || !isMultiStage || !caseRow) return;
+    // Stage failure reported by the background pipeline.
+    const pErr = (caseRow as unknown as { pipeline_error?: { stage?: string; message?: string } | null }).pipeline_error;
+    if (pErr && pErr.stage) {
+      const failedStage = pErr.stage as "analysis" | "strategy" | "draft";
+      setStageMeta({ failed_at: failedStage, error: pErr.message });
+      setStageState((prev) => ({
+        analysis: failedStage === "analysis" ? "failed" : (caseRow.analysis && caseRow.analysis.length > 0 ? "complete" : prev.analysis),
+        strategy: failedStage === "strategy" ? "failed" : (caseRow.strategy ? "complete" : "pending"),
+        draft:    failedStage === "draft"    ? "failed" : "pending",
+      }));
+      toast.error(`Pipeline bei Schritt "${failedStage}" abgebrochen.`);
+      setLoading(false);
+      return;
+    }
     setStageState((prev) => {
       const analysisDone = !!(caseRow.analysis && caseRow.analysis.length > 0);
       const strategyDone = !!caseRow.strategy;
       const draftDone = !!caseRow.draft;
-      return {
+      const next = {
         analysis: analysisDone ? "complete" : prev.analysis,
         strategy: strategyDone
           ? "complete"
@@ -168,7 +182,22 @@ const CaseDetail = () => {
           : strategyDone && prev.draft === "pending"
           ? "running"
           : prev.draft,
-      };
+      } as { analysis: StageState; strategy: StageState; draft: StageState };
+      // All three stages done + version persisted → close out loading.
+      if (
+        next.analysis === "complete" &&
+        next.strategy === "complete" &&
+        next.draft === "complete" &&
+        (caseRow as unknown as { current_version_id?: string | null }).current_version_id
+      ) {
+        // Defer side effects to next tick so we don't setState during render of another component.
+        queueMicrotask(() => {
+          setLoading(false);
+          refreshProfile();
+          toast.success("Pipeline abgeschlossen");
+        });
+      }
+      return next;
     });
   }, [caseRow, loading, isMultiStage]);
 
