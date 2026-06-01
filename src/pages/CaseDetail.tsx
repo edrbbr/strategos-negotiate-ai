@@ -379,6 +379,7 @@ const CaseDetail = () => {
       // with { status: "started" } and the UI advances via realtime updates on
       // the cases row (handled by the effect that watches `caseRow`).
       if (payload?.status === "started") {
+        backgroundStarted = true;
         // Safety watchdog: if no terminal state in 5 min, surface a timeout.
         if (activeCaseId) {
           const watchdogId = activeCaseId;
@@ -425,7 +426,7 @@ const CaseDetail = () => {
         draft: s.draft === "running" ? "failed" : s.draft,
       }));
     } finally {
-      setLoading(false);
+      if (!backgroundStarted) setLoading(false);
     }
   };
 
