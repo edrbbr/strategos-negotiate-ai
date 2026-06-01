@@ -41,6 +41,25 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
+    // Require an authenticated caller to prevent unauthenticated admin-inbox
+    // flooding. The function is invoked from EliteRequestModal via the
+    // signed-in supabase client, so this doesn't break the legitimate flow.
+    const callerAuth = req.headers.get("Authorization");
+    if (!callerAuth?.startsWith("Bearer ")) {
+      return json({ error: "Unauthorized" }, 401);
+    }
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: callerAuth } } },
+    );
+    const { data: caller, error: callerErr } = await authClient.auth.getUser(
+      callerAuth.replace("Bearer ", ""),
+    );
+    if (callerErr || !caller?.user) {
+      return json({ error: "Unauthorized" }, 401);
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     // Gateway requires a real JWT. service-role is NOT a JWT under the new

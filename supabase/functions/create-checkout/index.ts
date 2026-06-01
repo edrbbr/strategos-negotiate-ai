@@ -46,6 +46,30 @@ Deno.serve(async (req) => {
     if (!returnUrl) {
       return json({ error: "Missing returnUrl" }, 400);
     }
+    // Validate returnUrl against an allowlist of trusted origins to prevent
+    // open-redirect / phishing abuse via Stripe's post-checkout redirect.
+    const ALLOWED_RETURN_ORIGINS = new Set<string>([
+      "https://pallanx.com",
+      "https://www.pallanx.com",
+      "https://pallanx.lovable.app",
+    ]);
+    const parsedReturn = (() => {
+      try {
+        return new URL(returnUrl);
+      } catch {
+        return null;
+      }
+    })();
+    const isAllowedReturnOrigin =
+      !!parsedReturn &&
+      (ALLOWED_RETURN_ORIGINS.has(parsedReturn.origin) ||
+        // Allow Lovable preview subdomains (e.g. id-preview--*.lovable.app)
+        /^https:\/\/[a-z0-9-]+\.lovable\.app$/i.test(parsedReturn.origin) ||
+        // Allow localhost during development
+        /^https?:\/\/localhost(:\d+)?$/i.test(parsedReturn.origin));
+    if (!isAllowedReturnOrigin) {
+      return json({ error: "Invalid returnUrl" }, 400);
+    }
     if (environment !== "sandbox" && environment !== "live") {
       return json({ error: "Invalid environment" }, 400);
     }
