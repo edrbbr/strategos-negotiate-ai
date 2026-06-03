@@ -44,6 +44,659 @@ export type Database = {
         }
         Relationships: []
       }
+      b2b_leads: {
+        Row: {
+          company_name: string
+          contact_name: string
+          created_at: string
+          email: string
+          id: string
+          industry: string
+          message: string | null
+          phone: string | null
+          status: string
+          store_count: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_name: string
+          contact_name: string
+          created_at?: string
+          email: string
+          id?: string
+          industry: string
+          message?: string | null
+          phone?: string | null
+          status?: string
+          store_count?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_name?: string
+          contact_name?: string
+          created_at?: string
+          email?: string
+          id?: string
+          industry?: string
+          message?: string | null
+          phone?: string | null
+          status?: string
+          store_count?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      business_accounts: {
+        Row: {
+          billing_email: string
+          created_at: string
+          id: string
+          industry: string | null
+          name: string
+          status: string
+          store_count: number | null
+          updated_at: string
+        }
+        Insert: {
+          billing_email: string
+          created_at?: string
+          id?: string
+          industry?: string | null
+          name: string
+          status?: string
+          store_count?: number | null
+          updated_at?: string
+        }
+        Update: {
+          billing_email?: string
+          created_at?: string
+          id?: string
+          industry?: string | null
+          name?: string
+          status?: string
+          store_count?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      business_approvals: {
+        Row: {
+          ai_recommendation: Json | null
+          business_account_id: string
+          case_id: string
+          created_at: string
+          decided_at: string | null
+          decided_by_user_id: string | null
+          decision_notes: string | null
+          final_amount: number | null
+          final_percent: number | null
+          id: string
+          justification: string | null
+          requested_amount: number
+          requested_by_role: Database["public"]["Enums"]["business_role"]
+          requested_by_user_id: string
+          requested_percent: number
+          required_role: Database["public"]["Enums"]["business_role"]
+          status: Database["public"]["Enums"]["approval_status"]
+        }
+        Insert: {
+          ai_recommendation?: Json | null
+          business_account_id: string
+          case_id: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by_user_id?: string | null
+          decision_notes?: string | null
+          final_amount?: number | null
+          final_percent?: number | null
+          id?: string
+          justification?: string | null
+          requested_amount?: number
+          requested_by_role: Database["public"]["Enums"]["business_role"]
+          requested_by_user_id: string
+          requested_percent?: number
+          required_role: Database["public"]["Enums"]["business_role"]
+          status?: Database["public"]["Enums"]["approval_status"]
+        }
+        Update: {
+          ai_recommendation?: Json | null
+          business_account_id?: string
+          case_id?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by_user_id?: string | null
+          decision_notes?: string | null
+          final_amount?: number | null
+          final_percent?: number | null
+          id?: string
+          justification?: string | null
+          requested_amount?: number
+          requested_by_role?: Database["public"]["Enums"]["business_role"]
+          requested_by_user_id?: string
+          requested_percent?: number
+          required_role?: Database["public"]["Enums"]["business_role"]
+          status?: Database["public"]["Enums"]["approval_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_approvals_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_approvals_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "business_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_billing: {
+        Row: {
+          billing_model: string
+          business_account_id: string
+          created_at: string
+          currency: string
+          monthly_fee_cents: number
+          payment_status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          billing_model?: string
+          business_account_id: string
+          created_at?: string
+          currency?: string
+          monthly_fee_cents?: number
+          payment_status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billing_model?: string
+          business_account_id?: string
+          created_at?: string
+          currency?: string
+          monthly_fee_cents?: number
+          payment_status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_billing_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: true
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_case_logs: {
+        Row: {
+          action: string
+          approval_role_used:
+            | Database["public"]["Enums"]["business_role"]
+            | null
+          business_account_id: string
+          case_id: string
+          chosen_option: Json | null
+          created_at: string
+          id: string
+          system_suggestion: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          approval_role_used?:
+            | Database["public"]["Enums"]["business_role"]
+            | null
+          business_account_id: string
+          case_id: string
+          chosen_option?: Json | null
+          created_at?: string
+          id?: string
+          system_suggestion?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          approval_role_used?:
+            | Database["public"]["Enums"]["business_role"]
+            | null
+          business_account_id?: string
+          case_id?: string
+          chosen_option?: Json | null
+          created_at?: string
+          id?: string
+          system_suggestion?: Json | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_case_logs_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_case_logs_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "business_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_cases: {
+        Row: {
+          ai_analysis: Json | null
+          ai_options: Json | null
+          business_account_id: string
+          case_number: string
+          channel: string
+          claimed_amount: number
+          closed_at: string | null
+          created_at: string
+          created_by_user_id: string
+          customer_type: string | null
+          final_granted_amount: number | null
+          final_granted_percent: number | null
+          id: string
+          notes: string | null
+          product_category: string | null
+          product_name: string | null
+          purchase_price_total: number
+          quantity: number
+          required_approval_role:
+            | Database["public"]["Enums"]["business_role"]
+            | null
+          situation_text: string | null
+          sku: string | null
+          status: Database["public"]["Enums"]["business_case_status"]
+          suggested_offer: number | null
+          suggested_offer_percent: number | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          ai_options?: Json | null
+          business_account_id: string
+          case_number: string
+          channel?: string
+          claimed_amount?: number
+          closed_at?: string | null
+          created_at?: string
+          created_by_user_id: string
+          customer_type?: string | null
+          final_granted_amount?: number | null
+          final_granted_percent?: number | null
+          id?: string
+          notes?: string | null
+          product_category?: string | null
+          product_name?: string | null
+          purchase_price_total?: number
+          quantity?: number
+          required_approval_role?:
+            | Database["public"]["Enums"]["business_role"]
+            | null
+          situation_text?: string | null
+          sku?: string | null
+          status?: Database["public"]["Enums"]["business_case_status"]
+          suggested_offer?: number | null
+          suggested_offer_percent?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          ai_analysis?: Json | null
+          ai_options?: Json | null
+          business_account_id?: string
+          case_number?: string
+          channel?: string
+          claimed_amount?: number
+          closed_at?: string | null
+          created_at?: string
+          created_by_user_id?: string
+          customer_type?: string | null
+          final_granted_amount?: number | null
+          final_granted_percent?: number | null
+          id?: string
+          notes?: string | null
+          product_category?: string | null
+          product_name?: string | null
+          purchase_price_total?: number
+          quantity?: number
+          required_approval_role?:
+            | Database["public"]["Enums"]["business_role"]
+            | null
+          situation_text?: string | null
+          sku?: string | null
+          status?: Database["public"]["Enums"]["business_case_status"]
+          suggested_offer?: number | null
+          suggested_offer_percent?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_cases_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_invoices: {
+        Row: {
+          amount_cents: number
+          business_account_id: string
+          created_at: string
+          currency: string
+          id: string
+          pdf_url: string | null
+          period_end: string
+          period_start: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          business_account_id: string
+          created_at?: string
+          currency?: string
+          id?: string
+          pdf_url?: string | null
+          period_end: string
+          period_start: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          business_account_id?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          pdf_url?: string | null
+          period_end?: string
+          period_start?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_invoices_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_policies: {
+        Row: {
+          business_account_id: string
+          chunk_count: number
+          content: string
+          created_at: string
+          id: string
+          source_type: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          business_account_id: string
+          chunk_count?: number
+          content: string
+          created_at?: string
+          id?: string
+          source_type?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          business_account_id?: string
+          chunk_count?: number
+          content?: string
+          created_at?: string
+          id?: string
+          source_type?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_policies_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_policy_chunks: {
+        Row: {
+          business_account_id: string
+          chunk_index: number
+          content: string
+          created_at: string
+          embedding: string | null
+          id: string
+          policy_id: string
+        }
+        Insert: {
+          business_account_id: string
+          chunk_index: number
+          content: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          policy_id: string
+        }
+        Update: {
+          business_account_id?: string
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          policy_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_policy_chunks_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_policy_chunks_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "business_policies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_settings: {
+        Row: {
+          business_account_id: string
+          created_at: string
+          kulanz_rules: string | null
+          max_discount_limits: Json
+          updated_at: string
+        }
+        Insert: {
+          business_account_id: string
+          created_at?: string
+          kulanz_rules?: string | null
+          max_discount_limits?: Json
+          updated_at?: string
+        }
+        Update: {
+          business_account_id?: string
+          created_at?: string
+          kulanz_rules?: string | null
+          max_discount_limits?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_settings_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: true
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_support_messages: {
+        Row: {
+          author_type: string
+          author_user_id: string
+          body: string
+          business_account_id: string
+          created_at: string
+          id: string
+          ticket_id: string
+        }
+        Insert: {
+          author_type: string
+          author_user_id: string
+          body: string
+          business_account_id: string
+          created_at?: string
+          id?: string
+          ticket_id: string
+        }
+        Update: {
+          author_type?: string
+          author_user_id?: string
+          body?: string
+          business_account_id?: string
+          created_at?: string
+          id?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_support_messages_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_support_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "business_support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_support_tickets: {
+        Row: {
+          business_account_id: string
+          created_at: string
+          created_by_user_id: string
+          id: string
+          last_reply_at: string
+          last_reply_by: string | null
+          status: string
+          subject: string
+        }
+        Insert: {
+          business_account_id: string
+          created_at?: string
+          created_by_user_id: string
+          id?: string
+          last_reply_at?: string
+          last_reply_by?: string | null
+          status?: string
+          subject: string
+        }
+        Update: {
+          business_account_id?: string
+          created_at?: string
+          created_by_user_id?: string
+          id?: string
+          last_reply_at?: string
+          last_reply_by?: string | null
+          status?: string
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_support_tickets_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_users: {
+        Row: {
+          auth_user_id: string | null
+          business_account_id: string
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_primary_contact: boolean
+          role: Database["public"]["Enums"]["business_role"]
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          auth_user_id?: string | null
+          business_account_id: string
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          is_primary_contact?: boolean
+          role?: Database["public"]["Enums"]["business_role"]
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          auth_user_id?: string | null
+          business_account_id?: string
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          is_primary_contact?: boolean
+          role?: Database["public"]["Enums"]["business_role"]
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_users_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_attachments: {
         Row: {
           case_id: string
@@ -1165,6 +1818,30 @@ export type Database = {
       }
     }
     Views: {
+      business_case_kpis: {
+        Row: {
+          avg_granted_percent: number | null
+          business_account_id: string | null
+          closed_cases: number | null
+          escalated_count: number | null
+          open_cases: number | null
+          sum_claimed: number | null
+          sum_granted: number | null
+          sum_purchase: number | null
+          sum_saved: number | null
+          total_cases: number | null
+          waiting_approval_cases: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_cases_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans_public: {
         Row: {
           allows_deep_doc_analysis: boolean | null
@@ -1239,6 +1916,10 @@ export type Database = {
       }
     }
     Functions: {
+      business_role_rank: {
+        Args: { _account: string; _user: string }
+        Returns: number
+      }
       consume_dossier: { Args: { p_user_id: string }; Returns: Json }
       consume_refinement: {
         Args: { p_case_id: string; p_user_id: string }
@@ -1252,6 +1933,11 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      generate_business_case_number: {
+        Args: { _account_id: string }
+        Returns: string
+      }
+      get_user_business_account: { Args: { _user: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1260,6 +1946,23 @@ export type Database = {
         Returns: boolean
       }
       increment_cases_used: { Args: { p_user_id: string }; Returns: number }
+      is_business_member: {
+        Args: { _account: string; _user: string }
+        Returns: boolean
+      }
+      match_business_knowledge: {
+        Args: {
+          _account_id: string
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          id: string
+          policy_id: string
+          similarity: number
+        }[]
+      }
       match_knowledge: {
         Args: {
           filter_books?: string[]
@@ -1305,6 +2008,18 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      approval_status: "pending" | "accepted" | "modified" | "rejected"
+      business_case_status:
+        | "open"
+        | "in_review"
+        | "waiting_approval"
+        | "closed"
+        | "rejected"
+      business_role:
+        | "support_readonly"
+        | "sachbearbeiter"
+        | "manager"
+        | "leitung"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1433,6 +2148,20 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      approval_status: ["pending", "accepted", "modified", "rejected"],
+      business_case_status: [
+        "open",
+        "in_review",
+        "waiting_approval",
+        "closed",
+        "rejected",
+      ],
+      business_role: [
+        "support_readonly",
+        "sachbearbeiter",
+        "manager",
+        "leitung",
+      ],
     },
   },
 } as const
