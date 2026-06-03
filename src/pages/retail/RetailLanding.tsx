@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Shield, ShieldCheck, AlertTriangle, BarChart3, Users, Lock, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Shield, ShieldCheck, AlertTriangle, BarChart3, Users, Lock, ArrowRight, CheckCircle2, Inbox, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -188,7 +188,3 @@ export default function RetailLanding() {
     </div>
   );
 }
-
-function Inbox2Icon(props: any) { return <Inbox {...props} />; }
-function BookOpenIcon(props: any) { return <BookOpen {...props} />; }
-import { Inbox, BookOpen } from "lucide-react";
