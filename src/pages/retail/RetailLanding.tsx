@@ -102,8 +102,8 @@ export default function RetailLanding() {
               { icon: Users, title: "Mitarbeitende entlastet", text: "2–3 Vorschläge mit Formulierung — der Mitarbeiter wählt, das System protokolliert." },
               { icon: Lock, title: "DSGVO-konform", text: "Daten bleiben in Ihrem Mandanten-Bereich. Kein ChatGPT, kein externer Datenabfluss." },
               { icon: BarChart3, title: "Voll dokumentiert", text: "Jede Forderung, jeder Vorschlag, jede Freigabe wird mit Beträgen geloggt." },
-              { icon: Inbox2Icon, title: "Auto-Eskalation", text: "Überschreitet ein Fall das Limit des Sachbearbeiters, wird automatisch ein Antrag an Manager oder Leitung erzeugt." },
-              { icon: BookOpenIcon, title: "Eigenes Wissen", text: "Laden Sie Ihre Richtlinien hoch — die AI nutzt sie zusätzlich zum Verhandlungswissen." },
+              { icon: Inbox, title: "Auto-Eskalation", text: "Überschreitet ein Fall das Limit des Sachbearbeiters, wird automatisch ein Antrag an Manager oder Leitung erzeugt." },
+              { icon: BookOpen, title: "Eigenes Wissen", text: "Laden Sie Ihre Richtlinien hoch — die AI nutzt sie zusätzlich zum Verhandlungswissen." },
             ].map((f) => (
               <div key={f.title} className="p-6 rounded-lg border bg-card">
                 <f.icon className="w-6 h-6 text-primary mb-3" />
