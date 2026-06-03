@@ -190,7 +190,7 @@ export function useBusinessCaseVersions(caseId?: string) {
   useEffect(() => {
     if (!caseId || caseId === "new") return;
     const ch = supabase
-      .channel(`bcv:${caseId}`)
+      .channel(`bcv:${caseId}:${Math.random().toString(36).slice(2)}`)
       .on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "business_case_versions", filter: `case_id=eq.${caseId}` },
         () => qc.invalidateQueries({ queryKey: ["business-case-versions", caseId] }))
       .subscribe();
