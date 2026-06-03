@@ -33,7 +33,7 @@ export default function RetailLanding() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Seo title="Pallanx Retail Shield — AI für Reklamationsentscheidungen" description="DSGVO-konformer AI-Verhandlungsassistent für Reklamations- und Kulanzfälle im Einzelhandel. Marge schützen, Mitarbeitende entlasten, faire Entscheidungen." />
+      <Seo title="Pallanx Retail Shield — AI für Reklamationsentscheidungen" description="DSGVO-konformer AI-Verhandlungsassistent für Reklamations- und Kulanzfälle im Einzelhandel. Marge schützen, Mitarbeitende entlasten, faire Entscheidungen." path="/retail" />
       <header className="border-b bg-card/50 backdrop-blur">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/retail" className="flex items-center gap-2">
