@@ -1,117 +1,136 @@
-## Befund (aus DB + Logs)
 
-DB-Zeile `case_versions` v1 dieses Falls:
-- `strategy` = `"Zugeständnis- und Gegenforderungslogik"` (38 Zeichen — nur das Label aus der Whitelist, keine 2 Sätze, keine `tactical_principles`)
-- `draft` = `""` (leer, 0 Zeichen)
-- `variants` = `null`
-- `recommended_variant` = `"neutral"`
+# Pallanx Retail Shield — Vollständige B2B-Implementierung
 
-Edge-Function-Logs: `multi-stage pipeline complete total_ms: 128659` — kein Fehler, kein Retry, kein Fallback ausgelöst. Vorher nur die bekannte `match_knowledge` Statement-Timeout-Warnung (RAG-Treffer leer, nicht ursächlich).
+## Wichtige Vorab-Hinweise (bitte lesen)
 
-## Root Causes
+1. **Umfang**: Dieser Plan umfasst ~30–40 neue Dateien, 5–7 Migrationen, 8–10 Edge Functions, eine Landingpage und zwei komplette App-Bereiche (Mandanten-Portal + Owner-Admin). Ich werde das in **einem Build-Durchlauf** umsetzen wie gewünscht — bitte rechne mit längeren Wartezeiten zwischen Schritten und plane Zeit für Review/QA ein. Wenn etwas in Iteration 1 nicht perfekt sitzt, iterieren wir gezielt.
+2. **„Komplett getrennte Auth"**: Da Supabase nur EIN `auth.users`-System hat, bedeutet "getrennt" hier: eigene Login-/Register-Seiten unter `/retail/login`, eigene Routen, eigene Guards, eigene `business_users`-Tabelle, die `auth.users.id` referenziert aber sonst NICHTS mit B2C-`profiles` teilt. Ein technisches zweites Auth-System ist auf Supabase nicht möglich, aber UX und Datenmodell sind vollständig isoliert.
+3. **Subdomain**: Alles unter `/retail/*`. Wenn du später `retail.pallanx.com` willst, fügst du nur den DNS-Record + ein Host-Rewrite hinzu — kein Code-Change nötig.
+4. **Billing**: MVP heißt hier: Tabellen + Admin-UI für manuelle Rechnungserstellung + Stripe-optional-Hook. Echte automatische Stripe-Subscriptions für B2B würden eigene Pricing-Pläne brauchen — sage Bescheid, wenn das auch direkt rein soll.
 
-**1. Strategie-Stage — Schema zu weich.**
-`STRATEGY_SCHEMA` verlangt nur `{ strategy: string, recommended_variant: enum }`. Kein `minLength`, kein `tactical_principles`. Der Prompt fordert „Framework + 2 Sätze + tactical_principles" — das Modell hat trotzdem nur das Whitelist-Label zurückgegeben und damit das Schema formal erfüllt. Wir validieren danach nicht und schreiben den Stub in die DB.
+## Architektur-Überblick
 
-**2. Draft-Stage — `max_tokens: 2048` zu klein.**
-In `providers/anthropic.ts` ist `max_tokens` für ALLE Anthropic-Calls hart auf 2048 gedeckelt. Drei vollständige deutsche Varianten (soft/neutral/hard, jede mit Betreff, Anrede, mehreren Absätzen, Closing) + `title` + `plan_steps` passen nicht in 2048 Token. Folge: Claude liefert ein `tool_use`-Block, dessen `input.variants` entweder leer ist oder schlicht fehlt — Schema "required" wird vom Modell unter Token-Druck nicht zuverlässig erzwungen. `finalizeDraft` baut daraus klaglos `variants: null, draft: ""`.
+```text
+/retail                       (öffentliche Landing)
+/retail/login, /register      (B2B-Auth, getrennte Flows)
+/retail/app/dashboard         (KPIs für Mandanten)
+/retail/app/cases             (Fallliste + Detail + neue Anfrage)
+/retail/app/approvals         (Eskalierte Fälle für Manager/Leitung)
+/retail/app/settings          (Mandanten-Settings: Limits, Kulanzregeln)
+/retail/app/team              (User-Verwaltung innerhalb des Mandanten)
+/retail/app/support           (Tickets)
+/retail/app/billing           (Rechnungen Mandanten-Sicht)
 
-**3. Keine Output-Validierung.**
-`multiStage.ts` schreibt jede Stage roh in die DB. Ein leerer `draft` oder fehlende `variants` lösen weder `StageFailure` aus noch werden Fallbacks (Gemini) gezogen. Pipeline „endet erfolgreich" mit leerem Ergebnis → UI zeigt nichts.
-
-## Lösung
-
-### A. Strategie-Schema + Persistierung härten
-
-In `supabase/functions/strategos-ai-router/pipelines/multiStage.ts`:
-
-```ts
-const STRATEGY_SCHEMA = {
-  type: "object",
-  properties: {
-    framework_label: { type: "string", minLength: 3 },     // Whitelist-Tactic-Name
-    rationale: { type: "string", minLength: 80 },          // 2 Sätze, warum dieses Framework
-    tactical_principles: {                                  // konkrete B2B-Moves
-      type: "array", minItems: 2, maxItems: 4,
-      items: { type: "string", minLength: 20 },
-    },
-    recommended_variant: { type: "string", enum: VARIANT_KEYS },
-  },
-  required: ["framework_label", "rationale", "tactical_principles", "recommended_variant"],
-  additionalProperties: false,
-}
+/admin/b2b                    (Owner: alle Business-Accounts)
+/admin/b2b/leads              (eingegangene Lead-Anfragen)
+/admin/b2b/:id                (Account-Detail, Settings, User, Billing)
+/admin/b2b/tickets            (Support global)
 ```
 
-Vor `writeStage` zusammensetzen:
+## Datenmodell (neue Tabellen, alle mit RLS + GRANTs)
 
-```
-strategy = `${framework_label}\n\n${rationale}\n\nTaktische Prinzipien:\n• ${tactical_principles.join("\n• ")}`
-```
+- `b2b_leads` — Lead-Formular der Landing (firma, branche, kontakt, status)
+- `business_accounts` — Mandanten (name, branche, anzahl_filialen, billing_email, status, soft-delete)
+- `business_users` — Mandanten-User (auth_user_id, business_account_id, role enum, is_primary)
+- `business_settings` — pro Mandant (currency, vat, max_discount_limits JSONB pro Rolle, kulanzregeln Text)
+- `business_policies` — pro Mandant: hochgeladene Richtlinien (PDF/MD) für RAG
+- `business_policy_chunks` — Chunks + Embedding (vector 3072), `business_account_id` indexed
+- `business_cases` — Fälle (alle Felder aus Brief: claimed/suggested/final amount, status, approval_role)
+- `business_case_logs` — jede AI-Empfehlung + Entscheidung
+- `business_approvals` — strukturierte Eskalationsanträge (from_user, to_role, status, decision_notes)
+- `business_support_tickets` + `business_support_messages` — Threading
+- `business_billing` — billing_model, status, next_invoice_date
+- `business_invoices` — generierte Rechnungen
+- Enum-Typen: `business_role` (sachbearbeiter|manager|leitung|support_readonly), `business_case_status`, `approval_status`
 
-Bonus: minLength im Schema zwingt OpenAI in der Tool-Antwort zu echtem Inhalt — keine reinen Labels mehr.
+**Rollen & Security**: 
+- Neue SECURITY-DEFINER Function `is_business_member(_user_id, _account_id, _min_role)` für RLS
+- Neue Function `get_user_business_account(_user_id)` für Tenant-Resolution
+- Bestehende `has_role(_, 'admin')` weiterhin für Owner-Zugriff
+- ALLE RLS-Policies scopen strikt auf `business_account_id` → keine Cross-Tenant-Leaks
 
-`PROMPT_STRATEGY` (`prompts.ts`) entsprechend auf die neuen Feldnamen umstellen (statt `strategy:` jetzt `framework_label`/`rationale`/`tactical_principles`).
+## RAG-Erweiterung (additiv, bestehender RAG bleibt unverändert)
 
-### B. Draft-Token-Limit erhöhen
+Neue Funktion `retrieve_business_knowledge(account_id, query_embedding, k)`:
+1. Holt Top-K aus `business_policy_chunks` WHERE `business_account_id = account_id` (mandantenspezifisch)
+2. Kombiniert mit bestehender `match_knowledge()` (globales Verhandlungswissen)
+3. Liefert getrennt zurück: `policy_context` + `global_context` → Prompt zeigt beides mit Quellenangabe
 
-In `providers/anthropic.ts`: `TIMEOUT_MS` und Default `max_tokens` so lassen, aber `AnthropicCallParams.maxTokens` für den Draft-Call in `multiStage.ts` explizit setzen:
+Neue Edge Function `ingest-business-policy` — analog zu `ingest-knowledge-base`, aber mit `business_account_id` als Pflichtparameter und Tenant-Isolation.
 
-```ts
-draftOut = await callAnthropic({
-  ...,
-  maxTokens: 8000,   // drei volle Varianten DE + plan_steps passen sicher rein
-});
-```
+## Edge Functions (neu)
 
-Analyse- und Strategie-Calls bleiben bei 2048 (ausreichend).
+- `b2b-lead-submit` — Public, Rate-Limit, schreibt `b2b_leads` + mailt dich (analog `notify-elite-request-admin`)
+- `b2b-create-account` — Admin-only: legt Account + Primary Manager an, sendet Einladungs-E-Mail
+- `b2b-invite-user` — Manager/Leitung lädt Team-Mitglied in seinen Account ein
+- `retail-shield-pipeline` — Kern-Pipeline für Business-Cases:
+  1. Lädt Mandanten-Settings (Limits, Regeln)
+  2. RAG-Retrieval (Policy + Global)
+  3. LLM erzeugt 2–3 Optionen mit Betrag/%/Begründung/Formulierung/`required_role`
+  4. Limit-Check gegen User-Rolle
+  5. Bei Überschreitung: erzeugt `business_approvals`-Eintrag, setzt Case auf `waiting_approval`
+- `b2b-approval-decide` — Manager/Leitung entscheidet (accept/modify/reject)
+- `ingest-business-policy` — RAG-Ingest pro Mandant
+- `b2b-generate-invoice` — Owner-Action: erzeugt Rechnung
+- `b2b-support-reply` — Mail-Notification bei Antworten
 
-### C. Output-Validierung pro Stage
+## Frontend-Struktur
 
-In `multiStage.ts` nach jedem Stage-Call vor `writeStage`:
+**Neue Routen** in `App.tsx`: `/retail`, `/retail/login`, `/retail/register`, `/retail/app/*` (mit `BusinessLayout` + `BusinessProtectedRoute` + `BusinessRoleGuard`), `/admin/b2b/*`.
 
-```ts
-// Strategie
-if (!framework_label || !rationale || !Array.isArray(tactical_principles) || tactical_principles.length < 2) {
-  throw stageError("strategy", ["analysis"], new ProviderError("EMPTY_STRATEGY_OUTPUT", 502, "EMPTY_OUTPUT", "openai"));
-}
+**Neue Components/Pages** (~25 Stück), darunter:
+- `pages/retail/Landing.tsx` — Hero, Problem, Lösung, Vorteile, Wie-funktioniert-es, Zielgruppe, Lead-Form
+- `pages/retail/RetailLogin.tsx`, `RetailRegister.tsx` (eigene Auth-UI mit Retail-Shield-Branding)
+- `components/retail/BusinessLayout.tsx` + `BusinessSidebar.tsx`
+- `pages/retail/app/{Dashboard,Cases,CaseDetail,NewCase,Approvals,Team,Settings,Support,Billing}.tsx`
+- `pages/admin/b2b/{Overview,AccountDetail,Leads,Tickets,Billing}.tsx`
+- `hooks/useBusinessAccount.ts`, `useBusinessRole.ts`, `useBusinessCases.ts`, `useApprovals.ts`
 
-// Draft
-const v = draftOut.variants as Record<string, string> | null;
-const ok = v && v.soft?.trim() && v.neutral?.trim() && v.hard?.trim();
-if (!ok) {
-  throw stageError("draft", ["analysis","strategy"], new ProviderError("EMPTY_DRAFT_VARIANTS", 502, "EMPTY_OUTPUT", "anthropic"));
-}
-```
+**Design**: Eigenes B2B-Look-Token-Set (seriöser, dunklere/professionellere Akzente als B2C), aber gleiche Design-System-Basis (`index.css`-Tokens), damit Theme-System weiter funktioniert.
 
-`StageFailure` wird vom bestehenden Top-Level-Catch in `index.ts` in `cases.pipeline_error` geschrieben — UI zeigt damit endlich „Stage failed" statt eines leeren Drafts.
+## KPI-Berechnung (Dashboard)
 
-### D. Draft-Fallback (analog zu Strategy)
+DB-View `business_case_kpis` aggregiert pro Account + Zeitraum:
+- count cases, sum purchase_price, sum claimed, sum granted
+- saved_amount = claimed - granted
+- avg_discount_pct
+- escalation_rate, % je Rollen-Level
 
-Wenn `callAnthropic` für Draft `TIMEOUT` / `EMPTY_OUTPUT` wirft und `lovableKey` vorhanden ist, einmal mit `google/gemini-2.5-pro` über `callGemini` retryen (gleicher Prompt, gleiches Schema-Tool). Verhindert künftiges stilles Scheitern, wenn Claude wieder truncates.
+## Billing-UI (Owner + Mandant)
 
-### E. (Optional, klein) RAG-Statement-Timeout
+- Owner sieht alle Mandanten mit Status, kann Rechnung erzeugen (PDF via existierender Pattern), als bezahlt markieren
+- Mandant sieht seine Rechnungen + Status
+- Stripe-Hook bleibt optional (manuelle Rechnung als Default `billing_model='invoice'`)
 
-`match_knowledge` läuft regelmäßig in Postgres-`statement_timeout`. Nicht Ursache hier, aber Folgeticket: `match_count` runter (8 → 5) und in `knowledge.ts` Try/Catch sauber als „keine Quellen" propagieren (bereits passiert, hier nur erwähnt — nicht Teil dieses Fixes).
+## Support
 
-## Validierung
+- Mandant: Ticket öffnen, Thread sehen, antworten
+- Owner: globale Inbox, antworten, Status setzen
+- Realtime via `ALTER PUBLICATION supabase_realtime` für Tickets
 
-1. Migration nicht nötig (alles in Edge-Function-Code).
-2. Denselben Fall (`e88cfc29-…`) erneut über „Pipeline neu starten" anstoßen.
-3. Erwartung:
-   - `case_versions.strategy` enthält Framework-Label + Begründung + Bullet-Liste (mehrere hundert Zeichen).
-   - `case_versions.draft` und `variants.soft/neutral/hard` sind alle befüllt.
-   - In der UI sind alle drei Stages grün, Draft-Tab zeigt Text.
-4. Negativtest: in `multiStage.ts` temporär Anthropic-Aufruf auf `maxTokens: 200` zwingen → Stage-Failure muss in `cases.pipeline_error` landen und in der UI als rote Draft-Stage erscheinen (kein stiller Leerlauf mehr).
+## Seed-Daten
 
-## Out of Scope
+Migration mit 2 Demo-Accounts ("Demo Baumarkt GmbH", "Demo Möbelhaus AG"), je 1 Manager + 2 Sachbearbeiter, je 5 Fälle inkl. 2 eskalierte, ein Beispiel-Policy-Dokument.
 
-- Prompt-Inhalte (Soft/Neutral/Hard-Stil) — unverändert, du hattest sie zuletzt gerade neu kalibriert.
-- UI/Design.
-- `match_knowledge`-Tuning (separates Ticket).
-- Persistenz von `tactical_principles` als eigene Spalte — wir hängen sie an `strategy` an, um ohne Migration auszukommen.
+## Reihenfolge der Umsetzung
 
-## Geänderte Dateien
+1. **Migration 1**: Alle Tabellen + Enums + RLS + GRANTs + Helper-Functions + RAG-Tenant-Function
+2. **Migration 2**: Seed-Daten + KPI-View
+3. **Edge Functions** (alle neuen, parallel deploybar)
+4. **Frontend**: Landing → Auth → BusinessLayout → Dashboard → Cases → Approvals → Settings/Team → Support → Billing → Admin-B2B
+5. **Verification**: Manuell jeden Flow durchklicken, Build prüfen
 
-- `supabase/functions/strategos-ai-router/pipelines/multiStage.ts` (Schemas, Validierung, Fallback, Token-Limit-Param)
-- `supabase/functions/strategos-ai-router/providers/anthropic.ts` (`maxTokens` weiterleiten — bereits Param, nur Default-Check)
-- `supabase/functions/strategos-ai-router/prompts.ts` (PROMPT_STRATEGY auf neue Feldnamen)
+## Was bewusst NICHT in dieser Iteration
+
+- Echte automatische Stripe-Subscriptions für B2B (komplexes Pricing, eigene Plans) — Tabellen+UI sind da, Stripe-Verknüpfung folgt wenn du B2B-Preise definiert hast
+- E-Mail-Templates für alle B2B-Notifications (nutzen erstmal das bestehende `send-transactional-email`-System mit einfachen Texten; hübsche React-Email-Templates kommen on demand)
+- Branchen-spezifische RAG-Inhalte (Architektur ist da, Inhalte fügst du via Policy-Upload hinzu)
+- Mehrsprachigkeit B2B-Bereich (erstmal Deutsch wie B2C)
+
+## Risiken / was wahrscheinlich nachjustiert werden muss
+
+- LLM-Prompt für Pipeline muss real getestet werden — Erste Version liefert Vorschläge, Tuning per Iteration
+- RLS-Policies sind komplex bei Multi-Tenant + Rollen — bei jedem Fehlerfall (403/leere Listen) muss ich gezielt nachfassen
+- Volumen der UI: einige Pages werden in V1 funktional aber visuell schlichter sein, damit Scope einhaltbar bleibt
+
+Wenn das so passt, sag „los" — dann starte ich mit Migration 1.
