@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Send, X, Mail, Briefcase, TrendingUp, Crown, BookOpen, BarChart3, Linkedin } from "lucide-react";
+import { Loader2, Send, X, Mail, Briefcase, TrendingUp, Crown, BookOpen, BarChart3, Linkedin, Building2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { useEliteRequests, useSendEliteOffer, useDeclineEliteRequest, type EliteRequest } from "@/hooks/useEliteRequests";
@@ -64,6 +64,7 @@ const Admin = () => {
           <Link to="/admin/knowledge" className="font-mono-label text-muted-foreground hover:text-foreground inline-flex items-center gap-2"><BookOpen className="w-3 h-3" /> Knowledge</Link>
           <Link to="/admin/content" className="font-mono-label text-muted-foreground hover:text-foreground inline-flex items-center gap-2"><Linkedin className="w-3 h-3" /> Content</Link>
           <Link to="/admin/analytics" className="font-mono-label text-muted-foreground hover:text-foreground inline-flex items-center gap-2"><BarChart3 className="w-3 h-3" /> Analytics</Link>
+          <Link to="/admin/b2b" className="font-mono-label text-muted-foreground hover:text-foreground inline-flex items-center gap-2"><Building2 className="w-3 h-3" /> B2B</Link>
           <Link to="/app/dashboard" className="font-mono-label text-muted-foreground hover:text-foreground">← App</Link>
         </div>
       </header>
