@@ -25,16 +25,16 @@ Deno.serve(async (req) => {
     if (!userRes?.user) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const userId = userRes.user.id;
 
-    const body = await req.json();
-    const { case_id } = body ?? {};
-    if (!case_id) return new Response(JSON.stringify({ error: "case_id required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const { case_id, instruction } = await req.json();
+    if (!case_id || !instruction || String(instruction).trim().length < 2) {
+      return new Response(JSON.stringify({ error: "case_id and instruction required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const { data: caseRow, error: caseErr } = await svc.from("business_cases").select("*").eq("id", case_id).single();
     if (caseErr || !caseRow) return new Response(JSON.stringify({ error: "case not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    // verify membership
     const { data: membership } = await svc.from("business_users").select("role").eq("auth_user_id", userId).eq("business_account_id", caseRow.business_account_id).eq("status","active").maybeSingle();
     if (!membership) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const userRole = membership.role as Role;
@@ -43,11 +43,16 @@ Deno.serve(async (req) => {
     const limits = (settings?.max_discount_limits ?? { sachbearbeiter_max_percent: 10, manager_max_percent: 25, leitung_max_percent: 100 }) as Record<string, number>;
     const kulanzRules = settings?.kulanz_rules ?? "";
 
+    // load latest version (current_version_id or highest version_number)
+    const { data: latestVersion } = await svc.from("business_case_versions")
+      .select("*").eq("case_id", case_id).order("version_number", { ascending: false }).limit(1).maybeSingle();
+    const baseAnalysis = latestVersion?.ai_analysis ?? caseRow.ai_analysis ?? {};
+    const baseOptions = (latestVersion?.ai_options ?? caseRow.ai_options ?? []) as any[];
+
     const lovableKey = Deno.env.get("LOVABLE_API_KEY")!;
 
-    // RAG retrieval (tenant-scoped + global)
-    const query = `${caseRow.product_category ?? ""} ${caseRow.product_name ?? ""}\nKundenforderung: ${caseRow.claimed_amount} EUR bei Kaufpreis ${caseRow.purchase_price_total} EUR\nSituation: ${caseRow.situation_text ?? ""}`.slice(0, 6000);
-
+    // RAG retrieval (re-query with instruction context)
+    const query = `${caseRow.product_category ?? ""} ${caseRow.product_name ?? ""}\nSituation: ${caseRow.situation_text ?? ""}\nAnpassung: ${instruction}`.slice(0, 6000);
     let policyContext = "";
     let globalContext = "";
     try {
@@ -62,66 +67,46 @@ Deno.serve(async (req) => {
           const { data: pol } = await svc.rpc("match_business_knowledge", {
             _account_id: caseRow.business_account_id, query_embedding: vec(emb), match_count: 6,
           });
-          if (pol && pol.length) {
-            policyContext = (pol as any[]).map((r, i) => `[Richtlinie ${i + 1}] ${r.content}`).join("\n\n");
-          }
-          const { data: glob } = await svc.rpc("match_knowledge", {
-            query_embedding: vec(emb), match_count: 6, filter_books: null,
-          });
-          if (glob && glob.length) {
-            globalContext = (glob as any[]).map((r, i) => `[Quelle ${i + 1}] ${r.book_title}${r.chapter ? " · " + r.chapter : ""}\n${r.content}`).join("\n\n");
-          }
+          if (pol && pol.length) policyContext = (pol as any[]).map((r, i) => `[Richtlinie ${i + 1}] ${r.content}`).join("\n\n");
+          const { data: glob } = await svc.rpc("match_knowledge", { query_embedding: vec(emb), match_count: 4, filter_books: null });
+          if (glob && glob.length) globalContext = (glob as any[]).map((r, i) => `[Quelle ${i + 1}] ${r.book_title}\n${r.content}`).join("\n\n");
         }
       }
     } catch (e) { console.warn("rag error", e); }
 
-    const systemPrompt = `Du bist Pallanx Retail Shield, ein AI-Assistent für Reklamations- und Kulanzentscheidungen im Einzelhandel.
-Du arbeitest mit:
-- firmeninternen Richtlinien (höchste Priorität)
-- verhandlungswissenschaftlichem Wissen aus klassischer Literatur
-- klaren Freigabe-Limits je Rolle
+    const systemPrompt = `Du bist Pallanx Retail Shield. Du verfeinerst bestehende Reklamations-Optionen gemäß Anweisung des Mitarbeitenden.
+REGEL: Liefere IMMER exakt 3 Optionen (konservativ, mittel, kulant) im selben JSON-Schema wie der vorherige Lauf — die Struktur ist fix, nur Inhalte ändern sich.
 
 Limits dieses Mandanten (in % Rabatt/Erstattung vom Kaufpreis):
 - Sachbearbeiter: bis ${limits.sachbearbeiter_max_percent}%
 - Manager: bis ${limits.manager_max_percent}%
 - Leitung: bis ${limits.leitung_max_percent}%
 
-Kulanzregeln des Mandanten:
-${kulanzRules || "(keine spezifischen Regeln hinterlegt — verwende branchenüblichen Standard)"}
+Kulanzregeln: ${kulanzRules || "(branchenüblich)"}
 
-${policyContext ? "MANDANTEN-RICHTLINIEN (RAG):\n" + policyContext + "\n\n" : ""}${globalContext ? "VERHANDLUNGSWISSEN (RAG):\n" + globalContext : ""}
+${policyContext ? "MANDANTEN-RICHTLINIEN:\n" + policyContext + "\n\n" : ""}${globalContext ? "VERHANDLUNGSWISSEN:\n" + globalContext : ""}
 
-Antworte AUSSCHLIESSLICH mit gültigem JSON nach diesem Schema:
+Antworte AUSSCHLIESSLICH mit gültigem JSON:
 {
-  "analysis": "Kurzanalyse 2-4 Sätze",
-  "risk_assessment": "Risiken (Image, Folgekosten, Präzedenz)",
-  "options": [
-    {
-      "label": "Option-Name",
-      "amount_eur": Zahl,
-      "percent_of_purchase": Zahl,
-      "rationale": "Begründung",
-      "customer_wording": "Genauer Wortlaut für Mitarbeitende gegenüber Kunde",
-      "required_role": "sachbearbeiter"|"manager"|"leitung"
-    }
-  ],
-  "recommended_option_index": 0
-}
-Erzeuge IMMER genau 3 Optionen (konservativ, mittel, kulant). Berücksichtige Limits.`;
+  "analysis": "Aktualisierte Kurzanalyse",
+  "risk_assessment": "Aktualisierte Risiken",
+  "options": [ { "label": "...", "amount_eur": 0, "percent_of_purchase": 0, "rationale": "...", "customer_wording": "...", "required_role": "sachbearbeiter|manager|leitung" } ],
+  "recommended_option_index": 0,
+  "change_summary": "Was wurde gegenüber der Vorversion geändert (1-2 Sätze)"
+}`;
 
     const userPrompt = `Reklamationsfall:
-- Produkt: ${caseRow.product_name ?? "n/a"} (Kategorie: ${caseRow.product_category ?? "n/a"})
-- Kaufpreis gesamt: ${caseRow.purchase_price_total} EUR (Menge: ${caseRow.quantity})
+- Produkt: ${caseRow.product_name ?? "n/a"} (${caseRow.product_category ?? "n/a"})
+- Kaufpreis: ${caseRow.purchase_price_total} EUR · Menge ${caseRow.quantity}
 - Kundenforderung: ${caseRow.claimed_amount} EUR
-- Kanal: ${caseRow.channel}
-- Kundentyp: ${caseRow.customer_type ?? "unbekannt"}
-- Situation:
-${caseRow.situation_text ?? "(keine Beschreibung)"}
-- Notizen: ${caseRow.notes ?? "-"}
+- Situation: ${caseRow.situation_text ?? "—"}
 
-Aktueller Mitarbeiter-Rolle: ${userRole}
+VORHERIGE ANALYSE: ${JSON.stringify(baseAnalysis)}
+VORHERIGE OPTIONEN: ${JSON.stringify(baseOptions)}
 
-Erzeuge die 3 Optionen.`;
+ANWEISUNG DES MITARBEITENDEN: ${instruction}
+
+Passe die 3 Optionen entsprechend an und erkläre kurz die Änderung.`;
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -148,69 +133,49 @@ Erzeuge die 3 Optionen.`;
     if (recommended) {
       const r = String(recommended.required_role || "sachbearbeiter") as Role;
       requiredRole = (["sachbearbeiter","manager","leitung"] as Role[]).includes(r) ? r : "sachbearbeiter";
-      // server-side limit re-check
       const pct = Number(recommended.percent_of_purchase) || 0;
       if (pct > (limits.manager_max_percent ?? 25)) requiredRole = "leitung";
       else if (pct > (limits.sachbearbeiter_max_percent ?? 10)) requiredRole = requiredRole === "leitung" ? "leitung" : "manager";
     }
 
-    const needsEscalation = roleRank[requiredRole] > roleRank[userRole];
-    const newStatus = needsEscalation ? "waiting_approval" : "in_review";
+    // determine next version_number
+    const nextNum = (latestVersion?.version_number ?? 0) + 1;
 
+    const { data: newVersion, error: insErr } = await svc.from("business_case_versions").insert({
+      case_id, business_account_id: caseRow.business_account_id,
+      version_number: nextNum, kind: "refinement",
+      user_prompt: instruction,
+      ai_analysis: { analysis: parsed.analysis, risk_assessment: parsed.risk_assessment, change_summary: parsed.change_summary },
+      ai_options: options,
+      recommended_index: recIdx,
+      required_role: requiredRole,
+      created_by_user_id: userId,
+    }).select("*").single();
+    if (insErr) throw insErr;
+
+    // update case head
     await svc.from("business_cases").update({
-      ai_analysis: { analysis: parsed.analysis, risk_assessment: parsed.risk_assessment },
+      current_version_id: newVersion.id,
+      ai_analysis: newVersion.ai_analysis,
       ai_options: options,
       suggested_offer: recommended?.amount_eur ?? null,
       suggested_offer_percent: recommended?.percent_of_purchase ?? null,
       required_approval_role: requiredRole,
-      status: newStatus,
     }).eq("id", case_id);
-
-    // Write V1 (initial) snapshot for the chat/version timeline
-    try {
-      const { data: existingV1 } = await svc.from("business_case_versions")
-        .select("id").eq("case_id", case_id).eq("kind", "initial").maybeSingle();
-      let versionId = existingV1?.id ?? null;
-      if (!versionId) {
-        const { data: v1 } = await svc.from("business_case_versions").insert({
-          case_id, business_account_id: caseRow.business_account_id,
-          version_number: 1, kind: "initial",
-          user_prompt: null,
-          ai_analysis: { analysis: parsed.analysis, risk_assessment: parsed.risk_assessment },
-          ai_options: options,
-          recommended_index: options.length ? (parsed.recommended_option_index ?? 0) : null,
-          required_role: requiredRole,
-          created_by_user_id: userId,
-        }).select("id").single();
-        versionId = v1?.id ?? null;
-      }
-      if (versionId) {
-        await svc.from("business_cases").update({ current_version_id: versionId }).eq("id", case_id);
-      }
-    } catch (e) { console.warn("v1 snapshot failed", e); }
 
     await svc.from("business_case_logs").insert({
       case_id, business_account_id: caseRow.business_account_id, user_id: userId,
-      action: "ai_suggestion", system_suggestion: parsed,
+      action: "refinement", system_suggestion: { instruction, result: parsed },
     });
 
-    if (needsEscalation && recommended) {
-      await svc.from("business_approvals").insert({
-        case_id, business_account_id: caseRow.business_account_id,
-        requested_by_user_id: userId, requested_by_role: userRole, required_role: requiredRole,
-        requested_amount: recommended.amount_eur ?? 0,
-        requested_percent: recommended.percent_of_purchase ?? 0,
-        ai_recommendation: recommended,
-        justification: parsed.analysis ?? "",
-      });
-    }
-
     return new Response(JSON.stringify({
-      ok: true, options, recommended, required_role: requiredRole,
-      escalated: needsEscalation, analysis: parsed.analysis, risk_assessment: parsed.risk_assessment,
+      ok: true, version: newVersion, options, recommended,
+      required_role: requiredRole,
+      escalated: roleRank[requiredRole] > roleRank[userRole],
+      change_summary: parsed.change_summary ?? null,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
-    console.error("pipeline error", e);
+    console.error("refine error", e);
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
