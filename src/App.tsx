@@ -29,6 +29,25 @@ import Privacy from "./pages/Privacy";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { FloatingThemeToggle } from "@/components/FloatingThemeToggle";
 import { CookieConsent } from "@/components/CookieConsent";
+import RetailLanding from "./pages/retail/RetailLanding";
+import RetailLogin from "./pages/retail/RetailLogin";
+import RetailRegister from "./pages/retail/RetailRegister";
+import { RetailLayout } from "@/components/retail/RetailLayout";
+import { RetailProtectedRoute } from "@/components/retail/RetailProtectedRoute";
+import RetailDashboard from "./pages/retail/app/RetailDashboard";
+import RetailCases from "./pages/retail/app/RetailCases";
+import RetailNewCase from "./pages/retail/app/RetailNewCase";
+import RetailCaseDetail from "./pages/retail/app/RetailCaseDetail";
+import RetailApprovals from "./pages/retail/app/RetailApprovals";
+import RetailTeam from "./pages/retail/app/RetailTeam";
+import RetailSettings from "./pages/retail/app/RetailSettings";
+import RetailPolicies from "./pages/retail/app/RetailPolicies";
+import RetailSupport from "./pages/retail/app/RetailSupport";
+import RetailBilling from "./pages/retail/app/RetailBilling";
+import AdminB2B from "./pages/admin/AdminB2B";
+import AdminB2BLeads from "./pages/admin/AdminB2BLeads";
+import AdminB2BAccount from "./pages/admin/AdminB2BAccount";
+import AdminB2BTickets from "./pages/admin/AdminB2BTickets";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +74,25 @@ const App = () => (
             <Route path="/unsubscribe" element={<Unsubscribe />} />
             <Route path="/datenschutz" element={<Privacy />} />
             <Route path="/privacy" element={<Privacy />} />
+
+            {/* Retail Shield (B2B) public */}
+            <Route path="/retail" element={<RetailLanding />} />
+            <Route path="/retail/login" element={<RetailLogin />} />
+            <Route path="/retail/register" element={<RetailRegister />} />
+
+            {/* Retail Shield app (protected) */}
+            <Route path="/retail/app" element={<RetailProtectedRoute><RetailLayout /></RetailProtectedRoute>}>
+              <Route path="dashboard" element={<RetailDashboard />} />
+              <Route path="cases" element={<RetailCases />} />
+              <Route path="cases/new" element={<RetailNewCase />} />
+              <Route path="cases/:id" element={<RetailCaseDetail />} />
+              <Route path="approvals" element={<RetailApprovals />} />
+              <Route path="team" element={<RetailTeam />} />
+              <Route path="settings" element={<RetailSettings />} />
+              <Route path="policies" element={<RetailPolicies />} />
+              <Route path="support" element={<RetailSupport />} />
+              <Route path="billing" element={<RetailBilling />} />
+            </Route>
 
             {/* Protected */}
             <Route
@@ -104,6 +142,10 @@ const App = () => (
                 </AdminRoute>
               }
             />
+            <Route path="/admin/b2b" element={<AdminRoute><AdminB2B /></AdminRoute>} />
+            <Route path="/admin/b2b/leads" element={<AdminRoute><AdminB2BLeads /></AdminRoute>} />
+            <Route path="/admin/b2b/tickets" element={<AdminRoute><AdminB2BTickets /></AdminRoute>} />
+            <Route path="/admin/b2b/:id" element={<AdminRoute><AdminB2BAccount /></AdminRoute>} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>
