@@ -1,0 +1,170 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect } from "react";
+
+export interface BusinessCase {
+  id: string;
+  business_account_id: string;
+  created_by_user_id: string;
+  case_number: string;
+  title: string;
+  product_category: string | null;
+  sku: string | null;
+  product_name: string | null;
+  purchase_price_total: number;
+  quantity: number;
+  claimed_amount: number;
+  suggested_offer: number | null;
+  suggested_offer_percent: number | null;
+  final_granted_amount: number | null;
+  final_granted_percent: number | null;
+  required_approval_role: string | null;
+  status: "open"|"in_review"|"waiting_approval"|"closed"|"rejected";
+  channel: string;
+  customer_type: string | null;
+  situation_text: string | null;
+  notes: string | null;
+  ai_analysis: any;
+  ai_options: any;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+}
+
+export function useBusinessCases(accountId?: string) {
+  return useQuery({
+    queryKey: ["business-cases", accountId],
+    enabled: !!accountId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("business_cases").select("*")
+        .eq("business_account_id", accountId!).order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as BusinessCase[];
+    },
+  });
+}
+
+export function useBusinessCase(caseId?: string) {
+  return useQuery({
+    queryKey: ["business-case", caseId],
+    enabled: !!caseId && caseId !== "new",
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("business_cases").select("*").eq("id", caseId!).maybeSingle();
+      if (error) throw error;
+      return data as BusinessCase | null;
+    },
+  });
+}
+
+export function useBusinessCaseRealtime(caseId?: string) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!caseId || caseId === "new") return;
+    const ch = supabase
+      .channel(`bcase:${caseId}`)
+      .on("postgres_changes" as any, { event: "UPDATE", schema: "public", table: "business_cases", filter: `id=eq.${caseId}` },
+        (p: any) => qc.setQueryData(["business-case", caseId], p.new))
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [caseId, qc]);
+}
+
+export function useCreateBusinessCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      business_account_id: string; created_by_user_id: string;
+      product_category?: string; product_name?: string; sku?: string;
+      purchase_price_total: number; quantity: number; claimed_amount: number;
+      channel?: string; customer_type?: string; situation_text?: string; notes?: string;
+    }) => {
+      // generate case_number client-side via RPC
+      const { data: num } = await (supabase as any).rpc("generate_business_case_number", { _account_id: input.business_account_id });
+      const { data, error } = await (supabase as any).from("business_cases").insert({
+        ...input,
+        case_number: num,
+        title: input.product_name ? `Reklamation: ${input.product_name}` : "Reklamationsfall",
+      }).select("*").single();
+      if (error) throw error;
+      return data as BusinessCase;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["business-cases"] }); },
+  });
+}
+
+export function useRunPipeline() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (case_id: string) => {
+      const { data, error } = await supabase.functions.invoke("retail-shield-pipeline", { body: { case_id } });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data;
+    },
+    onSuccess: (_d, case_id) => {
+      qc.invalidateQueries({ queryKey: ["business-case", case_id] });
+      qc.invalidateQueries({ queryKey: ["business-cases"] });
+      qc.invalidateQueries({ queryKey: ["business-approvals"] });
+    },
+  });
+}
+
+export function useApprovals(accountId?: string) {
+  return useQuery({
+    queryKey: ["business-approvals", accountId],
+    enabled: !!accountId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("business_approvals").select("*, case:business_cases(case_number,product_name,situation_text,purchase_price_total,claimed_amount)")
+        .eq("business_account_id", accountId!).order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+  });
+}
+
+export function useDecideApproval() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { approval_id: string; decision: "accepted"|"modified"|"rejected"; final_amount?: number; final_percent?: number; notes?: string; }) => {
+      const { data, error } = await supabase.functions.invoke("b2b-approval-decide", { body: input });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["business-approvals"] });
+      qc.invalidateQueries({ queryKey: ["business-cases"] });
+    },
+  });
+}
+
+export function useDecideCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { case_id: string; final_amount: number; final_percent: number; notes?: string; }) => {
+      const { data, error } = await supabase.functions.invoke("b2b-case-decide", { body: input });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["business-cases"] });
+      qc.invalidateQueries({ queryKey: ["business-case"] });
+    },
+  });
+}
+
+export function useBusinessKpis(accountId?: string) {
+  return useQuery({
+    queryKey: ["business-kpis", accountId],
+    enabled: !!accountId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("business_case_kpis").select("*").eq("business_account_id", accountId!).maybeSingle();
+      if (error) throw error;
+      return data ?? { total_cases: 0, open_cases: 0, waiting_approval_cases: 0, closed_cases: 0, sum_purchase: 0, sum_claimed: 0, sum_granted: 0, sum_saved: 0, avg_granted_percent: 0, escalated_count: 0 };
+    },
+  });
+}
