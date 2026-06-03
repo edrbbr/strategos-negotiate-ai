@@ -166,6 +166,29 @@ Erzeuge die 3 Optionen.`;
       status: newStatus,
     }).eq("id", case_id);
 
+    // Write V1 (initial) snapshot for the chat/version timeline
+    try {
+      const { data: existingV1 } = await svc.from("business_case_versions")
+        .select("id").eq("case_id", case_id).eq("kind", "initial").maybeSingle();
+      let versionId = existingV1?.id ?? null;
+      if (!versionId) {
+        const { data: v1 } = await svc.from("business_case_versions").insert({
+          case_id, business_account_id: caseRow.business_account_id,
+          version_number: 1, kind: "initial",
+          user_prompt: null,
+          ai_analysis: { analysis: parsed.analysis, risk_assessment: parsed.risk_assessment },
+          ai_options: options,
+          recommended_index: options.length ? (parsed.recommended_option_index ?? 0) : null,
+          required_role: requiredRole,
+          created_by_user_id: userId,
+        }).select("id").single();
+        versionId = v1?.id ?? null;
+      }
+      if (versionId) {
+        await svc.from("business_cases").update({ current_version_id: versionId }).eq("id", case_id);
+      }
+    } catch (e) { console.warn("v1 snapshot failed", e); }
+
     await svc.from("business_case_logs").insert({
       case_id, business_account_id: caseRow.business_account_id, user_id: userId,
       action: "ai_suggestion", system_suggestion: parsed,
