@@ -606,6 +606,8 @@ export type Database = {
         Row: {
           business_account_id: string
           created_at: string
+          currency: string
+          default_vat_rate: number
           kulanz_rules: string | null
           max_discount_limits: Json
           updated_at: string
@@ -613,6 +615,8 @@ export type Database = {
         Insert: {
           business_account_id: string
           created_at?: string
+          currency?: string
+          default_vat_rate?: number
           kulanz_rules?: string | null
           max_discount_limits?: Json
           updated_at?: string
@@ -620,6 +624,8 @@ export type Database = {
         Update: {
           business_account_id?: string
           created_at?: string
+          currency?: string
+          default_vat_rate?: number
           kulanz_rules?: string | null
           max_discount_limits?: Json
           updated_at?: string
