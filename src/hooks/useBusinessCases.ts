@@ -168,3 +168,59 @@ export function useBusinessKpis(accountId?: string) {
     },
   });
 }
+
+// ---------- Versions / Refinement ----------
+export interface BusinessCaseVersion {
+  id: string;
+  case_id: string;
+  business_account_id: string;
+  version_number: number;
+  kind: "initial" | "refinement" | "restore";
+  user_prompt: string | null;
+  ai_analysis: any;
+  ai_options: any;
+  recommended_index: number | null;
+  required_role: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+}
+
+export function useBusinessCaseVersions(caseId?: string) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!caseId || caseId === "new") return;
+    const ch = supabase
+      .channel(`bcv:${caseId}`)
+      .on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "business_case_versions", filter: `case_id=eq.${caseId}` },
+        () => qc.invalidateQueries({ queryKey: ["business-case-versions", caseId] }))
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [caseId, qc]);
+  return useQuery({
+    queryKey: ["business-case-versions", caseId],
+    enabled: !!caseId && caseId !== "new",
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("business_case_versions").select("*").eq("case_id", caseId!).order("version_number", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as BusinessCaseVersion[];
+    },
+  });
+}
+
+export function useRefineBusinessCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { case_id: string; instruction: string }) => {
+      const { data, error } = await supabase.functions.invoke("b2b-case-refine", { body: input });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["business-case", vars.case_id] });
+      qc.invalidateQueries({ queryKey: ["business-case-versions", vars.case_id] });
+      qc.invalidateQueries({ queryKey: ["business-approvals"] });
+    },
+  });
+}
