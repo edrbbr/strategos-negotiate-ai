@@ -30,6 +30,9 @@ export const PublicHeader = ({ active }: PublicHeaderProps) => {
         >
           Preise
         </Link>
+        <Link to="/retail" className="hover:text-primary transition-colors">
+          Geschäftskunden
+        </Link>
       </nav>
       <div className="flex items-center gap-4">
         {isAuthed ? (
