@@ -44,3 +44,24 @@ verify_jwt = false
 
 [functions.ingest-knowledge-base]
 verify_jwt = false
+
+[functions.b2b-lead-submit]
+verify_jwt = false
+
+[functions.retail-shield-pipeline]
+verify_jwt = false
+
+[functions.b2b-approval-decide]
+verify_jwt = false
+
+[functions.b2b-case-decide]
+verify_jwt = false
+
+[functions.b2b-register-account]
+verify_jwt = false
+
+[functions.b2b-invite-user]
+verify_jwt = false
+
+[functions.b2b-ingest-policy]
+verify_jwt = false
