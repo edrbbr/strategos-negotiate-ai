@@ -16,6 +16,7 @@ export default function RetailSettings() {
   const { toast } = useToast();
   const canEdit = m && roleRank[m.role] >= 2;
   const [f, setF] = useState({ sb: "10", mg: "25", lt: "100", kulanz: "", currency: "EUR", vat: "19" });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (s) {
@@ -32,11 +33,25 @@ export default function RetailSettings() {
   }, [s]);
 
   async function save() {
+    const sb = Number(f.sb), mg = Number(f.mg), lt = Number(f.lt);
+    if ([sb, mg, lt].some((n) => Number.isNaN(n) || n < 0 || n > 100)) {
+      toast({ title: "Ungültige Werte", description: "Limits müssen zwischen 0 und 100 % liegen.", variant: "destructive" });
+      return;
+    }
+    if (!(sb <= mg && mg <= lt)) {
+      toast({ title: "Ungültige Reihenfolge", description: "Sachbearbeiter ≤ Manager ≤ Leitung.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
     const patch = {
-      max_discount_limits: { sachbearbeiter_max_percent: Number(f.sb), manager_max_percent: Number(f.mg), leitung_max_percent: Number(f.lt) },
+      business_account_id: m!.business_account_id,
+      max_discount_limits: { sachbearbeiter_max_percent: sb, manager_max_percent: mg, leitung_max_percent: lt },
       kulanz_rules: f.kulanz, currency: f.currency, default_vat_rate: Number(f.vat),
     };
-    const { error } = await (supabase as any).from("business_settings").update(patch).eq("business_account_id", m!.business_account_id);
+    const { error } = await (supabase as any)
+      .from("business_settings")
+      .upsert(patch, { onConflict: "business_account_id" });
+    setSaving(false);
     if (error) toast({ title: "Fehler", description: error.message, variant: "destructive" });
     else { toast({ title: "Gespeichert" }); qc.invalidateQueries({ queryKey: ["business-settings"] }); }
   }
@@ -64,7 +79,7 @@ export default function RetailSettings() {
           <div><Label>MwSt. (%)</Label><Input type="number" disabled={!canEdit} value={f.vat} onChange={(e) => setF({ ...f, vat: e.target.value })} /></div>
         </CardContent>
       </Card>
-      {canEdit && <Button onClick={save}>Speichern</Button>}
+      {canEdit && <Button onClick={save} disabled={saving}>{saving ? "Speichere…" : "Speichern"}</Button>}
     </div>
   );
 }
