@@ -1,33 +1,68 @@
-## Problem
 
-Die Konsole zeigt bei jedem Aufruf:
-```
-permission denied for function has_role
-```
+# B2B Fall-Detail: Analyse, Strategie, Optionen + Refinement
 
-Das bedeutet: Die SQL‑Funktion `public.has_role(uuid, app_role)` ist nur für `postgres` und `service_role` ausführbar, **nicht** für die Rolle `authenticated`. Die RLS‑Policies auf `user_roles` ("Admins manage roles", "Admins view all roles") rufen aber genau diese Funktion auf. Beim Lesen schlägt die Policy‑Auswertung deshalb fehl, der Hook `useUserRole` bekommt einen Fehler und liefert `isAdmin = false` zurück.
+## Ziel
 
-Folgen:
-- Der Admin‑Link in der App‑Sidebar (`AppSidebar.tsx`, schon vorhanden, `roleInfo?.isAdmin`‑gated) wird nie angezeigt.
-- `AdminRoute` leitet `/admin` zurück auf `/app/dashboard`.
+Nach „Fall analysieren" auf `/retail/app/cases/new` landest du auf `/retail/app/cases/:id` und siehst eine vollwertige Arbeitsoberfläche im Stil der B2C-Strategos-Seite — mit:
 
-Dein Admin‑Eintrag in `user_roles` existiert bereits — es ist also reines Rechte‑Problem auf Datenbank‑Ebene.
+- **Analyse** (KI-Einschätzung + Risiken)
+- **Strategie** (Begründung des empfohlenen Vorgehens)
+- **3 Vorschläge** (konservativ / mittel / kulant) inkl. Kunden-Wortlaut
+- **Refinement-Chat** zum iterativen Anpassen („freundlicher", „biete 15% statt 10%", „kürzer", „auf Englisch")
+- **Versions-Historie** jeder Verfeinerung
 
-## Lösung
+**Begrenzungen:** Eskalationen (Sachbearbeiter/Manager/Leitung) bleiben — sie sind das Produktkernfeature. **Keine** Plan-/Tarif-Limits wie bei B2C: unbegrenzte Refinements, Anhänge, keine Upgrade-Modals.
 
-Eine kleine Migration, die der Funktion `has_role` (und der parallelen B2B‑Helper, falls vorhanden) das Execute‑Recht für die Auth‑Rollen gibt:
+## Drei Layout-Varianten zur Wahl
 
-```sql
-GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role)
-  TO authenticated, anon;
-```
+Du hast drei Stile genannt — bitte wähle nach dem Plan eine aus, dann baue ich nur diese:
 
-Falls die B2B‑Migration zusätzliche Helper wie `is_business_member`, `get_user_business_account`, `business_role_rank` eingeführt hat, bekommen die im gleichen Zug ebenfalls `GRANT EXECUTE … TO authenticated`, damit dasselbe Problem nicht im Retail‑Bereich wieder auftaucht.
+### Variante A — 1:1 Strategos-Stil
+Zwei-Spalten-Layout exakt wie `src/pages/CaseDetail.tsx`:
+- Header mit Case-ID + Status-Badge
+- Drei farbige Progress-Segmente (Analyse · Strategie · Draft)
+- Links: Situations-Box (read-only) + Meta (Kanal, Kundentyp, Kaufpreis)
+- Rechts: drei StageBoxen (Analyse / Strategie / Optionen-Draft) mit denselben Akzentfarben (secondary / primary / tertiary)
+- Unten: gleiche `CaseChatView`-artige Refinement-Timeline mit V0/V1/V2…-Versionen + Sticky-Eingabe
 
-Kein Frontend‑Change nötig — die Sidebar zeigt den Admin‑Link bereits automatisch, sobald `useUserRole` `isAdmin = true` zurückgibt, und `AdminRoute` lässt dich dann durch.
+### Variante B — Inspiriert, B2B-angepasst
+Gleiche Bausteine, aber für 3-Optionen-Vergleich optimiert:
+- Top: Analyse + Risiken kompakt als Kachel-Paar
+- Mitte: 3 Optionen als nebeneinanderliegende Karten mit Eskalations-Badge, Direkt-Freigabe-Button und „Diese Option verfeinern"-Aktion
+- Unten: Refinement-Chat als Timeline + Sticky-Eingabe (wie A, aber schlanker)
 
-## Verifikation nach dem Apply
+### Variante C — ChatGPT-Style Chat
+Reines Chat-Fenster:
+- Erste Bubble (KI): Analyse + Risiken als Markdown
+- Zweite Bubble (KI): 3 Optionen als formatierte Karten innerhalb der Bubble, inkl. Freigabe-Buttons
+- Folge-Bubbles: User-Prompts links/rechts + KI-Antworten mit aktualisierten Optionen
+- Unten Sticky-Composer (Textarea + Send) wie ChatGPT — voll vertikal, kein Zwei-Spalten-Layout
 
-1. Seite neu laden → die Warnung `permission denied for function has_role` verschwindet aus der Konsole.
-2. In der linken Sidebar (`/app/...`) erscheint der Admin‑Eintrag.
-3. `/admin` und `/admin/b2b` sind direkt erreichbar.
+## Technische Umsetzung
+
+### Datenbank
+- **Neue Tabelle** `business_case_versions` (id, case_id, business_account_id, version_number, kind: `initial|refinement|restore`, user_prompt, ai_analysis jsonb, ai_options jsonb, recommended_index, created_by, created_at). Beim ersten Pipeline-Run wird V1 (kind=`initial`) angelegt.
+- **Spalte** `business_cases.current_version_id uuid` (FK auf Versions-Tabelle), wird bei jedem Refinement aktualisiert.
+- RLS: nur Mitglieder des `business_account_id` lesen/schreiben; GRANTs für `authenticated` + `service_role`.
+
+### Edge Functions
+- **`retail-shield-pipeline`** (vorhanden): erweitern → schreibt Ergebnis zusätzlich als V1 in `business_case_versions`.
+- **`b2b-case-refine`** (neu): nimmt `{ case_id, instruction }`, lädt aktuelle Version + Mandanten-RAG, ruft Gemini mit System-Prompt „Verfeinere die bestehenden 3 Optionen gemäß Anweisung — gleiche Struktur, gleiche Anzahl", schreibt neue Version, setzt `current_version_id`. Keine Tier-Checks. Mitgliedschaft wird via `business_users` verifiziert.
+
+### Frontend
+- **Hooks** (`src/hooks/useBusinessCases.ts`): `useBusinessCaseVersions(caseId)`, `useRefineBusinessCase()`, `useRestoreBusinessCase()`.
+- **Neue Komponente** je nach Variante:
+  - A: `RetailCaseStrategosView.tsx` (Kopie der Strategos-Struktur, an B2B-Schema gemappt)
+  - B: `RetailCaseOptionsView.tsx`
+  - C: `RetailCaseChatView.tsx`
+- **`RetailCaseDetail.tsx`**: aktuelle Logik beibehalten, aber Rendering komplett durch gewählte Variante ersetzen.
+- Eskalations-Badge + Direkt-Freigabe-Button bleiben pro Option erhalten (das ist das Produkt).
+
+### Was bleibt unverändert
+- `RetailNewCase.tsx` (Formular ist ok)
+- `useDecideCase`, `useApprovals`, Freigabe-Pipeline
+- Keine Plan-/Limit-Checks im B2B-Bereich
+
+## Offene Frage vor Bau
+
+Bitte sag mir, welche Variante (A/B/C) ich bauen soll — dann lege ich Migration + Edge Function + UI in einem Zug an.

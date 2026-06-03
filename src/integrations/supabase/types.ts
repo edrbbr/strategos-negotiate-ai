@@ -295,6 +295,66 @@ export type Database = {
           },
         ]
       }
+      business_case_versions: {
+        Row: {
+          ai_analysis: Json | null
+          ai_options: Json | null
+          business_account_id: string
+          case_id: string
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          kind: string
+          recommended_index: number | null
+          required_role: Database["public"]["Enums"]["business_role"] | null
+          user_prompt: string | null
+          version_number: number
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          ai_options?: Json | null
+          business_account_id: string
+          case_id: string
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          kind: string
+          recommended_index?: number | null
+          required_role?: Database["public"]["Enums"]["business_role"] | null
+          user_prompt?: string | null
+          version_number: number
+        }
+        Update: {
+          ai_analysis?: Json | null
+          ai_options?: Json | null
+          business_account_id?: string
+          case_id?: string
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          kind?: string
+          recommended_index?: number | null
+          required_role?: Database["public"]["Enums"]["business_role"] | null
+          user_prompt?: string | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_case_versions_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_case_versions_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "business_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_cases: {
         Row: {
           ai_analysis: Json | null
@@ -306,6 +366,7 @@ export type Database = {
           closed_at: string | null
           created_at: string
           created_by_user_id: string
+          current_version_id: string | null
           customer_type: string | null
           final_granted_amount: number | null
           final_granted_percent: number | null
@@ -336,6 +397,7 @@ export type Database = {
           closed_at?: string | null
           created_at?: string
           created_by_user_id: string
+          current_version_id?: string | null
           customer_type?: string | null
           final_granted_amount?: number | null
           final_granted_percent?: number | null
@@ -366,6 +428,7 @@ export type Database = {
           closed_at?: string | null
           created_at?: string
           created_by_user_id?: string
+          current_version_id?: string | null
           customer_type?: string | null
           final_granted_amount?: number | null
           final_granted_percent?: number | null
@@ -392,6 +455,13 @@ export type Database = {
             columns: ["business_account_id"]
             isOneToOne: false
             referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_cases_current_version_id_fkey"
+            columns: ["current_version_id"]
+            isOneToOne: false
+            referencedRelation: "business_case_versions"
             referencedColumns: ["id"]
           },
         ]
