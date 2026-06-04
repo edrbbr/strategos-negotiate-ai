@@ -89,6 +89,37 @@ Deno.serve(async (req) => {
           status: "active",
         });
         primary_user_id = authUserId;
+
+        // Send welcome email with initial credentials
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const mailRes = await fetch(`${supabaseUrl}/functions/v1/send-transactional-email`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${serviceKey}`,
+              apikey: serviceKey,
+            },
+            body: JSON.stringify({
+              templateName: "b2b-account-welcome",
+              recipientEmail: primary_contact_email,
+              idempotencyKey: `b2b-welcome-${acc.id}-${authUserId}`,
+              templateData: {
+                fullName: primary_contact_name,
+                companyName: company_name,
+                email: primary_contact_email,
+                tempPassword: primary_contact_temp_password,
+                loginUrl: "https://pallanx.com/retail/login",
+              },
+            }),
+          });
+          if (!mailRes.ok) {
+            console.error("welcome email failed", mailRes.status, await mailRes.text());
+          }
+        } catch (mailErr) {
+          console.error("welcome email error", mailErr);
+        }
       }
     }
 
