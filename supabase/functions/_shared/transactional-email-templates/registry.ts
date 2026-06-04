@@ -11,8 +11,10 @@ export interface TemplateEntry {
 
 import { template as eliteRequestAdmin } from './elite-request-admin.tsx'
 import { template as eliteOffer } from './elite-offer.tsx'
+import { template as b2bAccountWelcome } from './b2b-account-welcome.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'elite-request-admin': eliteRequestAdmin,
   'elite-offer': eliteOffer,
+  'b2b-account-welcome': b2bAccountWelcome,
 }
