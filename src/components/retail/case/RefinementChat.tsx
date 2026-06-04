@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Send, Sparkles, User } from "lucide-react";
+import { Loader2, Paperclip, Send, Sparkles, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBusinessCaseVersions, useRefineBusinessCase, type BusinessCaseVersion } from "@/hooks/useBusinessCases";
 import { OptionCard, eur } from "./RetailCaseShared";
@@ -18,6 +18,8 @@ export function RefinementChat({
   const { data: versions = [] } = useBusinessCaseVersions(caseRow.id);
   const refine = useRefineBusinessCase();
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { toast } = useToast();
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -106,6 +108,24 @@ export function RefinementChat({
         : "border-t border-border/30 pt-3 mt-2"
       }>
         <div className="relative bg-card border border-border/40 rounded-2xl p-3 focus-within:border-primary/60 transition">
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {attachments.map((f, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded-full">
+                  <Paperclip className="w-3 h-3" />
+                  <span className="max-w-[160px] truncate">{f.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                    className="hover:text-destructive"
+                    aria-label="Anhang entfernen"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -113,8 +133,31 @@ export function RefinementChat({
             disabled={refine.isPending}
             placeholder="Anweisung zur Anpassung… (Enter sendet, Shift+Enter = neue Zeile)"
             rows={2}
-            className="w-full bg-transparent focus:outline-none resize-none text-[15px] leading-6 pr-12 disabled:opacity-50"
+            className="w-full bg-transparent focus:outline-none resize-none text-[15px] leading-6 pr-24 disabled:opacity-50"
           />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []);
+              if (files.length) setAttachments((prev) => [...prev, ...files]);
+              if (fileInputRef.current) fileInputRef.current.value = "";
+            }}
+          />
+          <Button
+            size="icon"
+            variant="ghost"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={refine.isPending}
+            className="absolute bottom-2 right-12 h-9 w-9 rounded-full"
+            aria-label="Anhang hinzufügen"
+            title="Anhang hinzufügen"
+          >
+            <Paperclip className="w-4 h-4" />
+          </Button>
           <Button
             size="icon"
             onClick={() => send()}
