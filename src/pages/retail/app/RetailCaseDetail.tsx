@@ -23,9 +23,7 @@ export default function RetailCaseDetail() {
   const { toast } = useToast();
 
   const [variant, setVariant] = useState<Variant>(() => {
-    if (typeof window === "undefined") return "B";
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored === "A" || stored === "B" || stored === "C" ? stored : "B";
+    return "C";
   });
   useEffect(() => { localStorage.setItem(STORAGE_KEY, variant); }, [variant]);
 
@@ -61,23 +59,6 @@ export default function RetailCaseDetail() {
           </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Layout switcher */}
-          <div className="inline-flex border border-border/50 rounded-md overflow-hidden text-xs">
-            {([
-              { v: "A" as const, label: "Strategos" },
-              { v: "B" as const, label: "B2B-Optionen" },
-              { v: "C" as const, label: "Chat" },
-            ]).map(({ v, label }) => (
-              <button
-                key={v}
-                onClick={() => setVariant(v)}
-                className={`px-3 py-1.5 transition ${variant === v ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}
-                title={`Layout ${v}`}
-              >
-                {v} · {label}
-              </button>
-            ))}
-          </div>
           {options.length === 0 && (
             <Button onClick={() => runPipe.mutate(c.id)} disabled={runPipe.isPending}>
               <Sparkles className="w-4 h-4 mr-2" />
