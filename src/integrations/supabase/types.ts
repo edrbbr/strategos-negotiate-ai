@@ -22,6 +22,7 @@ export type Database = {
           path: string | null
           properties: Json
           session_id: string | null
+          user_agent: string | null
           user_id: string | null
         }
         Insert: {
@@ -31,6 +32,7 @@ export type Database = {
           path?: string | null
           properties?: Json
           session_id?: string | null
+          user_agent?: string | null
           user_id?: string | null
         }
         Update: {
@@ -40,6 +42,7 @@ export type Database = {
           path?: string | null
           properties?: Json
           session_id?: string | null
+          user_agent?: string | null
           user_id?: string | null
         }
         Relationships: []
@@ -50,39 +53,63 @@ export type Database = {
           contact_name: string
           created_at: string
           email: string
+          fbclid: string | null
+          gclid: string | null
           id: string
           industry: string
           message: string | null
           phone: string | null
+          referrer: string | null
           status: string
           store_count: string | null
           updated_at: string
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
         }
         Insert: {
           company_name: string
           contact_name: string
           created_at?: string
           email: string
+          fbclid?: string | null
+          gclid?: string | null
           id?: string
           industry: string
           message?: string | null
           phone?: string | null
+          referrer?: string | null
           status?: string
           store_count?: string | null
           updated_at?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
         }
         Update: {
           company_name?: string
           contact_name?: string
           created_at?: string
           email?: string
+          fbclid?: string | null
+          gclid?: string | null
           id?: string
           industry?: string
           message?: string | null
           phone?: string | null
+          referrer?: string | null
           status?: string
           store_count?: string | null
           updated_at?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
         }
         Relationships: []
       }
@@ -976,6 +1003,42 @@ export type Database = {
           updated_at?: string
           user_id?: string
           variants?: Json | null
+        }
+        Relationships: []
+      }
+      conversion_events: {
+        Row: {
+          business_account_id: string | null
+          created_at: string
+          email: string | null
+          event_name: string
+          id: string
+          properties: Json
+          user_agent: string | null
+          user_id: string | null
+          utm: Json
+        }
+        Insert: {
+          business_account_id?: string | null
+          created_at?: string
+          email?: string | null
+          event_name: string
+          id?: string
+          properties?: Json
+          user_agent?: string | null
+          user_id?: string | null
+          utm?: Json
+        }
+        Update: {
+          business_account_id?: string | null
+          created_at?: string
+          email?: string | null
+          event_name?: string
+          id?: string
+          properties?: Json
+          user_agent?: string | null
+          user_id?: string | null
+          utm?: Json
         }
         Relationships: []
       }
