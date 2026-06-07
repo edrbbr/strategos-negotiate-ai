@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import { Shield, ArrowRight, CheckCircle2, Scale, Clock, FileText, Truck, Wrench, Sofa } from "lucide-react";
+import { Shield, ArrowRight, CheckCircle2, Scale, Clock, FileText, Truck, Wrench, Sofa, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -20,7 +20,7 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: "Welche Fristen gelten für die Nacherfüllung?",
-    a: "Das Gesetz nennt keine starre Frist, verlangt aber eine ‚angemessene Frist‘ (§ 323 BGB). In der Möbelhandels-Praxis sind 14 Tage für die Rückmeldung und 4–6 Wochen für die tatsächliche Nacherfüllung üblich und gerichtsfest. Pallanx hinterlegt branchenübliche Fristen pro Mangelart und erinnert Sie automatisch, bevor Sie in Verzug geraten.",
+    a: "Das Gesetz nennt keine starre Frist, verlangt aber eine ‚angemessene Frist‘ (§ 323 BGB). In der Möbelhandels-Praxis sind 14 Tage für die Rückmeldung und 4–6 Wochen für die tatsächliche Nacherfüllung üblich und gerichtsfest. In Pallanx tragen Sie die mit der Kundin oder dem Kunden vereinbarte Frist im Fall ein; die Vorgangs- und Versionshistorie hält Datum und Wortlaut nachvollziehbar fest.",
   },
   {
     q: "Wann greift die Beweislastumkehr bei Möbeln?",
@@ -32,7 +32,7 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: "Wann ist eine Rücknahme statt Reparatur fair?",
-    a: "Wenn zwei Nachbesserungsversuche fehlschlagen, ist die Nacherfüllung gemäß § 440 BGB regelmäßig als fehlgeschlagen anzusehen — dann hat die Kundschaft Anspruch auf Rücktritt oder Minderung. Auch bei massiven optischen Mängeln, die für die Käuferin oder den Käufer unzumutbar sind, ist eine kulante Rücknahme oft die fairere und wirtschaftlich klügere Lösung als ein Rechtsstreit. Pallanx schlägt auf Basis Ihrer Richtlinien automatisch den Eskalationsweg vor.",
+    a: "Wenn zwei Nachbesserungsversuche fehlschlagen, ist die Nacherfüllung gemäß § 440 BGB regelmäßig als fehlgeschlagen anzusehen — dann hat die Kundschaft Anspruch auf Rücktritt oder Minderung. Auch bei massiven optischen Mängeln, die für die Käuferin oder den Käufer unzumutbar sind, ist eine kulante Rücknahme oft die fairere und wirtschaftlich klügere Lösung als ein Rechtsstreit. Pallanx erzeugt zu jedem Fall drei abgestufte Lösungsoptionen (konservativ, mittel, kulant) und leitet, falls eine Option Ihre hinterlegten Rabatt-Limits überschreitet, automatisch eine Freigabe-Anfrage an die richtige Rolle (Manager oder Leitung) ein.",
   },
 ];
 
@@ -43,7 +43,7 @@ const examples = [
     situation: "Ein Polstersofa kommt mit einem 6 cm langen Kratzer am Sitzbezug an. Die Kundin reklamiert innerhalb von zwei Tagen mit Fotos.",
     law: "Es liegt ein Sachmangel im Sinne von § 434 BGB vor. Die Kundin hat Anspruch auf Nacherfüllung nach § 439 BGB und das Wahlrecht zwischen Reparatur und Ersatzlieferung.",
     fair: "Bieten Sie beide Optionen aktiv an: kostenfreie Reparatur durch einen Polsterer vor Ort oder Austausch des Bezugs ab Werk. Lassen Sie die Kundin wählen, nennen Sie realistische Termine (z. B. 3 Wochen) und übernehmen Sie alle Kosten — auch der Spedition.",
-    workflow: "Pallanx legt automatisch den Vorgang an, hinterlegt die 14-Tage-Frist zur Rückmeldung, erzeugt rechtssichere Antwortvorlagen und dokumentiert die Wahl der Kundin revisionssicher.",
+    workflow: "Ihr Team erfasst den Fall in einer strukturierten Maske (Produkt, Kaufpreis, Kundenforderung, Schadensbeschreibung). Pallanx erzeugt daraus eine Kurzanalyse und drei abgestufte Lösungsoptionen mit jeweils vorformuliertem Antworttext für die Kundin. Die getroffene Entscheidung und alle weiteren Schritte werden mit Versionshistorie pro Fall festgehalten.",
   },
   {
     icon: Clock,
@@ -51,7 +51,7 @@ const examples = [
     situation: "Ein Kunde meldet acht Monate nach Lieferung deutlich hörbare Quietschgeräusche der Bettfederung.",
     law: "Innerhalb der ersten zwölf Monate gilt die Beweislastumkehr nach § 477 BGB. Es wird vermutet, dass der Mangel bereits bei Übergabe vorlag — den Gegenbeweis müssen Sie führen, nicht der Kunde.",
     fair: "Vereinbaren Sie zeitnah eine Begutachtung beim Kunden zu Hause oder eine Abholung. Bieten Sie parallel ein Leihbett für die Dauer der Prüfung an. Reparieren oder tauschen Sie die Federung kostenfrei — diskutieren Sie nicht über die Ursache, solange die Vermutung gegen Sie spricht.",
-    workflow: "Pallanx erkennt die § 477-Frist anhand des Kaufdatums, weist auf die Beweislast hin und schlägt eine kundenfreundliche Vor-Ort-Begutachtung als Standardweg vor.",
+    workflow: "Sie tragen das Kaufdatum im Fall ein. Die KI-Analyse zieht die Beweislastumkehr nach § 477 BGB ausdrücklich in ihre Bewertung ein und schlägt im konservativen wie im kulanten Vorschlag eine Vor-Ort-Begutachtung als kundenfreundlichen Standardweg vor.",
   },
   {
     icon: Sofa,
@@ -59,7 +59,7 @@ const examples = [
     situation: "Vier Wochen nach Lieferung löst sich die Front einer Schublade aufgrund einer mangelhaften Verklebung.",
     law: "Eindeutiger Sachmangel nach § 434 BGB. Die Beweislastumkehr greift, eine längere Prüfung ist unverhältnismäßig.",
     fair: "Versenden Sie unbürokratisch das Ersatzteil oder bieten Sie eine Monteur-Anfahrt an. Verzichten Sie auf Rücksendung der defekten Front, wenn die Bilder eindeutig sind — das spart Aufwand auf beiden Seiten und stärkt das Vertrauen in Ihre Marke.",
-    workflow: "Pallanx erkennt anhand der Schadensbeschreibung den Standardfall ‚Verarbeitungsmangel‘ und schlägt Ersatzteilversand mit vorformulierter Kundenkommunikation vor.",
+    workflow: "Aus Ihrer Schadensbeschreibung leitet die KI-Analyse den Vorschlag ‚Ersatzteilversand ohne Rücksendung‘ als kulante Option ab — inklusive eines konkreten Textbausteins, den Mitarbeitende übernehmen oder anpassen können.",
   },
   {
     icon: FileText,
@@ -67,7 +67,7 @@ const examples = [
     situation: "Eine Kundin reklamiert, dass die Tischplatte aus Wildeiche deutlich dunkler ist als auf dem Online-Foto.",
     law: "Bei Massivholz sind farbliche Schwankungen und Maserungsunterschiede produkttypisch und in der Regel kein Sachmangel — sofern die Produktbeschreibung darauf hinweist (vgl. § 434 Abs. 1 Satz 2 BGB, Beschaffenheitsvereinbarung).",
     fair: "Klären Sie sachlich auf, mit Verweis auf die Produktbeschreibung und vergleichbare Belegfotos. Wenn die Abweichung für die Kundin trotzdem unzumutbar ist, bieten Sie ein kulantes Widerrufsrecht über die gesetzliche Frist hinaus an. Das ist günstiger als ein verlorener Bewertungs- oder Verbraucherschutzfall.",
-    workflow: "Pallanx hinterlegt für natürliche Materialien Standardbausteine zur sachlichen Aufklärung und schlägt nach Schwellwert (z. B. >150 € Tischpreis) automatisch die Kulanzoption zur Freigabe vor.",
+    workflow: "Sie hinterlegen Ihre eigenen Richtlinien zu Naturmaterialien einmal in der Wissensbasis. Pallanx zieht diese Richtlinien per RAG in jede Fallanalyse ein und stellt der sachlichen Aufklärung eine kulante Rücknahme-Option gegenüber — die Freigabe-Anfrage geht je nach Rabatthöhe automatisch an die richtige Rolle.",
   },
   {
     icon: Wrench,
@@ -75,7 +75,7 @@ const examples = [
     situation: "Der von Ihnen beauftragte Monteur hat eine Esstischverschraubung über Kreuz nicht festgezogen — der Tisch wackelt.",
     law: "Der Aufbau ist ein Werkvertrag nach §§ 631 ff. BGB. Bei einem Werkmangel hat die Kundin Anspruch auf kostenfreie Nachbesserung (§ 635 BGB), unabhängig davon, ob ein Subunternehmer beauftragt war.",
     fair: "Übernehmen Sie die Verantwortung sofort und ohne Verweis auf den Monteur. Vereinbaren Sie binnen 7 Tagen einen Nachbesserungstermin. Regress beim Monteur regeln Sie intern — die Kundin sieht nur Sie als Ansprechpartner.",
-    workflow: "Pallanx unterscheidet Kauf- und Werkvertragsfälle, verknüpft den Monteurseinsatz mit dem Vorgang und stellt für interne Regressansprüche eine separate Dokumentationsspur bereit.",
+    workflow: "Sie beschreiben den Aufbaufehler im Situationsfeld; die KI ordnet den Fall dem Werkvertragsrecht (§§ 631 ff. BGB) zu und formuliert die Kundenkommunikation entsprechend. Notizen zum beauftragten Monteur halten Sie im Notizfeld des Vorgangs fest — sie bleiben Teil der Fallhistorie für einen späteren internen Regress.",
   },
 ];
 
@@ -252,19 +252,19 @@ export default function Moebelhandel() {
           <Card>
             <CardHeader><div className="flex items-center gap-2"><FileText className="w-5 h-5 text-primary" /><CardTitle className="text-base">Rechtssichere Vorlagen</CardTitle></div></CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              Vorlagen für Nacherfüllung, Wahlrechtsangebot, Fristsetzung und Rücknahme — abgestimmt auf §§ 434/437/439 BGB und auf typische Möbel-Mangelarten. Sie wählen, Pallanx formuliert.
+              Zu jedem Fall erzeugt die KI einen vorformulierten Antworttext je Lösungsoption — abgestimmt auf §§ 434/437/439 BGB, Ihre eigenen Richtlinien und die konkrete Schadensbeschreibung. Mitarbeitende übernehmen den Text oder passen ihn an.
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><div className="flex items-center gap-2"><Clock className="w-5 h-5 text-primary" /><CardTitle className="text-base">Fristen-Tracker</CardTitle></div></CardHeader>
+            <CardHeader><div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" /><CardTitle className="text-base">Rollen- & Limit-basierte Freigaben</CardTitle></div></CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              14-Tage-Rückmeldefristen, 4–6-Wochen-Nacherfüllung, 12-Monats-Beweislastumkehr nach § 477 BGB: Pallanx erkennt den passenden Rahmen automatisch und erinnert Sie, bevor Sie in Verzug geraten.
+              Sie definieren Rabatt- und Erstattungsgrenzen je Rolle (Sachbearbeitung, Manager, Leitung). Überschreitet eine Option das Limit, leitet Pallanx automatisch eine Freigabe-Anfrage an die zuständige Rolle ein — inklusive KI-Begründung und Kontext.
             </CardContent>
           </Card>
           <Card>
             <CardHeader><div className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-primary" /><CardTitle className="text-base">Faire Lösungen pro Fall</CardTitle></div></CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              Statt Standardabsagen schlägt Pallanx auf Basis Ihrer Richtlinien die korrekte und kundenfreundlichste Lösung vor — Reparatur, Ersatzteil, Kulanz-Rücknahme — und dokumentiert die Entscheidung revisionssicher.
+              Statt Standardabsagen erhalten Sie drei abgestufte Vorschläge — konservativ, mittel, kulant — mit Begründung und Kundentext. Jede Entscheidung samt Versionen wird lückenlos in der Fallhistorie protokolliert.
             </CardContent>
           </Card>
         </div>
