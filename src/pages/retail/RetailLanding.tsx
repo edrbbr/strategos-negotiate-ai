@@ -9,6 +9,37 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Seo } from "@/components/Seo";
 import { utmForSubmit } from "@/lib/utm";
+import { Helmet } from "react-helmet-async";
+
+const RETAIL_JSONLD = {
+  product: {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Pallanx Retail Shield",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    description:
+      "DSGVO-konformer AI-Verhandlungsassistent für Reklamations- und Kulanzfälle im Einzelhandel. Rollen- und Limit-basierte Freigaben, RAG auf eigene Richtlinien, Versionshistorie pro Fall.",
+    url: "https://pallanx.com/retail",
+    offers: {
+      "@type": "Offer",
+      priceCurrency: "EUR",
+      price: "0",
+      availability: "https://schema.org/InStock",
+      url: "https://pallanx.com/retail#kontakt",
+      description: "Demo auf Anfrage",
+    },
+    provider: { "@type": "Organization", name: "Pallanx", url: "https://pallanx.com/" },
+  },
+  breadcrumb: {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Start", item: "https://pallanx.com/" },
+      { "@type": "ListItem", position: 2, name: "Retail Shield", item: "https://pallanx.com/retail" },
+    ],
+  },
+};
 
 export default function RetailLanding() {
   const { toast } = useToast();
@@ -38,6 +69,10 @@ export default function RetailLanding() {
   return (
     <div className="min-h-screen bg-background">
       <Seo title="Pallanx Retail Shield — AI für Reklamationsentscheidungen" description="DSGVO-konformer AI-Verhandlungsassistent für Reklamations- und Kulanzfälle im Einzelhandel. Marge schützen, Mitarbeitende entlasten, faire Entscheidungen." path="/retail" />
+      <Helmet>
+        <script type="application/ld+json">{JSON.stringify(RETAIL_JSONLD.product)}</script>
+        <script type="application/ld+json">{JSON.stringify(RETAIL_JSONLD.breadcrumb)}</script>
+      </Helmet>
       <header className="border-b bg-card/50 backdrop-blur">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/retail" className="flex items-center gap-2">

@@ -6,6 +6,40 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePlans } from "@/hooks/usePlans";
 import { PlansGrid } from "@/components/pricing/PlanCard";
 import { Seo } from "@/components/Seo";
+import { Helmet } from "react-helmet-async";
+
+const PRICING_JSONLD = {
+  product: {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: "Pallanx",
+    description:
+      "AI-Verhandlungsassistent für Selbständige und Freelancer. Free, Single-Case-Pass, Pro und Elite.",
+    brand: { "@type": "Brand", name: "Pallanx" },
+    offers: {
+      "@type": "AggregateOffer",
+      priceCurrency: "EUR",
+      lowPrice: "0",
+      highPrice: "490",
+      offerCount: "4",
+      url: "https://pallanx.com/preise",
+      offers: [
+        { "@type": "Offer", name: "Free", price: "0", priceCurrency: "EUR", url: "https://pallanx.com/preise" },
+        { "@type": "Offer", name: "Single-Case-Pass", price: "29", priceCurrency: "EUR", url: "https://pallanx.com/preise" },
+        { "@type": "Offer", name: "Pro (monatlich)", price: "49", priceCurrency: "EUR", url: "https://pallanx.com/preise" },
+        { "@type": "Offer", name: "Pro (jährlich)", price: "490", priceCurrency: "EUR", url: "https://pallanx.com/preise" },
+      ],
+    },
+  },
+  breadcrumb: {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Start", item: "https://pallanx.com/" },
+      { "@type": "ListItem", position: 2, name: "Preise", item: "https://pallanx.com/preise" },
+    ],
+  },
+};
 
 const SkeletonCard = () => (
   <div className="p-8 border border-border/40 bg-card/40 space-y-6">
@@ -40,6 +74,10 @@ const Pricing = () => {
         description="Free, Single-Case-Pass (29 €), Pro (49 €/Monat oder 490 €/Jahr) und Elite auf Anfrage. Kein Risiko, kein Abo-Zwang."
         path="/preise"
       />
+      <Helmet>
+        <script type="application/ld+json">{JSON.stringify(PRICING_JSONLD.product)}</script>
+        <script type="application/ld+json">{JSON.stringify(PRICING_JSONLD.breadcrumb)}</script>
+      </Helmet>
       <PublicHeader active="preise" />
 
       <section className="container py-20 text-center">
