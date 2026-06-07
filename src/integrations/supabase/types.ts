@@ -1502,6 +1502,66 @@ export type Database = {
         }
         Relationships: []
       }
+      magazin_articles: {
+        Row: {
+          audience: string | null
+          author: string
+          category: string
+          content_md: string
+          created_at: string
+          excerpt: string
+          faq: Json
+          hero_image_url: string | null
+          id: string
+          meta_description: string
+          meta_title: string | null
+          published_at: string | null
+          reading_minutes: number
+          slug: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          audience?: string | null
+          author?: string
+          category: string
+          content_md: string
+          created_at?: string
+          excerpt: string
+          faq?: Json
+          hero_image_url?: string | null
+          id?: string
+          meta_description: string
+          meta_title?: string | null
+          published_at?: string | null
+          reading_minutes?: number
+          slug: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          audience?: string | null
+          author?: string
+          category?: string
+          content_md?: string
+          created_at?: string
+          excerpt?: string
+          faq?: Json
+          hero_image_url?: string | null
+          id?: string
+          meta_description?: string
+          meta_title?: string | null
+          published_at?: string | null
+          reading_minutes?: number
+          slug?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       negotiation_strategies: {
         Row: {
           created_at: string
