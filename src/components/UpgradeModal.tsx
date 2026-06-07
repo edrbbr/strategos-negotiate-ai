@@ -126,6 +126,10 @@ export const UpgradeModal = ({ open, onOpenChange }: UpgradeModalProps) => {
           <img
             src={pallanxLogo}
             alt="PALLANX"
+            loading="lazy"
+            decoding="async"
+            width={56}
+            height={56}
             className="w-14 h-14 mx-auto mb-6 object-contain"
           />
           <h2 className="font-serif italic text-3xl mb-4">
