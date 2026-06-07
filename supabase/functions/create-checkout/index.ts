@@ -31,6 +31,8 @@ Deno.serve(async (req) => {
       returnUrl,
       environment,
       discountCode,
+      utm,
+      referrer,
     } = body as {
       priceId?: string;
       quantity?: number;
@@ -38,6 +40,8 @@ Deno.serve(async (req) => {
       returnUrl?: string;
       environment?: StripeEnv;
       discountCode?: string;
+      utm?: Record<string, string>;
+      referrer?: string;
     };
 
     if (!priceId || !/^[a-zA-Z0-9_-]+$/.test(priceId)) {
@@ -196,6 +200,14 @@ Deno.serve(async (req) => {
             discountCodeId: appliedDiscountCodeId,
             discountCode: appliedDiscountCode ?? "",
           }),
+          ...(utm?.utm_source ? { utm_source: String(utm.utm_source).slice(0, 200) } : {}),
+          ...(utm?.utm_medium ? { utm_medium: String(utm.utm_medium).slice(0, 200) } : {}),
+          ...(utm?.utm_campaign ? { utm_campaign: String(utm.utm_campaign).slice(0, 200) } : {}),
+          ...(utm?.utm_term ? { utm_term: String(utm.utm_term).slice(0, 200) } : {}),
+          ...(utm?.utm_content ? { utm_content: String(utm.utm_content).slice(0, 200) } : {}),
+          ...(utm?.gclid ? { gclid: String(utm.gclid).slice(0, 200) } : {}),
+          ...(utm?.fbclid ? { fbclid: String(utm.fbclid).slice(0, 200) } : {}),
+          ...(referrer ? { referrer: String(referrer).slice(0, 500) } : {}),
         },
         ...(isRecurring && {
           subscription_data: {
@@ -204,6 +216,10 @@ Deno.serve(async (req) => {
               ...(appliedDiscountCodeId && {
                 discountCodeId: appliedDiscountCodeId,
               }),
+              ...(utm?.utm_source ? { utm_source: String(utm.utm_source).slice(0, 200) } : {}),
+              ...(utm?.utm_medium ? { utm_medium: String(utm.utm_medium).slice(0, 200) } : {}),
+              ...(utm?.utm_campaign ? { utm_campaign: String(utm.utm_campaign).slice(0, 200) } : {}),
+              ...(utm?.gclid ? { gclid: String(utm.gclid).slice(0, 200) } : {}),
             },
           },
         }),

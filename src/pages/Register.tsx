@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Logo } from "@/components/Logo";
 import { Seo } from "@/components/Seo";
 import { track } from "@/lib/analytics";
+import { supabase } from "@/integrations/supabase/client";
+import { utmForSubmit } from "@/lib/utm";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -54,6 +56,13 @@ const Register = () => {
       return;
     }
     track("register_completed", { method: "email", has_prefill: !!sessionStorage.getItem("pallanx_prefill") });
+    // Server-side conversion event (best-effort, never blocks navigation)
+    try {
+      const { utm, referrer } = utmForSubmit();
+      void supabase.functions.invoke("track-conversion", {
+        body: { event_name: "register", email, properties: { flow: "b2c", intended_plan: intendedPlan ?? null }, utm, referrer },
+      });
+    } catch { /* ignore */ }
     navigate(`/check-email?email=${encodeURIComponent(email)}`);
   };
 

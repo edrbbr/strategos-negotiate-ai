@@ -5,6 +5,7 @@ import {
 } from "@stripe/react-stripe-js";
 import { getStripe, getStripeEnvironment } from "@/lib/stripe";
 import { supabase } from "@/integrations/supabase/client";
+import { utmForSubmit } from "@/lib/utm";
 
 interface StripeEmbeddedCheckoutProps {
   priceId: string;
@@ -22,6 +23,7 @@ export const StripeEmbeddedCheckoutComponent = forwardRef<
   ref,
 ) {
   const fetchClientSecret = async (): Promise<string> => {
+    const { utm, referrer } = utmForSubmit();
     const { data, error } = await supabase.functions.invoke("create-checkout", {
       body: {
         priceId,
@@ -30,6 +32,8 @@ export const StripeEmbeddedCheckoutComponent = forwardRef<
         returnUrl,
         environment: getStripeEnvironment(),
         ...(discountCode ? { discountCode } : {}),
+        utm,
+        referrer,
       },
     });
     if (error || !data?.clientSecret) {

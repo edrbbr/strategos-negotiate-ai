@@ -16,7 +16,8 @@ Deno.serve(async (req) => {
     if (!userRes?.user) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const user = userRes.user;
 
-    const { company_name, industry, store_count, full_name } = await req.json();
+    const reqBody = await req.json();
+    const { company_name, industry, store_count, full_name, utm, referrer } = reqBody ?? {};
     if (!company_name || !full_name) return new Response(JSON.stringify({ error: "missing" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -40,6 +41,21 @@ Deno.serve(async (req) => {
     });
     await svc.from("business_settings").insert({ business_account_id: acc.id });
     await svc.from("business_billing").insert({ business_account_id: acc.id, billing_model: "invoice" });
+
+    // Server-side conversion event (best-effort)
+    try {
+      await svc.from("conversion_events").insert({
+        event_name: "register",
+        user_id: user.id,
+        email: user.email ?? null,
+        business_account_id: acc.id,
+        properties: { flow: "b2b", company_name: String(company_name).slice(0, 200), industry: industry ? String(industry).slice(0, 100) : null },
+        utm: (utm && typeof utm === "object") ? utm : {},
+        user_agent: req.headers.get("user-agent")?.slice(0, 500) ?? null,
+      });
+    } catch (logErr) {
+      console.warn("conversion_events insert failed:", logErr);
+    }
 
     return new Response(JSON.stringify({ ok: true, business_account_id: acc.id }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {

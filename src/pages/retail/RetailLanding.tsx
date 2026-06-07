@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Seo } from "@/components/Seo";
+import { utmForSubmit } from "@/lib/utm";
 
 export default function RetailLanding() {
   const { toast } = useToast();
@@ -22,7 +23,10 @@ export default function RetailLanding() {
     }
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("b2b-lead-submit", { body: form });
+      const { utm, referrer } = utmForSubmit();
+      const { data, error } = await supabase.functions.invoke("b2b-lead-submit", {
+        body: { ...form, utm, referrer },
+      });
       if (error || (data as any)?.error) throw new Error(error?.message || (data as any)?.error);
       setSent(true);
       toast({ title: "Vielen Dank!", description: "Wir melden uns innerhalb von 24 Stunden." });

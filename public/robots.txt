@@ -12,5 +12,13 @@ Allow: /
 
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /app
+Disallow: /retail/app
+Disallow: /case
+Disallow: /passwort-neu
+Disallow: /passwort-vergessen
+Disallow: /check-email
+Disallow: /unsubscribe
 
 Sitemap: https://pallanx.com/sitemap.xml

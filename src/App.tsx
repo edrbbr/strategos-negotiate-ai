@@ -48,8 +48,16 @@ import AdminB2B from "./pages/admin/AdminB2B";
 import AdminB2BLeads from "./pages/admin/AdminB2BLeads";
 import AdminB2BAccount from "./pages/admin/AdminB2BAccount";
 import AdminB2BTickets from "./pages/admin/AdminB2BTickets";
+import { useUtmCapture, useHtmlLang } from "@/hooks/useUtmCapture";
 
 const queryClient = new QueryClient();
+
+/** Mount-only effects (UTM capture + <html lang>) that need to live inside the Router. */
+const RootEffects = () => {
+  useUtmCapture();
+  useHtmlLang("de");
+  return null;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -60,6 +68,7 @@ const App = () => (
         <AuthProvider>
           <ThemeProvider>
             <PaymentTestModeBanner />
+            <RootEffects />
             <Routes>
             {/* Public */}
             <Route path="/" element={<Landing />} />
