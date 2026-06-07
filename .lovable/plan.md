@@ -1,98 +1,83 @@
+# Block 2a — Landingpage /retail/moebelhandel (DE)
 
-# BLOCK 1 — Technisches SEO-Fundament + Tracking-DB
+Nur diese eine Seite als Vorlage. Kfz und Elektronik erst nach Freigabe. Keine AT/CH-Routen.
 
-Nur die unten gelisteten Änderungen. Kein Content, kein Plausible, kein aktives gtag, keine Branchen-Seiten.
+## Route & Datei
+- Neue Datei: `src/pages/retail/branchen/Moebelhandel.tsx`
+- Neue Route in `src/App.tsx`: `/retail/moebelhandel` (öffentlich, ohne RetailLayout-Login-Chrome — nutzt eigenes Marketing-Layout analog `RetailLanding`)
+- Aufnahme in `scripts/generate-sitemap.ts` (Priority 0.8, changefreq monthly)
 
-## 1. Helmet sauber aktivieren
-- `react-helmet-async` ist bereits installiert und `HelmetProvider` ist bereits in `src/main.tsx` aktiv → ✅ nichts zu tun, kurz verifizieren.
+## SEO-Kopf (react-helmet-async)
+- `<title>`: "Reklamationen im Möbelhandel rechtssicher & fair bearbeiten | Pallanx"
+- `<meta description>`: ~155 Zeichen, Möbelhandel + BGB §§ 437/439 + faire Abwicklung
+- `<link rel="canonical">` auf `https://pallanx.com/retail/moebelhandel`
+- OpenGraph (title, description, url, type=website)
+- `<html lang="de">` via `useHtmlLang('de')`
+- JSON-LD: **FAQPage** (6 Fragen) + **BreadcrumbList** (Home › Branchen › Möbelhandel)
 
-## 2. Canonical & og:url aus `index.html` entfernen
-- `<link rel="canonical">` und `<meta property="og:url">` aus `index.html` löschen.
-- Sitewide `og:title/description/image` bleiben als Fallback für JS-lose Social-Crawler.
-- Per-Route Canonical/og:url werden über die bestehende `<Seo>`-Komponente gesetzt; ich ergänze `<Seo>` auf den öffentlichen Routen, denen er noch fehlt (`/preise`, `/login`, `/register`, `/datenschutz`, `/retail/login`, `/retail/register`).
+## Inhalt (~1.500 Wörter, Tonalität "rechtskonform & fair")
 
-## 3. `<html lang>` dynamisch
-- Neuer Hook `useHtmlLang(lang = "de")`, aufgerufen in `App.tsx` (Default `de`). Setzt `document.documentElement.lang`. Vorbereitet für spätere `de-AT`/`de-CH`-Routen, ohne sie heute zu schalten.
+Durchgehende Linie: Nicht "wie wehre ich Kunden ab", sondern "wie reagiere ich rechtssicher UND fair, so dass Kunde und Händler beide profitieren". Sprache: "so bearbeiten Sie das korrekt", "so dokumentieren Sie sauber", "fair und gesetzeskonform".
 
-## 4. 404 = noindex
-- `NotFound.tsx`: `<Helmet><meta name="robots" content="noindex,nofollow" /></Helmet>`.
+1. **Hero**
+   - H1: "Reklamationen im Möbelhandel — rechtssicher und fair in Minuten bearbeitet"
+   - Subline (2–3 Sätze): Problemraum + Pallanx als strukturierte Hilfe
+   - Primär-CTA "Kostenlose Demo anfragen" → `/retail/register?utm_source=lp&utm_medium=organic&utm_campaign=moebelhandel`
+   - Sekundär "Wie es funktioniert" (Anchor)
 
-## 5. Sitemap-Generator
-- Neue Datei `scripts/generate-sitemap.ts` (Template aus den Knowledge-Files), `BASE_URL = "https://pallanx.com"`.
-- Routen-Liste (nur was existiert): `/`, `/preise`, `/login`, `/register`, `/retail`, `/retail/login`, `/retail/register`, `/datenschutz`.
-- `/impressum` existiert **nicht** als Route → bewusst weggelassen, kommt rein wenn die Seite gebaut ist.
-- `package.json` Hooks: `"predev": "bunx tsx scripts/generate-sitemap.ts"`, `"prebuild": "bunx tsx scripts/generate-sitemap.ts"`.
-- Bestehende statische `public/sitemap.xml` wird vom Generator-Output überschrieben.
+2. **Problemkontext (~200 Wörter)**
+   - EHI-Retourenkostenrahmen (10–20 €/Retoure), Möbel-Spezifika: Speditionsversand, Sperrgut, Aufbau, Kratzer/Transportschäden
+   - Wer haftet wann (Spedition vs. Händler vs. Hersteller) — sachlich
 
-## 6. `robots.txt` erweitern
-- Bestehende `User-agent:`-Blöcke beibehalten.
-- Im `User-agent: *`-Block hinzufügen:
-  ```
-  Disallow: /admin
-  Disallow: /app
-  Disallow: /retail/app
-  Disallow: /case
-  Disallow: /passwort-neu
-  Disallow: /passwort-vergessen
-  Disallow: /check-email
-  Disallow: /unsubscribe
-  ```
-- `Sitemap: https://pallanx.com/sitemap.xml` ist bereits vorhanden → bleibt.
+3. **Rechtsrahmen kompakt (~250 Wörter)**
+   - BGB § 434 Sachmangel, § 437 Rechte des Käufers, § 439 Nacherfüllung (Wahlrecht des Käufers), § 441 Minderung, § 323 Rücktritt
+   - § 477 BGB Beweislastumkehr 12 Monate (B2C)
+   - Aufbau-/Montageleistung als Werkvertrag §§ 633 ff.
+   - Hinweis: Information, kein Rechtsrat
 
-Hinweis: dein Plan nennt `/reset-password`, die tatsächliche Route heißt `/passwort-neu` (+ `/passwort-vergessen`). Ich blockiere die tatsächlichen Pfade.
+4. **5 konkrete Reklamationsbeispiele Möbel (~500 Wörter, je ~100)**
+   Jeweils Struktur: *Sachverhalt → Rechtliche Einordnung → Faire & korrekte Bearbeitung → Pallanx-Workflow*
+   - **Transportschaden Sofa (Kratzer am Bezug)**: Nacherfüllung anbieten (Reparatur durch Polsterer ODER Austausch des Bezugs; Käufer wählt)
+   - **Quietschende Federung Boxspringbett nach 8 Monaten**: Beweislastumkehr greift; großzügige Prüfung vor Ort, dokumentierte Nacherfüllung
+   - **Schubladenfront eines Kleiderschranks gelöst (4 Wochen)**: Mangel offensichtlich, schnelle Ersatzteillieferung statt Diskussion
+   - **Farbabweichung Massivholz-Tisch (natürliche Maserung)**: Aufklärung mit Belegfotos aus Produktbeschreibung; bei Unzumutbarkeit kulant Rücknahme anbieten
+   - **Aufbaufehler durch beauftragten Monteur (Werkvertrag)**: §§ 634/635 BGB, kostenfreie Nachbesserung, Verantwortung übernehmen
+   Jeweils geschlossen mit: "Pallanx legt dafür automatisch Vorgang, Frist, Doku und Kundenkommunikation an."
 
-## 7. UTM-Capture-Hook
-- Neue Datei `src/lib/utm.ts`:
-  - `captureUtmFromUrl()` — liest `utm_source/medium/campaign/term/content` + `gclid` + `fbclid` aus `window.location`, schreibt sie mit 30-Tage-Ablauf in `localStorage` unter `pallanx_utm`.
-  - `getStoredUtm()` — gibt das gespeicherte Objekt zurück oder `{}` wenn abgelaufen.
-- Neuer Hook `src/hooks/useUtmCapture.ts` → ruft `captureUtmFromUrl()` einmal auf Mount.
-- Aufruf in `src/App.tsx` einmal innerhalb des Routers (z. B. in einer kleinen `RootEffects`-Komponente).
-- `RetailLanding` (Lead-Formular) und `Register`/`RetailRegister` hängen `getStoredUtm()` an ihren Submit-Payload an.
+5. **Value Proposition / Features (~200 Wörter)**
+   - 3-Spalten-Block: Rechtssichere Vorlagen · Fristen-Tracker (14/30 Tage Nacherfüllung) · Kunden-Portal mit fairen Lösungen
+   - Statistik-Zeile aus GTM (EHI-Zahlen, Sparpotenzial)
 
-## 8. DB-Erweiterung + serverseitige Conversion-Events
+6. **Interne Verlinkung (~80 Wörter)**
+   - Verweise (Text & Links) auf kommende Branchen: "Auch relevant: Kfz-Werkstatt (in Kürze), Elektronikhandel (in Kürze)" — als reiner Text, **keine Dead-Links**, keine Route. Wenn Routen vorhanden sind, werden sie hier später ergänzt.
+   - Link zu `/retail` (Übersicht) und `/preise`
 
-### 8a. Migration
-- `b2b_leads`: Spalten `utm_source text`, `utm_medium text`, `utm_campaign text`, `utm_term text`, `utm_content text`, `gclid text`, `fbclid text`, `referrer text` ergänzen.
-- `analytics_events` hat bereits `properties jsonb` + `path`. Wir ergänzen `utm` separat NICHT — UTM wandert in `properties`. Spalte `user_agent text` ergänzen (für serverseitige Events ohne JS).
-- Neue Tabelle `conversion_events` (server-side, append-only, getrennt von Client-`analytics_events`):
-  - `id uuid pk`, `event_name text not null` (`b2b_lead` | `register` | `checkout_success`), `user_id uuid null`, `email text null`, `business_account_id uuid null`, `properties jsonb default '{}'`, `utm jsonb default '{}'`, `created_at timestamptz default now()`.
-  - RLS: nur Admins lesen (`has_role(auth.uid(),'admin')`), Insert nur per Service-Role.
-  - GRANTs: `service_role` ALL, `authenticated` SELECT (RLS gated).
+7. **FAQ (6 Fragen, ~250 Wörter)** — gerendert + identisch im FAQPage JSON-LD
+   - Was muss ich bei einem Transportschaden tun?
+   - Wer hat das Wahlrecht bei der Nacherfüllung — Kunde oder Händler?
+   - Welche Fristen gelten für die Nacherfüllung?
+   - Wann greift die Beweislastumkehr bei Möbeln?
+   - Wie gehe ich mit Reklamationen am Aufbauservice um?
+   - Wann ist eine Rücknahme statt Reparatur fair?
 
-### 8b. Edge Functions
-- `b2b-lead-submit/index.ts`: nimmt zusätzlich `utm` (Objekt) + `referrer` aus dem Body, speichert sie in `b2b_leads`, schreibt parallel ein `conversion_events`-Insert (`event_name='b2b_lead'`).
-- `b2b-register-account/index.ts`: nach erfolgreicher Account-Provisionierung ein `conversion_events`-Insert (`event_name='register'`, `properties.flow='b2b'`). UTM kommt aus dem Body (Frontend hängt an).
-- `payments-webhook/index.ts`: bei `checkout.session.completed` zusätzlich `conversion_events`-Insert (`event_name='checkout_success'`, `properties.plan_id, billing_cycle, amount_cents, currency`). UTM aus Stripe-Session-Metadata wenn vorhanden.
-- `create-checkout/index.ts`: nimmt `utm` im Body entgegen und packt es in `session.metadata`, damit der Webhook es zurücklesen kann.
+8. **CTA-Footer**
+   - "Demo anfragen" → `/retail/register?utm_source=lp&utm_medium=organic&utm_campaign=moebelhandel`
 
-### 8c. Frontend
-- `Register.tsx`, `RetailRegister.tsx` und `RetailLanding.tsx` hängen `getStoredUtm()` an die Edge-Function-Aufrufe.
-- `useStripeCheckout.tsx` hängt `getStoredUtm()` an den `create-checkout`-Call.
+## Komponenten / technisch
+- Eigenständige Datei, kein neues Design-System. Nutzt vorhandene shadcn-Components (`Button`, `Card`, `Accordion` für FAQ), Tailwind-Tokens.
+- Tonalitätsreview: Lektorat-Pass über alle Beispiele auf "fair statt abwehrend"; keine Formulierungen wie "abwimmeln", "Kunden zurückweisen", "Reklamation ablehnen" außer wenn explizit rechtlich unzulässig.
+- UTM-Capture-Hook ist bereits aktiv; CTA-Links tragen Default-UTM als Fallback.
 
-## 9. gtag-Vorbereitung (inaktiv)
-- `.env` bekommt keinen Eintrag (Lovable-managed). Stattdessen Konstante `VITE_ENABLE_GTAG` lesen über `import.meta.env.VITE_ENABLE_GTAG === "true"`.
-- Neue Datei `src/lib/gtag.ts` mit `initGtag()` und `trackGtagConversion(label, value?)`, geguarded durch das Flag. Wird heute nirgendwo aufgerufen, ist aber bereit für später.
-- `index.html` bekommt **keinen** gtag-Snippet — wird nachgerüstet, wenn Ads-ID da ist.
+## Nicht enthalten
+- Kfz-Werkstatt, Elektronikhandel (warten auf Freigabe)
+- AT/CH-Routen, keine "Coming soon"-Stubs
+- Magazin, Plausible, aktives gtag, SEA-Kampagnen
+- Schema.org Organization/Product (separat)
 
-## 10. Was NICHT in Block 1 gebaut wird
-- Keine `/retail/moebelhandel`, `/retail/kfz-werkstatt`, `/retail/elektronikhandel`.
-- Kein `/magazin`, keine `magazin_articles`-Tabelle.
-- Kein Plausible-Snippet.
-- Kein scharfer gtag.
-- Keine Schema.org-Erweiterungen für `/retail` oder `/preise`.
-
----
-
-## Technische Details (für späteres Audit)
-
-**Reihenfolge bei Umsetzung** (wegen abhängiger Migration):
-1. Migration für `b2b_leads`-Spalten + `conversion_events`-Tabelle → Approval & Run.
-2. Alle Frontend-Änderungen + Edge-Function-Änderungen + Sitemap-Generator + robots.txt + `index.html`-Bereinigung in einem Build.
-3. Edge Functions werden automatisch deployed.
-
-**Risiken / Hinweise:**
-- Sitemap-Generator-Hook (`predev`) löst beim ersten Lauf einen kurzen Build-Spike aus.
-- `conversion_events` ist intentional **append-only** und enthält nur nicht-PII-Aggregat-Properties; E-Mails werden gehasht wenn nötig (vorerst plain, da intern).
-- UTM-Cookie/-localStorage ist technisch notwendig (Funnel-Zuordnung) → fällt unter berechtigtes Interesse, kein Consent-Banner-Eintrag nötig solange nichts an Dritte geht.
-
-Nach Build 1: ich melde mich mit Test-Checkliste (Sitemap-URL, robots-Test, Lead-Submit mit `?utm_source=test`-Param, DB-Eintrag in `conversion_events`). Dann freigibst du Block 2.
+## Nach Build: Test-Checkliste
+- Route `/retail/moebelhandel` lädt, `<title>` und Canonical korrekt im DOM
+- FAQPage + BreadcrumbList JSON-LD valide (Rich-Results-Test)
+- Sitemap enthält neue URL
+- CTA setzt UTM in localStorage und übermittelt sie an `b2b-lead-submit` / Register
+- Mobile-Layout (393px) sauber
+- Wortzahl ≥ 1.400 (Ziel ~1.500)

@@ -32,6 +32,7 @@ import { CookieConsent } from "@/components/CookieConsent";
 import RetailLanding from "./pages/retail/RetailLanding";
 import RetailLogin from "./pages/retail/RetailLogin";
 import RetailRegister from "./pages/retail/RetailRegister";
+import Moebelhandel from "./pages/retail/branchen/Moebelhandel";
 import { RetailLayout } from "@/components/retail/RetailLayout";
 import { RetailProtectedRoute } from "@/components/retail/RetailProtectedRoute";
 import RetailDashboard from "./pages/retail/app/RetailDashboard";
@@ -88,6 +89,7 @@ const App = () => (
             <Route path="/retail" element={<RetailLanding />} />
             <Route path="/retail/login" element={<RetailLogin />} />
             <Route path="/retail/register" element={<RetailRegister />} />
+            <Route path="/retail/moebelhandel" element={<Moebelhandel />} />
 
             {/* Retail Shield app (protected) */}
             <Route path="/retail/app" element={<RetailProtectedRoute><RetailLayout /></RetailProtectedRoute>}>
