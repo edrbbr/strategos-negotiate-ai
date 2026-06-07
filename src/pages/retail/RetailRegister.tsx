@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { utmForSubmit } from "@/lib/utm";
 
 export default function RetailRegister() {
   const { signUpWithEmail, isAuthenticated } = useAuth();
@@ -16,8 +17,9 @@ export default function RetailRegister() {
   const [loading, setLoading] = useState(false);
 
   async function provisionTenant() {
+    const { utm, referrer } = utmForSubmit();
     const { data, error } = await supabase.functions.invoke("b2b-register-account", {
-      body: { company_name: f.company_name, industry: f.industry, store_count: f.store_count ? Number(f.store_count) : undefined, full_name: f.full_name },
+      body: { company_name: f.company_name, industry: f.industry, store_count: f.store_count ? Number(f.store_count) : undefined, full_name: f.full_name, utm, referrer },
     });
     if (error || (data as any)?.error) throw new Error(error?.message || (data as any)?.error);
   }
