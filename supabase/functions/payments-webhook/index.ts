@@ -17,6 +17,33 @@ function readableId(item: any): string {
 }
 
 async function handleCheckoutCompleted(session: any, env: StripeEnv) {
+  // Conversion-event log (fires for ANY paid checkout — subscription or one-time)
+  if (session.payment_status === "paid") {
+    try {
+      const meta = session.metadata ?? {};
+      const utm: Record<string, string> = {};
+      for (const k of ["utm_source","utm_medium","utm_campaign","utm_term","utm_content","gclid","fbclid"] as const) {
+        if (typeof meta[k] === "string" && meta[k]) utm[k] = meta[k];
+      }
+      await getSupabase().from("conversion_events").insert({
+        event_name: "checkout_success",
+        user_id: meta.userId ?? null,
+        email: session.customer_details?.email ?? session.customer_email ?? null,
+        properties: {
+          mode: session.mode,
+          lookup_key: meta.lookupKey ?? null,
+          amount_cents: session.amount_total ?? null,
+          currency: (session.currency ?? "eur").toUpperCase(),
+          stripe_session_id: session.id,
+          environment: env,
+        },
+        utm,
+      });
+    } catch (logErr) {
+      console.warn("conversion_events insert failed:", logErr);
+    }
+  }
+
   // Only handle one-time payment (mode === "payment"); subscriptions are covered separately.
   if (session.mode !== "payment") return;
   if (session.payment_status !== "paid") return;
