@@ -35,6 +35,8 @@ import RetailRegister from "./pages/retail/RetailRegister";
 import Moebelhandel from "./pages/retail/branchen/Moebelhandel";
 import KfzWerkstatt from "./pages/retail/branchen/KfzWerkstatt";
 import Elektronikhandel from "./pages/retail/branchen/Elektronikhandel";
+import MagazinIndex from "./pages/magazin/MagazinIndex";
+import MagazinArticle from "./pages/magazin/MagazinArticle";
 import { RetailLayout } from "@/components/retail/RetailLayout";
 import { RetailProtectedRoute } from "@/components/retail/RetailProtectedRoute";
 import RetailDashboard from "./pages/retail/app/RetailDashboard";
@@ -94,6 +96,10 @@ const App = () => (
             <Route path="/retail/moebelhandel" element={<Moebelhandel />} />
             <Route path="/retail/kfz-werkstatt" element={<KfzWerkstatt />} />
             <Route path="/retail/elektronikhandel" element={<Elektronikhandel />} />
+
+            {/* Magazin */}
+            <Route path="/magazin" element={<MagazinIndex />} />
+            <Route path="/magazin/:slug" element={<MagazinArticle />} />
 
             {/* Retail Shield app (protected) */}
             <Route path="/retail/app" element={<RetailProtectedRoute><RetailLayout /></RetailProtectedRoute>}>
