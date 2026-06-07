@@ -106,7 +106,6 @@ const AdminMagazin = () => {
     setDraft(EMPTY);
   }
 
-  const dialogOpen = editing !== null || draft.title !== "" || draft.slug !== "" || draft.content_md !== "";
   const [openFlag, setOpenFlag] = useState(false);
 
   async function save() {
