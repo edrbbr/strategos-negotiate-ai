@@ -27,6 +27,8 @@ const entries: SitemapEntry[] = [
   { path: "/retail/register",   changefreq: "monthly", priority: "0.6", lastmod: today },
   { path: "/retail/login",      changefreq: "monthly", priority: "0.4", lastmod: today },
   { path: "/retail/moebelhandel", changefreq: "monthly", priority: "0.8", lastmod: today },
+  { path: "/retail/kfz-werkstatt", changefreq: "monthly", priority: "0.8", lastmod: today },
+  { path: "/retail/elektronikhandel", changefreq: "monthly", priority: "0.8", lastmod: today },
 ];
 
 function generateSitemap(items: SitemapEntry[]) {
