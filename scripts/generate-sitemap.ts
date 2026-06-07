@@ -5,6 +5,7 @@
 
 import { writeFileSync } from "fs";
 import { resolve } from "path";
+import { createClient } from "@supabase/supabase-js";
 
 const BASE_URL = "https://pallanx.com";
 
@@ -29,7 +30,31 @@ const entries: SitemapEntry[] = [
   { path: "/retail/moebelhandel", changefreq: "monthly", priority: "0.8", lastmod: today },
   { path: "/retail/kfz-werkstatt", changefreq: "monthly", priority: "0.8", lastmod: today },
   { path: "/retail/elektronikhandel", changefreq: "monthly", priority: "0.8", lastmod: today },
+  { path: "/magazin", changefreq: "weekly", priority: "0.7", lastmod: today },
 ];
+
+// Magazin-Artikel dynamisch nachladen (best effort — Sitemap-Build darf nicht hart fallen).
+async function loadMagazinArticles(): Promise<SitemapEntry[]> {
+  const url = process.env.VITE_SUPABASE_URL;
+  const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) return [];
+  try {
+    const client = createClient(url, key);
+    const { data, error } = await client
+      .from("magazin_articles")
+      .select("slug,updated_at")
+      .eq("status", "published");
+    if (error || !data) return [];
+    return data.map((row: { slug: string; updated_at: string }) => ({
+      path: `/magazin/${row.slug}`,
+      changefreq: "monthly" as const,
+      priority: "0.7",
+      lastmod: row.updated_at?.slice(0, 10) ?? today,
+    }));
+  } catch {
+    return [];
+  }
+}
 
 function generateSitemap(items: SitemapEntry[]) {
   const urls = items.map((e) =>
@@ -54,5 +79,9 @@ function generateSitemap(items: SitemapEntry[]) {
   ].join("\n");
 }
 
-writeFileSync(resolve("public/sitemap.xml"), generateSitemap(entries));
-console.log(`sitemap.xml written (${entries.length} entries)`);
+(async () => {
+  const dynamic = await loadMagazinArticles();
+  const all = [...entries, ...dynamic];
+  writeFileSync(resolve("public/sitemap.xml"), generateSitemap(all));
+  console.log(`sitemap.xml written (${all.length} entries, ${dynamic.length} magazin)`);
+})();
