@@ -16,7 +16,8 @@ Deno.serve(async (req) => {
     if (!userRes?.user) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const userId = userRes.user.id;
 
-    const { case_id, final_amount, final_percent, notes } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { case_id, final_amount, final_percent, notes, action } = body || {};
     if (!case_id) return new Response(JSON.stringify({ error: "missing" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -26,9 +27,6 @@ Deno.serve(async (req) => {
     const { data: mem } = await svc.from("business_users").select("role").eq("auth_user_id", userId).eq("business_account_id", c.business_account_id).eq("status","active").maybeSingle();
     if (!mem) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const body = await (async () => { try { return await req.json(); } catch { return {}; } })();
-    // reopen
-    const { action } = body || {};
     if (action === "reopen") {
       if (mem.role !== "manager" && mem.role !== "leitung") {
         return new Response(JSON.stringify({ error: "manager_or_higher_required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
