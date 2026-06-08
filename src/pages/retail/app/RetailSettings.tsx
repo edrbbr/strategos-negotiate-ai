@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { CustomRolesEditor } from "@/components/retail/settings/CustomRolesEditor";
 
 export default function RetailSettings() {
   const { data: m } = useBusinessMembership();
@@ -80,6 +81,9 @@ export default function RetailSettings() {
         </CardContent>
       </Card>
       {canEdit && <Button onClick={save} disabled={saving}>{saving ? "Speichere…" : "Speichern"}</Button>}
+      {m?.business_account_id && (
+        <CustomRolesEditor accountId={m.business_account_id} canEdit={!!canEdit} />
+      )}
     </div>
   );
 }
