@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { IndustryPicker } from "@/components/admin/IndustryPicker";
+import { CustomRolesEditor } from "@/components/retail/settings/CustomRolesEditor";
 
 function eur(n: number) { return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n || 0); }
 
@@ -28,6 +30,11 @@ export default function AdminB2BAccount() {
     const { error } = await (supabase as any).from("business_accounts").update({ status }).eq("id", id!);
     if (error) toast({ title: "Fehler", description: error.message, variant: "destructive" });
     else { toast({ title: "Status geändert" }); qc.invalidateQueries({ queryKey: ["admin-b2b-acc", id] }); }
+  }
+  async function setIndustry(key: string) {
+    const { error } = await (supabase as any).from("business_accounts").update({ industry: key }).eq("id", id!);
+    if (error) toast({ title: "Fehler", description: error.message, variant: "destructive" });
+    else { toast({ title: "Branche aktualisiert" }); qc.invalidateQueries({ queryKey: ["admin-b2b-acc", id] }); }
   }
   async function updateBilling(patch: any) {
     const { error } = await (supabase as any).from("business_billing").update(patch).eq("business_account_id", id!);
@@ -92,6 +99,15 @@ export default function AdminB2BAccount() {
             </div>
           </CardContent>
         </Card>
+
+        <Card><CardHeader><CardTitle>Branche</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <IndustryPicker value={acc.industry ?? ""} onChange={setIndustry} />
+            <p className="text-xs text-muted-foreground">Die Branche steuert den branchenspezifischen Kontext der KI (Rechtsrahmen, typische Fälle).</p>
+          </CardContent>
+        </Card>
+
+        <CustomRolesEditor accountId={id!} canEdit={true} />
       </div>
     </div>
   );
