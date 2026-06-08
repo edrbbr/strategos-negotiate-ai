@@ -493,6 +493,47 @@ export type Database = {
           },
         ]
       }
+      business_custom_roles: {
+        Row: {
+          base_role: string
+          business_account_id: string
+          created_at: string
+          id: string
+          label: string
+          max_discount_percent: number
+          role_key: string
+          updated_at: string
+        }
+        Insert: {
+          base_role?: string
+          business_account_id: string
+          created_at?: string
+          id?: string
+          label: string
+          max_discount_percent?: number
+          role_key: string
+          updated_at?: string
+        }
+        Update: {
+          base_role?: string
+          business_account_id?: string
+          created_at?: string
+          id?: string
+          label?: string
+          max_discount_percent?: number
+          role_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_custom_roles_business_account_id_fkey"
+            columns: ["business_account_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_invoices: {
         Row: {
           amount_cents: number
@@ -758,6 +799,7 @@ export type Database = {
           auth_user_id: string | null
           business_account_id: string
           created_at: string
+          custom_role_key: string | null
           email: string
           full_name: string
           id: string
@@ -770,6 +812,7 @@ export type Database = {
           auth_user_id?: string | null
           business_account_id: string
           created_at?: string
+          custom_role_key?: string | null
           email: string
           full_name: string
           id?: string
@@ -782,6 +825,7 @@ export type Database = {
           auth_user_id?: string | null
           business_account_id?: string
           created_at?: string
+          custom_role_key?: string | null
           email?: string
           full_name?: string
           id?: string
@@ -1317,6 +1361,33 @@ export type Database = {
           stripe_session_id?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      industries: {
+        Row: {
+          ai_context: string | null
+          created_at: string
+          is_active: boolean
+          key: string
+          label: string
+          updated_at: string
+        }
+        Insert: {
+          ai_context?: string | null
+          created_at?: string
+          is_active?: boolean
+          key: string
+          label: string
+          updated_at?: string
+        }
+        Update: {
+          ai_context?: string | null
+          created_at?: string
+          is_active?: boolean
+          key?: string
+          label?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -2127,6 +2198,10 @@ export type Database = {
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
+      }
+      effective_discount_limit: {
+        Args: { _account: string; _user: string }
+        Returns: number
       }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
