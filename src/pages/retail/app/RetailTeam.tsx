@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, UserCircle } from "lucide-react";
+import { useCustomRoles } from "@/hooks/useCustomRoles";
 
 export default function RetailTeam() {
   const { data: m } = useBusinessMembership();
@@ -17,6 +18,7 @@ export default function RetailTeam() {
   const { toast } = useToast();
   const accountId = m?.business_account_id;
   const canManage = m && roleRank[m.role] >= 2;
+  const { data: customRoles = [] } = useCustomRoles(accountId);
 
   const { data: team } = useQuery({
     queryKey: ["business-team", accountId], enabled: !!accountId,
@@ -28,17 +30,19 @@ export default function RetailTeam() {
   });
 
   const [show, setShow] = useState(false);
-  const [f, setF] = useState({ full_name: "", email: "", role: "sachbearbeiter", temp_password: "" });
+  const [f, setF] = useState({ full_name: "", email: "", role: "sachbearbeiter", custom_role_key: "", temp_password: "" });
   const [loading, setLoading] = useState(false);
 
   async function invite(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("b2b-invite-user", { body: f });
+      const payload: any = { full_name: f.full_name, email: f.email, role: f.role, temp_password: f.temp_password };
+      if (f.custom_role_key) payload.custom_role_key = f.custom_role_key;
+      const { data, error } = await supabase.functions.invoke("b2b-invite-user", { body: payload });
       if (error || (data as any)?.error) throw new Error(error?.message || (data as any)?.error);
       toast({ title: "Eingeladen", description: `${f.email} wurde hinzugefügt. Temp-Passwort weitergeben.` });
-      setShow(false); setF({ full_name: "", email: "", role: "sachbearbeiter", temp_password: "" });
+      setShow(false); setF({ full_name: "", email: "", role: "sachbearbeiter", custom_role_key: "", temp_password: "" });
       qc.invalidateQueries({ queryKey: ["business-team"] });
     } catch (err: any) { toast({ title: "Fehler", description: err.message, variant: "destructive" }); }
     finally { setLoading(false); }
@@ -71,6 +75,16 @@ export default function RetailTeam() {
                       <SelectItem value="support_readonly">Support (Lese-Zugriff)</SelectItem>
                     </SelectContent>
                   </Select></div>
+                {customRoles.length > 0 && (
+                  <div><Label>Eigene Rolle (optional, überschreibt Limit)</Label>
+                    <Select value={f.custom_role_key || "__none__"} onValueChange={(v) => setF({ ...f, custom_role_key: v === "__none__" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— keine —</SelectItem>
+                        {customRoles.map((r) => <SelectItem key={r.id} value={r.role_key}>{r.label} ({r.max_discount_percent}%)</SelectItem>)}
+                      </SelectContent>
+                    </Select></div>
+                )}
                 <div><Label>Temporäres Passwort</Label><Input type="text" value={f.temp_password} onChange={(e) => setF({ ...f, temp_password: e.target.value })} required minLength={8} /></div>
               </div>
               <Button type="submit" disabled={loading}>{loading ? "Erstellt..." : "Einladen"}</Button>
