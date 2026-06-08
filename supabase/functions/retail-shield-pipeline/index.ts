@@ -136,9 +136,7 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON nach diesem Schema:
 ${caseRow.situation_text ?? "(keine Beschreibung)"}
 - Notizen: ${caseRow.notes ?? "-"}
 
-Aktueller Mitarbeiter-Rolle: ${userRole}
-
-Erzeuge die 3 Optionen.`;
+Erzeuge eine EINZIGE faire Empfehlung mit Begründung und E-Mail-Entwurf.`;
 
     const userPromptExtra = `\nAktueller Mitarbeiter-Rolle: ${userRole} (eigene Obergrenze ${userLimit}%).`;
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
