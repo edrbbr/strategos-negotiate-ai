@@ -43,6 +43,25 @@ Deno.serve(async (req) => {
     const limits = (settings?.max_discount_limits ?? { sachbearbeiter_max_percent: 10, manager_max_percent: 25, leitung_max_percent: 100 }) as Record<string, number>;
     const kulanzRules = settings?.kulanz_rules ?? "";
 
+    // user's effective limit (built-in or custom role)
+    const { data: effLimit } = await svc.rpc("effective_discount_limit", { _user: userId, _account: caseRow.business_account_id });
+    const userLimit = Number(effLimit ?? 0);
+
+    // custom roles for prompt context
+    const { data: customRoles } = await svc.from("business_custom_roles")
+      .select("role_key,label,max_discount_percent,base_role").eq("business_account_id", caseRow.business_account_id);
+    const customRolesText = (customRoles ?? []).map((r: any) => `- ${r.label} (Key: ${r.role_key}, basiert auf ${r.base_role}): bis ${r.max_discount_percent}%`).join("\n");
+
+    // industry context
+    const { data: account } = await svc.from("business_accounts").select("industry").eq("id", caseRow.business_account_id).maybeSingle();
+    const industryKey = account?.industry ?? null;
+    let industryLabel = "n/a";
+    let industryContext = "";
+    if (industryKey) {
+      const { data: ind } = await svc.from("industries").select("label, ai_context").eq("key", industryKey).maybeSingle();
+      if (ind) { industryLabel = ind.label; industryContext = ind.ai_context ?? ""; }
+    }
+
     const lovableKey = Deno.env.get("LOVABLE_API_KEY")!;
 
     // RAG retrieval (tenant-scoped + global)
@@ -75,39 +94,37 @@ Deno.serve(async (req) => {
       }
     } catch (e) { console.warn("rag error", e); }
 
-    const systemPrompt = `Du bist Pallanx Retail Shield, ein AI-Assistent für Reklamations- und Kulanzentscheidungen im Einzelhandel.
-Du arbeitest mit:
-- firmeninternen Richtlinien (höchste Priorität)
-- verhandlungswissenschaftlichem Wissen aus klassischer Literatur
-- klaren Freigabe-Limits je Rolle
+    const systemPrompt = `Du bist Pallanx Retail Shield — ein AI-Verhandlungsassistent für rechtssichere und FAIRE Reklamationsbearbeitung im Einzelhandel.
 
-Limits dieses Mandanten (in % Rabatt/Erstattung vom Kaufpreis):
+DEINE AUFGABE: Liefere GENAU EINE Empfehlung — den kleinstmöglichen Betrag, mit dem der Kunde sich noch als Gewinner fühlt. Limits sind OBERGRENZEN, nicht Default. Bevorzuge Reparatur > Austausch > Teilgutschrift > Erstattung. Nutze BGB-Hebel und Branchenpraxis.
+
+BRANCHE: ${industryLabel}
+${industryContext ? "Branchenspezifische Leitplanken:\n" + industryContext + "\n" : ""}
+
+ROLLEN & LIMITS (in % vom Kaufpreis):
 - Sachbearbeiter: bis ${limits.sachbearbeiter_max_percent}%
 - Manager: bis ${limits.manager_max_percent}%
 - Leitung: bis ${limits.leitung_max_percent}%
-
-Kulanzregeln des Mandanten:
-${kulanzRules || "(keine spezifischen Regeln hinterlegt — verwende branchenüblichen Standard)"}
+${customRolesText ? "Zusätzliche firmeninterne Rollen:\n" + customRolesText + "\n" : ""}
+Kulanzregeln dieses Mandanten:
+${kulanzRules || "(keine — branchenüblich)"}
 
 ${policyContext ? "MANDANTEN-RICHTLINIEN (RAG):\n" + policyContext + "\n\n" : ""}${globalContext ? "VERHANDLUNGSWISSEN (RAG):\n" + globalContext : ""}
 
 Antworte AUSSCHLIESSLICH mit gültigem JSON nach diesem Schema:
 {
-  "analysis": "Kurzanalyse 2-4 Sätze",
+  "analysis": "Kurzanalyse 2-4 Sätze: Sachlage, Rechtslage, Branche",
   "risk_assessment": "Risiken (Image, Folgekosten, Präzedenz)",
-  "options": [
-    {
-      "label": "Option-Name",
-      "amount_eur": Zahl,
-      "percent_of_purchase": Zahl,
-      "rationale": "Begründung",
-      "customer_wording": "Genauer Wortlaut für Mitarbeitende gegenüber Kunde",
-      "required_role": "sachbearbeiter"|"manager"|"leitung"
-    }
-  ],
-  "recommended_option_index": 0
-}
-Erzeuge IMMER genau 3 Optionen (konservativ, mittel, kulant). Berücksichtige Limits.`;
+  "recommendation": {
+    "amount_eur": Zahl,
+    "percent_of_purchase": Zahl,
+    "rationale": "Warum genau dieser Betrag — Verhandlungslogik, BGB-Hebel, Branchenpraxis. KEINE Begründung über 'Limit erlaubt es'.",
+    "customer_wording": "Konkreter, höflicher, fairer Wortlaut für Mitarbeitende gegenüber Kunde (2-4 Sätze)",
+    "email_draft": "Vollständige E-Mail an Kunde mit Anrede, Inhalt, Grußformel. Tonalität: rechtssicher und fair.",
+    "required_role": "sachbearbeiter|manager|leitung",
+    "confidence": "low|medium|high"
+  }
+}`;
 
     const userPrompt = `Reklamationsfall:
 - Produkt: ${caseRow.product_name ?? "n/a"} (Kategorie: ${caseRow.product_category ?? "n/a"})
@@ -123,12 +140,13 @@ Aktueller Mitarbeiter-Rolle: ${userRole}
 
 Erzeuge die 3 Optionen.`;
 
+    const userPromptExtra = `\nAktueller Mitarbeiter-Rolle: ${userRole} (eigene Obergrenze ${userLimit}%).`;
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: CHAT_MODEL,
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt + userPromptExtra }],
         response_format: { type: "json_object" },
       }),
     });
@@ -140,9 +158,9 @@ Erzeuge die 3 Optionen.`;
     let parsed: any = {};
     try { parsed = JSON.parse(aiJson.choices?.[0]?.message?.content ?? "{}"); } catch { parsed = {}; }
 
-    const options = Array.isArray(parsed.options) ? parsed.options : [];
-    const recIdx = Math.max(0, Math.min(options.length - 1, parsed.recommended_option_index ?? 0));
-    const recommended = options[recIdx];
+    const recommended = parsed.recommendation ?? null;
+    const options = recommended ? [recommended] : [];
+    const recIdx = 0;
 
     let requiredRole: Role = "sachbearbeiter";
     if (recommended) {
