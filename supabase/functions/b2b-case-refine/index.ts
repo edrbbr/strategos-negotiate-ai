@@ -43,6 +43,14 @@ Deno.serve(async (req) => {
     const limits = (settings?.max_discount_limits ?? { sachbearbeiter_max_percent: 10, manager_max_percent: 25, leitung_max_percent: 100 }) as Record<string, number>;
     const kulanzRules = settings?.kulanz_rules ?? "";
 
+    const { data: account } = await svc.from("business_accounts").select("industry").eq("id", caseRow.business_account_id).maybeSingle();
+    let industryLabel = "n/a";
+    let industryContext = "";
+    if (account?.industry) {
+      const { data: ind } = await svc.from("industries").select("label, ai_context").eq("key", account.industry).maybeSingle();
+      if (ind) { industryLabel = ind.label; industryContext = ind.ai_context ?? ""; }
+    }
+
     // load latest version (current_version_id or highest version_number)
     const { data: latestVersion } = await svc.from("business_case_versions")
       .select("*").eq("case_id", case_id).order("version_number", { ascending: false }).limit(1).maybeSingle();
@@ -74,14 +82,13 @@ Deno.serve(async (req) => {
       }
     } catch (e) { console.warn("rag error", e); }
 
-    const systemPrompt = `Du bist Pallanx Retail Shield. Du verfeinerst bestehende Reklamations-Optionen gemäß Anweisung des Mitarbeitenden.
-REGEL: Liefere IMMER exakt 3 Optionen (konservativ, mittel, kulant) im selben JSON-Schema wie der vorherige Lauf — die Struktur ist fix, nur Inhalte ändern sich.
+    const systemPrompt = `Du bist Pallanx Retail Shield. Du verfeinerst die bestehende EINZIGE Empfehlung gemäß Anweisung des Mitarbeitenden.
+REGEL: Liefere wieder GENAU EINE Empfehlung — kein Optionen-Set. Limits sind Obergrenzen, nicht Default. Faire, rechtssichere, branchenrealistische Verhandlung.
 
-Limits dieses Mandanten (in % Rabatt/Erstattung vom Kaufpreis):
-- Sachbearbeiter: bis ${limits.sachbearbeiter_max_percent}%
-- Manager: bis ${limits.manager_max_percent}%
-- Leitung: bis ${limits.leitung_max_percent}%
+BRANCHE: ${industryLabel}
+${industryContext ? "Branchenleitplanken:\n" + industryContext + "\n" : ""}
 
+Limits (% vom Kaufpreis): Sachbearbeiter ${limits.sachbearbeiter_max_percent}% · Manager ${limits.manager_max_percent}% · Leitung ${limits.leitung_max_percent}%
 Kulanzregeln: ${kulanzRules || "(branchenüblich)"}
 
 ${policyContext ? "MANDANTEN-RICHTLINIEN:\n" + policyContext + "\n\n" : ""}${globalContext ? "VERHANDLUNGSWISSEN:\n" + globalContext : ""}
@@ -90,8 +97,11 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON:
 {
   "analysis": "Aktualisierte Kurzanalyse",
   "risk_assessment": "Aktualisierte Risiken",
-  "options": [ { "label": "...", "amount_eur": 0, "percent_of_purchase": 0, "rationale": "...", "customer_wording": "...", "required_role": "sachbearbeiter|manager|leitung" } ],
-  "recommended_option_index": 0,
+  "recommendation": {
+    "amount_eur": 0, "percent_of_purchase": 0,
+    "rationale": "...", "customer_wording": "...", "email_draft": "...",
+    "required_role": "sachbearbeiter|manager|leitung", "confidence": "low|medium|high"
+  },
   "change_summary": "Was wurde gegenüber der Vorversion geändert (1-2 Sätze)"
 }`;
 
@@ -102,11 +112,11 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON:
 - Situation: ${caseRow.situation_text ?? "—"}
 
 VORHERIGE ANALYSE: ${JSON.stringify(baseAnalysis)}
-VORHERIGE OPTIONEN: ${JSON.stringify(baseOptions)}
+VORHERIGE EMPFEHLUNG: ${JSON.stringify(baseOptions[0] ?? null)}
 
 ANWEISUNG DES MITARBEITENDEN: ${instruction}
 
-Passe die 3 Optionen entsprechend an und erkläre kurz die Änderung.`;
+Passe die Empfehlung entsprechend an und erkläre kurz die Änderung.`;
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -125,9 +135,9 @@ Passe die 3 Optionen entsprechend an und erkläre kurz die Änderung.`;
     let parsed: any = {};
     try { parsed = JSON.parse(aiJson.choices?.[0]?.message?.content ?? "{}"); } catch { parsed = {}; }
 
-    const options = Array.isArray(parsed.options) ? parsed.options : [];
-    const recIdx = Math.max(0, Math.min(options.length - 1, parsed.recommended_option_index ?? 0));
-    const recommended = options[recIdx];
+    const recommended = parsed.recommendation ?? null;
+    const options = recommended ? [recommended] : [];
+    const recIdx = 0;
 
     let requiredRole: Role = "sachbearbeiter";
     if (recommended) {
