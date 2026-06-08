@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { IndustryPicker } from "@/components/admin/IndustryPicker";
 
 export default function AdminB2B() {
   const qc = useQueryClient();
@@ -87,7 +88,9 @@ export default function AdminB2B() {
                 <div className="space-y-4">
                   <div className="grid md:grid-cols-2 gap-3">
                     <div className="space-y-1"><Label>Firmenname *</Label><Input value={f.company_name} onChange={(e) => setF({ ...f, company_name: e.target.value })} /></div>
-                    <div className="space-y-1"><Label>Branche</Label><Input value={f.industry} onChange={(e) => setF({ ...f, industry: e.target.value })} placeholder="z. B. Baumarkt" /></div>
+                    <div className="space-y-1"><Label>Branche</Label>
+                      <IndustryPicker value={f.industry} onChange={(key) => setF({ ...f, industry: key })} />
+                    </div>
                     <div className="space-y-1"><Label>Anzahl Filialen</Label><Input type="number" value={f.store_count} onChange={(e) => setF({ ...f, store_count: e.target.value })} /></div>
                     <div className="space-y-1"><Label>Rechnungs-E-Mail *</Label><Input type="email" value={f.billing_email} onChange={(e) => setF({ ...f, billing_email: e.target.value })} /></div>
                     <div className="space-y-1"><Label>Monatsgebühr (Cent)</Label><Input type="number" value={f.monthly_fee_cents} onChange={(e) => setF({ ...f, monthly_fee_cents: e.target.value })} placeholder="z. B. 49900" /></div>
