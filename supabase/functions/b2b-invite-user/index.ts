@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
     const { data: userRes } = await userClient.auth.getUser();
     if (!userRes?.user) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { email, full_name, role, temp_password } = await req.json();
+    const { email, full_name, role, temp_password, custom_role_key } = await req.json();
     if (!email || !full_name || !role || !temp_password) return new Response(JSON.stringify({ error: "missing" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     if (!["sachbearbeiter","manager","leitung","support_readonly"].includes(role)) return new Response(JSON.stringify({ error: "invalid role" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
@@ -41,9 +41,17 @@ Deno.serve(async (req) => {
     }
     if (!authUserId) return new Response(JSON.stringify({ error: "auth_user_failed" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    // validate custom_role_key belongs to this account if provided
+    let validatedCustomKey: string | null = null;
+    if (custom_role_key) {
+      const { data: cr } = await svc.from("business_custom_roles")
+        .select("role_key").eq("business_account_id", caller.business_account_id).eq("role_key", custom_role_key).maybeSingle();
+      if (cr) validatedCustomKey = cr.role_key;
+    }
+
     const { error: insErr } = await svc.from("business_users").insert({
       business_account_id: caller.business_account_id, auth_user_id: authUserId,
-      full_name, email, role, status: "active",
+      full_name, email, role, custom_role_key: validatedCustomKey, status: "active",
     });
     if (insErr) return new Response(JSON.stringify({ error: insErr.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 

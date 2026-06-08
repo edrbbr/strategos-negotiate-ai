@@ -157,6 +157,60 @@ export function useDecideCase() {
   });
 }
 
+export function useReopenCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { case_id: string }) => {
+      const { data, error } = await supabase.functions.invoke("b2b-case-decide", {
+        body: { ...input, action: "reopen" },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["business-cases"] });
+      qc.invalidateQueries({ queryKey: ["business-case"] });
+    },
+  });
+}
+
+export function useRequestApproval() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { case_id: string; requested_amount: number; requested_percent: number; justification: string; }) => {
+      const { data: caseRow, error: cErr } = await (supabase as any)
+        .from("business_cases").select("business_account_id, ai_options").eq("id", input.case_id).single();
+      if (cErr) throw cErr;
+      const { data: userRes } = await supabase.auth.getUser();
+      const userId = userRes?.user?.id;
+      if (!userId) throw new Error("Nicht angemeldet");
+      const { data: mem } = await (supabase as any)
+        .from("business_users").select("role").eq("auth_user_id", userId).eq("business_account_id", caseRow.business_account_id).eq("status","active").maybeSingle();
+      const rec = Array.isArray(caseRow.ai_options) ? caseRow.ai_options[0] : null;
+      const { error } = await (supabase as any).from("business_approvals").insert({
+        case_id: input.case_id,
+        business_account_id: caseRow.business_account_id,
+        requested_by_user_id: userId,
+        requested_by_role: mem?.role ?? "sachbearbeiter",
+        required_role: "manager",
+        requested_amount: input.requested_amount,
+        requested_percent: input.requested_percent,
+        ai_recommendation: rec ?? null,
+        justification: input.justification,
+      });
+      if (error) throw error;
+      await (supabase as any).from("business_cases").update({ status: "waiting_approval" }).eq("id", input.case_id);
+      return { ok: true };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["business-cases"] });
+      qc.invalidateQueries({ queryKey: ["business-case"] });
+      qc.invalidateQueries({ queryKey: ["business-approvals"] });
+    },
+  });
+}
+
 export function useBusinessKpis(accountId?: string) {
   return useQuery({
     queryKey: ["business-kpis", accountId],

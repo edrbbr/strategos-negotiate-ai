@@ -16,7 +16,8 @@ Deno.serve(async (req) => {
     if (!userRes?.user) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const userId = userRes.user.id;
 
-    const { case_id, final_amount, final_percent, notes } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { case_id, final_amount, final_percent, notes, action } = body || {};
     if (!case_id) return new Response(JSON.stringify({ error: "missing" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -26,11 +27,20 @@ Deno.serve(async (req) => {
     const { data: mem } = await svc.from("business_users").select("role").eq("auth_user_id", userId).eq("business_account_id", c.business_account_id).eq("status","active").maybeSingle();
     if (!mem) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { data: settings } = await svc.from("business_settings").select("max_discount_limits").eq("business_account_id", c.business_account_id).maybeSingle();
-    const limits = (settings?.max_discount_limits ?? {}) as Record<string, number>;
-    const myMax = mem.role === "leitung" ? (limits.leitung_max_percent ?? 100)
-      : mem.role === "manager" ? (limits.manager_max_percent ?? 25)
-      : (limits.sachbearbeiter_max_percent ?? 10);
+    if (action === "reopen") {
+      if (mem.role !== "manager" && mem.role !== "leitung") {
+        return new Response(JSON.stringify({ error: "manager_or_higher_required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      await svc.from("business_cases").update({ status: "in_review", closed_at: null }).eq("id", case_id);
+      await svc.from("business_case_logs").insert({
+        case_id, business_account_id: c.business_account_id, user_id: userId,
+        action: "reopened", approval_role_used: mem.role,
+      });
+      return new Response(JSON.stringify({ ok: true, reopened: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const { data: limitRow } = await svc.rpc("effective_discount_limit", { _user: userId, _account: c.business_account_id });
+    const myMax = Number(limitRow ?? 0);
     const pct = Number(final_percent) || 0;
     if (pct > myMax) return new Response(JSON.stringify({ error: "exceeds_limit", limit: myMax }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
