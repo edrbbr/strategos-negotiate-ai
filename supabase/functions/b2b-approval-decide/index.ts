@@ -27,6 +27,14 @@ Deno.serve(async (req) => {
     if (!mem) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     if (roleRank[mem.role] < roleRank[appr.required_role]) return new Response(JSON.stringify({ error: "insufficient_role" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    // Effective limit of the deciding user
+    const { data: effLimit } = await svc.rpc("effective_discount_limit", { _user: userId, _account: appr.business_account_id });
+    const decidersMax = Number(effLimit ?? 0);
+    const requestedPct = Number(final_percent ?? appr.requested_percent) || 0;
+    if (decision !== "rejected" && requestedPct > decidersMax) {
+      return new Response(JSON.stringify({ error: "exceeds_decider_limit", limit: decidersMax }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const amount = decision === "rejected" ? 0 : (Number(final_amount) || appr.requested_amount);
     const percent = decision === "rejected" ? 0 : (Number(final_percent) || appr.requested_percent);
 
