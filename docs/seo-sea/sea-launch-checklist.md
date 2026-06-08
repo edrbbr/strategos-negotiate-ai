@@ -17,8 +17,9 @@
 - [ ] Conversion-Aktion "B2B Lead Submit" definiert
 - [ ] Conversion-Aktion "B2C Magazin → Pricing" definiert
 - [ ] Google-Ads-Conversion-Tag im Frontend eingebaut (gtag oder GTM)
-- [ ] `gclid`-Capture in `useUtmCapture` ergänzt (heute fehlt)
-- [ ] `track-conversion` Edge Function um `gclid`-Speicherung erweitert
+- [x] `gclid`/`fbclid`-Capture in `src/lib/utm.ts` aktiv, persistiert 30 Tage
+- [x] `track-conversion` Edge Function speichert UTM + Click-IDs im `utm` JSONB-Feld
+- [x] `initGtag()` aus `useUtmCapture` aufgerufen, hart gegen `pallanx-cookie-consent.marketing` gegated
 - [ ] Enhanced Conversions für Lead-Submit (gehashte E-Mail) konfiguriert
 - [ ] Test-Lead mit eigenem Browser → Conversion erscheint in Google Ads (T+24 h)
 

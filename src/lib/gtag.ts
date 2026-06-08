@@ -9,6 +9,20 @@ const ENABLED =
   import.meta.env.VITE_GTAG_ID.length > 0;
 
 const GTAG_ID = import.meta.env.VITE_GTAG_ID as string | undefined;
+const CONSENT_KEY = "pallanx-cookie-consent";
+
+/** Returns true only when the user has actively granted marketing consent. */
+export function hasMarketingConsent(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.localStorage.getItem(CONSENT_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { marketing?: boolean };
+    return parsed?.marketing === true;
+  } catch {
+    return false;
+  }
+}
 
 declare global {
   interface Window {
@@ -21,6 +35,8 @@ let initialised = false;
 
 export function initGtag() {
   if (!ENABLED || initialised || typeof window === "undefined" || !GTAG_ID) return;
+  // Hard block: never load Google scripts before marketing consent.
+  if (!hasMarketingConsent()) return;
   initialised = true;
 
   const s = document.createElement("script");
@@ -38,6 +54,7 @@ export function initGtag() {
 
 export function trackGtagConversion(label: string, value?: number, currency = "EUR") {
   if (!ENABLED || typeof window === "undefined" || !window.gtag || !GTAG_ID) return;
+  if (!hasMarketingConsent()) return;
   window.gtag("event", "conversion", {
     send_to: `${GTAG_ID}/${label}`,
     ...(value !== undefined ? { value, currency } : {}),
