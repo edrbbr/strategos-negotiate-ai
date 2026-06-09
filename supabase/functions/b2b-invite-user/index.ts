@@ -24,6 +24,12 @@ Deno.serve(async (req) => {
     if (roleRank[caller.role] < 2) return new Response(JSON.stringify({ error: "manager_or_higher_required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     if (roleRank[role] > roleRank[caller.role]) return new Response(JSON.stringify({ error: "cannot_invite_higher" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    // Rank-based check: caller's own rank (from custom_roles) must be >= invited role's rank
+    const { data: callerRoleRow } = await svc.from("business_custom_roles")
+      .select("rank").eq("business_account_id", caller.business_account_id)
+      .eq("is_builtin", true).eq("base_role", caller.role).maybeSingle();
+    const callerRank = callerRoleRow?.rank ?? 0;
+
     // Create or find auth user
     let authUserId: string | null = null;
     const { data: created, error: cErr } = await svc.auth.admin.createUser({
