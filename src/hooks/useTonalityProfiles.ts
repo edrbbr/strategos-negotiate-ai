@@ -13,9 +13,8 @@ const TIER_RANK: Record<string, number> = { free: 0, pro: 1, elite: 2 };
 
 async function fetchTonalityProfiles(): Promise<TonalityProfile[]> {
   const { data, error } = await supabase
-    .from("tonality_profiles" as never)
-    .select("key, label, description, min_tier, sort_order, is_active")
-    .eq("is_active", true)
+    .from("tonality_profiles_public" as never)
+    .select("key, label, description, min_tier, sort_order")
     .order("sort_order", { ascending: true });
   if (error) throw error;
   return ((data ?? []) as unknown as TonalityProfile[]);
