@@ -2196,6 +2196,33 @@ export type Database = {
         }
         Relationships: []
       }
+      tonality_profiles_public: {
+        Row: {
+          description: string | null
+          is_active: boolean | null
+          key: string | null
+          label: string | null
+          min_tier: string | null
+          sort_order: number | null
+        }
+        Insert: {
+          description?: string | null
+          is_active?: boolean | null
+          key?: string | null
+          label?: string | null
+          min_tier?: string | null
+          sort_order?: number | null
+        }
+        Update: {
+          description?: string | null
+          is_active?: boolean | null
+          key?: string | null
+          label?: string | null
+          min_tier?: string | null
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       business_role_rank: {
