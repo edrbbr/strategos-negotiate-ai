@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, UserCircle } from "lucide-react";
-import { useCustomRoles } from "@/hooks/useCustomRoles";
+import { useRoleHierarchy } from "@/hooks/useRoleHierarchy";
 
 export default function RetailTeam() {
   const { data: m } = useBusinessMembership();
@@ -18,7 +18,8 @@ export default function RetailTeam() {
   const { toast } = useToast();
   const accountId = m?.business_account_id;
   const canManage = m && roleRank[m.role] >= 2;
-  const { data: customRoles = [] } = useCustomRoles(accountId);
+  const { data: allRoles = [] } = useRoleHierarchy(accountId);
+  const customRoles = allRoles.filter((r) => !r.is_builtin && r.is_active);
 
   const { data: team } = useQuery({
     queryKey: ["business-team", accountId], enabled: !!accountId,

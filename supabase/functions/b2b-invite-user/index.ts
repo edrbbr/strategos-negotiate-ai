@@ -24,6 +24,12 @@ Deno.serve(async (req) => {
     if (roleRank[caller.role] < 2) return new Response(JSON.stringify({ error: "manager_or_higher_required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     if (roleRank[role] > roleRank[caller.role]) return new Response(JSON.stringify({ error: "cannot_invite_higher" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    // Rank-based check: caller's own rank (from custom_roles) must be >= invited role's rank
+    const { data: callerRoleRow } = await svc.from("business_custom_roles")
+      .select("rank").eq("business_account_id", caller.business_account_id)
+      .eq("is_builtin", true).eq("base_role", caller.role).maybeSingle();
+    const callerRank = callerRoleRow?.rank ?? 0;
+
     // Create or find auth user
     let authUserId: string | null = null;
     const { data: created, error: cErr } = await svc.auth.admin.createUser({
@@ -45,8 +51,13 @@ Deno.serve(async (req) => {
     let validatedCustomKey: string | null = null;
     if (custom_role_key) {
       const { data: cr } = await svc.from("business_custom_roles")
-        .select("role_key").eq("business_account_id", caller.business_account_id).eq("role_key", custom_role_key).maybeSingle();
-      if (cr) validatedCustomKey = cr.role_key;
+        .select("role_key, rank, is_active").eq("business_account_id", caller.business_account_id).eq("role_key", custom_role_key).maybeSingle();
+      if (cr && cr.is_active) {
+        if ((cr.rank ?? 0) > callerRank) {
+          return new Response(JSON.stringify({ error: "cannot_invite_higher_rank" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        validatedCustomKey = cr.role_key;
+      }
     }
 
     const { error: insErr } = await svc.from("business_users").insert({

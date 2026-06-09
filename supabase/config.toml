@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.b2b-ingest-policy]
 verify_jwt = false
+
+[functions.b2b-roles-reorder]
+verify_jwt = false
