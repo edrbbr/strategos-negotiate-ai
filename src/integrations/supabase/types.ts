@@ -499,8 +499,11 @@ export type Database = {
           business_account_id: string
           created_at: string
           id: string
+          is_active: boolean
+          is_builtin: boolean
           label: string
           max_discount_percent: number
+          rank: number
           role_key: string
           updated_at: string
         }
@@ -509,8 +512,11 @@ export type Database = {
           business_account_id: string
           created_at?: string
           id?: string
+          is_active?: boolean
+          is_builtin?: boolean
           label: string
           max_discount_percent?: number
+          rank: number
           role_key: string
           updated_at?: string
         }
@@ -519,8 +525,11 @@ export type Database = {
           business_account_id?: string
           created_at?: string
           id?: string
+          is_active?: boolean
+          is_builtin?: boolean
           label?: string
           max_discount_percent?: number
+          rank?: number
           role_key?: string
           updated_at?: string
         }
@@ -678,6 +687,7 @@ export type Database = {
           default_vat_rate: number
           kulanz_rules: string | null
           max_discount_limits: Json
+          role_admin_user_ids: string[]
           updated_at: string
         }
         Insert: {
@@ -687,6 +697,7 @@ export type Database = {
           default_vat_rate?: number
           kulanz_rules?: string | null
           max_discount_limits?: Json
+          role_admin_user_ids?: string[]
           updated_at?: string
         }
         Update: {
@@ -696,6 +707,7 @@ export type Database = {
           default_vat_rate?: number
           kulanz_rules?: string | null
           max_discount_limits?: Json
+          role_admin_user_ids?: string[]
           updated_at?: string
         }
         Relationships: [
@@ -2189,6 +2201,10 @@ export type Database = {
       business_role_rank: {
         Args: { _account: string; _user: string }
         Returns: number
+      }
+      can_manage_roles: {
+        Args: { _account: string; _user: string }
+        Returns: boolean
       }
       consume_dossier: { Args: { p_user_id: string }; Returns: Json }
       consume_refinement: {
