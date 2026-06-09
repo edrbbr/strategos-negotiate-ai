@@ -19,16 +19,12 @@ export default function RetailSettings() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const canEdit = m && roleRank[m.role] >= 2;
-  const [f, setF] = useState({ sb: "10", mg: "25", lt: "100", kulanz: "", currency: "EUR", vat: "19" });
+  const [f, setF] = useState({ kulanz: "", currency: "EUR", vat: "19" });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (s) {
-      const l = s.max_discount_limits ?? {};
       setF({
-        sb: String(l.sachbearbeiter_max_percent ?? 10),
-        mg: String(l.manager_max_percent ?? 25),
-        lt: String(l.leitung_max_percent ?? 100),
         kulanz: s.kulanz_rules ?? "",
         currency: s.currency ?? "EUR",
         vat: String(s.default_vat_rate ?? 19),
@@ -37,19 +33,9 @@ export default function RetailSettings() {
   }, [s]);
 
   async function save() {
-    const sb = Number(f.sb), mg = Number(f.mg), lt = Number(f.lt);
-    if ([sb, mg, lt].some((n) => Number.isNaN(n) || n < 0 || n > 100)) {
-      toast({ title: "Ungültige Werte", description: "Limits müssen zwischen 0 und 100 % liegen.", variant: "destructive" });
-      return;
-    }
-    if (!(sb <= mg && mg <= lt)) {
-      toast({ title: "Ungültige Reihenfolge", description: "Sachbearbeiter ≤ Manager ≤ Leitung.", variant: "destructive" });
-      return;
-    }
     setSaving(true);
     const patch = {
       business_account_id: m!.business_account_id,
-      max_discount_limits: { sachbearbeiter_max_percent: sb, manager_max_percent: mg, leitung_max_percent: lt },
       kulanz_rules: f.kulanz, currency: f.currency, default_vat_rate: Number(f.vat),
     };
     const { error } = await (supabase as any)
@@ -63,15 +49,9 @@ export default function RetailSettings() {
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-semibold">Einstellungen</h1>
-      <Card><CardHeader><CardTitle>Rabatt-Limits (in % vom Kaufpreis)</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid md:grid-cols-3 gap-3">
-            <div><Label>Sachbearbeiter</Label><Input type="number" disabled={!canEdit} value={f.sb} onChange={(e) => setF({ ...f, sb: e.target.value })} /></div>
-            <div><Label>Manager</Label><Input type="number" disabled={!canEdit} value={f.mg} onChange={(e) => setF({ ...f, mg: e.target.value })} /></div>
-            <div><Label>Leitung</Label><Input type="number" disabled={!canEdit} value={f.lt} onChange={(e) => setF({ ...f, lt: e.target.value })} /></div>
-          </div>
-        </CardContent>
-      </Card>
+      {m?.business_account_id && (
+        <RoleHierarchyEditor accountId={m.business_account_id} canEdit={!!canManageRoles} />
+      )}
       <Card><CardHeader><CardTitle>Kulanzregeln</CardTitle></CardHeader>
         <CardContent>
           <Textarea rows={8} disabled={!canEdit} value={f.kulanz} onChange={(e) => setF({ ...f, kulanz: e.target.value })} placeholder="Beispiel: Bei Stammkunden bis 5% Rabatt automatisch. Versandbeschädigung: Ersatz oder 100% Erstattung..." />
@@ -84,9 +64,6 @@ export default function RetailSettings() {
         </CardContent>
       </Card>
       {canEdit && <Button onClick={save} disabled={saving}>{saving ? "Speichere…" : "Speichern"}</Button>}
-      {m?.business_account_id && (
-        <RoleHierarchyEditor accountId={m.business_account_id} canEdit={!!canManageRoles} />
-      )}
       {m?.business_account_id && m.role === "leitung" && (
         <RoleAdminsSection accountId={m.business_account_id} />
       )}

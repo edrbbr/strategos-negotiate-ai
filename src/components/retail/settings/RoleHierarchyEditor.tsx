@@ -36,11 +36,10 @@ function Row({ r, canEdit, onEdit, onToggle, onDelete }: {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium">{r.label}</span>
-          <span className="text-xs text-muted-foreground font-mono">({r.role_key})</span>
           {r.is_builtin && <Badge variant="outline" className="text-xs">Standard</Badge>}
           {!r.is_active && <Badge variant="secondary" className="text-xs">Deaktiviert</Badge>}
         </div>
-        <div className="text-xs text-muted-foreground mt-0.5">Rang {r.rank} · Rabatt-Limit {r.max_discount_percent}% · Berechtigungen wie {r.base_role}</div>
+        <div className="text-xs text-muted-foreground mt-0.5">Rabatt-Limit {r.max_discount_percent}%</div>
       </div>
       {canEdit && !isLeitung && (
         <div className="flex items-center gap-2">
