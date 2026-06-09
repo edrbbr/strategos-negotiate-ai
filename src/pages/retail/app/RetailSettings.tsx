@@ -8,11 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { CustomRolesEditor } from "@/components/retail/settings/CustomRolesEditor";
+import { RoleHierarchyEditor } from "@/components/retail/settings/RoleHierarchyEditor";
+import { RoleAdminsSection } from "@/components/retail/settings/RoleAdminsSection";
+import { useCanManageRoles } from "@/hooks/useRoleHierarchy";
 
 export default function RetailSettings() {
   const { data: m } = useBusinessMembership();
   const { data: s } = useBusinessSettings(m?.business_account_id);
+  const { data: canManageRoles } = useCanManageRoles(m?.business_account_id);
   const qc = useQueryClient();
   const { toast } = useToast();
   const canEdit = m && roleRank[m.role] >= 2;
@@ -82,7 +85,10 @@ export default function RetailSettings() {
       </Card>
       {canEdit && <Button onClick={save} disabled={saving}>{saving ? "Speichere…" : "Speichern"}</Button>}
       {m?.business_account_id && (
-        <CustomRolesEditor accountId={m.business_account_id} canEdit={!!canEdit} />
+        <RoleHierarchyEditor accountId={m.business_account_id} canEdit={!!canManageRoles} />
+      )}
+      {m?.business_account_id && m.role === "leitung" && (
+        <RoleAdminsSection accountId={m.business_account_id} />
       )}
     </div>
   );

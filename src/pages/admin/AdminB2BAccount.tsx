@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { IndustryPicker } from "@/components/admin/IndustryPicker";
-import { CustomRolesEditor } from "@/components/retail/settings/CustomRolesEditor";
+import { RoleHierarchyEditor } from "@/components/retail/settings/RoleHierarchyEditor";
 
 function eur(n: number) { return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n || 0); }
 
@@ -107,7 +107,7 @@ export default function AdminB2BAccount() {
           </CardContent>
         </Card>
 
-        <CustomRolesEditor accountId={id!} canEdit={true} />
+        <RoleHierarchyEditor accountId={id!} canEdit={true} />
       </div>
     </div>
   );
