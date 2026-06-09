@@ -95,7 +95,7 @@ export function RoleHierarchyEditor({ accountId, canEdit }: { accountId: string;
       await upsert.mutateAsync({
         id: editing?.id, business_account_id: accountId,
         role_key: f.role_key, label: f.label,
-        max_discount_percent: pct, base_role: f.base_role,
+        max_discount_percent: pct, base_role: f.base_role as "sachbearbeiter" | "manager" | "leitung",
       });
       toast({ title: editing ? "Rolle aktualisiert" : "Rolle angelegt" });
       setOpen(false);
