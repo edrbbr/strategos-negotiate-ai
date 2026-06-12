@@ -54,7 +54,7 @@ function usePool() {
         .eq("user_consent", true)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const entries = (data ?? []) as PoolEntry[];
+      const entries = (data ?? []) as unknown as PoolEntry[];
       const caseIds = Array.from(new Set(entries.map((e) => e.case_id))).filter(Boolean);
       if (caseIds.length > 0) {
         const { data: cases } = await supabase
