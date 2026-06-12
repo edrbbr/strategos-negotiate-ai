@@ -37,6 +37,7 @@ import KfzWerkstatt from "./pages/retail/branchen/KfzWerkstatt";
 import Elektronikhandel from "./pages/retail/branchen/Elektronikhandel";
 import MagazinIndex from "./pages/magazin/MagazinIndex";
 import MagazinArticle from "./pages/magazin/MagazinArticle";
+import Insights from "./pages/Insights";
 import { RetailLayout } from "@/components/retail/RetailLayout";
 import { RetailProtectedRoute } from "@/components/retail/RetailProtectedRoute";
 import RetailDashboard from "./pages/retail/app/RetailDashboard";
@@ -101,6 +102,7 @@ const App = () => (
             {/* Magazin */}
             <Route path="/magazin" element={<MagazinIndex />} />
             <Route path="/magazin/:slug" element={<MagazinArticle />} />
+            <Route path="/insights" element={<Insights />} />
 
             {/* Retail Shield app (protected) */}
             <Route path="/retail/app" element={<RetailProtectedRoute><RetailLayout /></RetailProtectedRoute>}>
