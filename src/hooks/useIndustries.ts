@@ -12,9 +12,11 @@ export function useIndustries() {
   return useQuery({
     queryKey: ["industries"],
     queryFn: async (): Promise<Industry[]> => {
-      const { data, error } = await (supabase as any).from("industries").select("key,label,ai_context,is_active").eq("is_active", true).order("label");
+      // ai_context is intentionally not selected here — it is proprietary AI
+      // configuration and only readable server-side (edge functions via service role).
+      const { data, error } = await (supabase as any).from("industries").select("key,label,is_active").eq("is_active", true).order("label");
       if (error) throw error;
-      return (data ?? []) as Industry[];
+      return (data ?? []).map((d: any) => ({ ...d, ai_context: null })) as Industry[];
     },
   });
 }
