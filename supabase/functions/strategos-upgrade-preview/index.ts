@@ -6,6 +6,7 @@
 // - Idempotent: skips if a preview already exists for the case.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { callAnthropicTool } from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,8 +15,6 @@ const corsHeaders = {
 };
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
-const PREVIEW_MODEL = "google/gemini-2.5-flash";
 
 const PREVIEW_SYSTEM = `You are STRATEGOS in PREVIEW mode. The user is on the Free plan.
 You receive: situation, current Free-tier strategy, an analysis bullet list and
@@ -37,7 +36,7 @@ Deno.serve(async (req: Request) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const body = await req.json().catch(() => ({}));
@@ -91,7 +90,7 @@ Deno.serve(async (req: Request) => {
       (s: { min_tier?: string }) => (s.min_tier ?? "free") === "pro",
     );
 
-    if (!LOVABLE_API_KEY || proStrategies.length === 0) {
+    if (!ANTHROPIC_API_KEY || proStrategies.length === 0) {
       // Fallback: persist a static placeholder so the UI still shows the panel
       const { error: insErr } = await service.from("upgrade_previews").insert({
         case_id,
@@ -122,12 +121,15 @@ Deno.serve(async (req: Request) => {
       `PRO-ONLY STRATEGY WHITELIST (pick exactly one Pro-only tactic the Free strategy lacks):\n${whitelist}\n\n` +
       `Now return the JSON.`;
 
-    const tool = {
-      type: "function" as const,
-      function: {
+    const toolRes = await callAnthropicTool({
+      apiKey: ANTHROPIC_API_KEY,
+      systemPrompt: PREVIEW_SYSTEM,
+      userMessage,
+      temperature: 0.3,
+      tool: {
         name: "return_preview",
         description: "Return the Pro-tier upgrade preview (truncated).",
-        parameters: {
+        input_schema: {
           type: "object",
           properties: {
             pro_strategy_label: { type: "string" },
@@ -139,34 +141,12 @@ Deno.serve(async (req: Request) => {
           additionalProperties: false,
         },
       },
-    };
-
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: PREVIEW_MODEL,
-        temperature: 0.3,
-        messages: [
-          { role: "system", content: PREVIEW_SYSTEM },
-          { role: "user", content: userMessage },
-        ],
-        tools: [tool],
-        tool_choice: { type: "function", function: { name: "return_preview" } },
-      }),
     });
-
-    if (!resp.ok) {
-      console.error("preview gateway error", resp.status, await resp.text());
+    if (!toolRes.ok) {
+      console.error("preview anthropic error", toolRes.status, toolRes.error);
       return json({ error: "Gateway error" }, 502);
     }
-    const data = await resp.json();
-    const argsStr = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-    if (!argsStr) {
-      console.error("preview missing tool call");
-      return json({ error: "Bad response" }, 502);
-    }
-    const parsed = JSON.parse(argsStr) as {
+    const parsed = toolRes.data as {
       pro_strategy_label?: string;
       pro_strategy?: string;
       pro_first_paragraph?: string;

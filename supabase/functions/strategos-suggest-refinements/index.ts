@@ -2,6 +2,7 @@
 // using the cheapest model. Caches result on cases.quick_suggestions.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { callAnthropicTool } from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +22,7 @@ Deno.serve(async (req: Request) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
     const body = await req.json().catch(() => ({}));
     const case_id: string | undefined = body?.case_id;
@@ -78,7 +79,7 @@ Deno.serve(async (req: Request) => {
       .order("sort_order");
     const strategyHints = (strategies ?? []).map((s) => `${s.label}: ${s.description ?? ""}`).join("\n");
 
-    if (!LOVABLE_API_KEY) return json({ error: "AI not configured" }, 500);
+    if (!ANTHROPIC_API_KEY) return json({ error: "AI not configured" }, 500);
 
     const systemPrompt = `You are STRATEGOS Suggest Engine. Produce exactly 4 highly specific, case-tailored refinement suggestions for the negotiation draft.
 
@@ -94,83 +95,46 @@ ${strategyHints}
 
     const userPrompt = `Situation:\n"""\n${caseRow.situation_text ?? ""}\n"""\n\nAnalysis (bullets):\n${JSON.stringify(latest.analysis ?? [])}\n\nStrategy:\n"""\n${latest.strategy ?? ""}\n"""\n\nCurrent draft:\n"""\n${latest.draft ?? ""}\n"""\n\nReturn 4 case-specific refinement suggestions via the suggest_refinements tool.`;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25_000);
-    let aiResp: Response;
-    try {
-      aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "suggest_refinements",
-              description: "Return 4 case-specific refinement suggestions.",
-              parameters: {
+    const toolResult = await callAnthropicTool({
+      apiKey: ANTHROPIC_API_KEY,
+      systemPrompt,
+      userMessage: userPrompt,
+      timeoutMs: 30_000,
+      tool: {
+        name: "suggest_refinements",
+        description: "Return 4 case-specific refinement suggestions.",
+        input_schema: {
+          type: "object",
+          properties: {
+            suggestions: {
+              type: "array",
+              minItems: 4,
+              maxItems: 4,
+              items: {
                 type: "object",
                 properties: {
-                  suggestions: {
-                    type: "array",
-                    minItems: 4,
-                    maxItems: 4,
-                    items: {
-                      type: "object",
-                      properties: {
-                        label: { type: "string", description: "Max 4 words, action-oriented." },
-                        prompt: { type: "string", description: "One sentence, imperative, case-specific." },
-                      },
-                      required: ["label", "prompt"],
-                      additionalProperties: false,
-                    },
-                  },
+                  label: { type: "string", description: "Max 4 words, action-oriented." },
+                  prompt: { type: "string", description: "One sentence, imperative, case-specific." },
                 },
-                required: ["suggestions"],
+                required: ["label", "prompt"],
                 additionalProperties: false,
               },
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "suggest_refinements" } },
-        }),
-      });
-    } catch (err) {
-      clearTimeout(timeoutId);
-      const aborted = (err as Error)?.name === "AbortError";
-      console.error("suggest gateway fetch failed", aborted ? "timeout" : err);
-      return json({ error: aborted ? "AI timeout" : "Gateway unreachable" }, 504);
-    }
-    clearTimeout(timeoutId);
-
-    if (aiResp.status === 429) return json({ error: "Rate limit" }, 429);
-    if (aiResp.status === 402) return json({ error: "AI credits exhausted" }, 402);
-    if (!aiResp.ok) {
-      const t = await aiResp.text();
-      console.error("suggest gateway error", aiResp.status, t);
+          required: ["suggestions"],
+          additionalProperties: false,
+        },
+      },
+    });
+    if (!toolResult.ok) {
+      if (toolResult.status === 429) return json({ error: "Rate limit" }, 429);
+      if (toolResult.status === 504) return json({ error: "AI timeout" }, 504);
+      console.error("suggest anthropic error", toolResult.status, toolResult.error);
       return json({ error: "Gateway error" }, 500);
     }
-
-    const data = await aiResp.json();
-    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
     let suggestions: Array<{ label: string; prompt: string }> = [];
-    if (toolCall?.function?.arguments) {
-      try {
-        const parsed = JSON.parse(toolCall.function.arguments);
-        if (Array.isArray(parsed?.suggestions)) suggestions = parsed.suggestions;
-      } catch (e) {
-        console.error("parse tool args failed", e);
-      }
-    }
+    const raw = toolResult.data?.suggestions;
+    if (Array.isArray(raw)) suggestions = raw as Array<{ label: string; prompt: string }>;
     suggestions = suggestions.slice(0, 4).filter((s) => s?.label && s?.prompt);
     if (suggestions.length === 0) return json({ error: "No suggestions" }, 500);
 

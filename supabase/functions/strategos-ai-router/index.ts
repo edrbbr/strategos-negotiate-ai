@@ -13,6 +13,7 @@ import {
   type StageMeta,
 } from "./types.ts";
 import { retrieveKnowledge } from "./knowledge.ts";
+import { callAnthropicVisionExtract } from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -200,7 +201,7 @@ Deno.serve(async (req: Request) => {
 
     // ---- Build attachments context ----
     let attachmentsContext = "";
-    if (case_id && attachment_ids.length > 0 && LOVABLE_API_KEY) {
+    if (case_id && attachment_ids.length > 0 && ANTHROPIC_API_KEY) {
       try {
         const { data: atts } = await serviceClient
           .from("case_attachments")
@@ -225,43 +226,23 @@ Deno.serve(async (req: Request) => {
               for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
               const b64 = btoa(bin);
               const mime = a.mime_type || "application/octet-stream";
-              const geminiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  // Cost-optimized: extraction is a structured-text task; use the cheap tier.
-                  model: "google/gemini-2.5-flash-lite",
-                  messages: [
-                    {
-                      role: "user",
-                      content: [
-                        {
-                          type: "text",
-                          text: "Extract all relevant text content from this document. Keep it concise, no commentary. Reproduce factual content (names, dates, amounts, clauses) verbatim where possible. Max ~1500 words.",
-                        },
-                        { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
-                      ],
-                    },
-                  ],
-                }),
+              const visionRes = await callAnthropicVisionExtract({
+                apiKey: ANTHROPIC_API_KEY,
+                mediaType: mime,
+                base64: b64,
+                instruction:
+                  "Extract all relevant text content from this document. Keep it concise, no commentary. Reproduce factual content (names, dates, amounts, clauses) verbatim where possible. Max ~1500 words.",
+                maxTokens: 2000,
               });
-              if (geminiResp.ok) {
-                const gj = await geminiResp.json();
-                const extracted = gj?.choices?.[0]?.message?.content;
-                if (typeof extracted === "string" && extracted.trim().length > 10) {
-                  const trimmed = extracted.slice(0, 4000);
-                  parts.push(`[${a.file_name}]\n${trimmed}`);
-                  // Cache extracted text for future runs
-                  await serviceClient
-                    .from("case_attachments")
-                    .update({ extracted_text: trimmed })
-                    .eq("id", a.id);
-                }
-              } else {
-                console.warn("Gemini extract failed", geminiResp.status);
+              if (visionRes.ok && visionRes.text.length > 10) {
+                const trimmed = visionRes.text.slice(0, 4000);
+                parts.push(`[${a.file_name}]\n${trimmed}`);
+                await serviceClient
+                  .from("case_attachments")
+                  .update({ extracted_text: trimmed })
+                  .eq("id", a.id);
+              } else if (!visionRes.ok) {
+                console.warn("Claude vision extract failed", visionRes.status, visionRes.error);
               }
             } catch (e) {
               console.warn("attachment extract error", a.file_name, e);

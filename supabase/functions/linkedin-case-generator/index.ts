@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAnthropicTool } from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,7 +24,7 @@ Deno.serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
 
   try {
     const authHeader = req.headers.get("Authorization") ?? "";
@@ -112,38 +113,34 @@ Antworte ausschließlich als JSON mit den Feldern:
   "post": "..."
 }`;
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+    const toolRes = await callAnthropicTool({
+      apiKey: ANTHROPIC_API_KEY,
+      systemPrompt,
+      userMessage: `Verhandlungs-Material (Roh):\n\n${casePayload}`,
+      maxTokens: 2000,
+      tool: {
+        name: "return_linkedin_post",
+        description: "Return the anonymized case + LinkedIn post.",
+        input_schema: {
+          type: "object",
+          properties: {
+            anonymized_situation: { type: "string" },
+            anonymized_outcome: { type: "string" },
+            post: { type: "string" },
+          },
+          required: ["anonymized_situation", "anonymized_outcome", "post"],
+          additionalProperties: false,
+        },
       },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Verhandlungs-Material (Roh):\n\n${casePayload}` },
-        ],
-        response_format: { type: "json_object" },
-      }),
     });
-
-    if (!aiResp.ok) {
-      const t = await aiResp.text();
-      console.error("AI gateway error", aiResp.status, t);
-      if (aiResp.status === 429) {
+    if (!toolRes.ok) {
+      console.error("AI anthropic error", toolRes.status, toolRes.error);
+      if (toolRes.status === 429) {
         return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-      if (aiResp.status === 402) {
-        return new Response(JSON.stringify({ error: "payment_required" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       return new Response(JSON.stringify({ error: "ai_error" }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
-    const aiJson = await aiResp.json();
-    const content = aiJson?.choices?.[0]?.message?.content ?? "{}";
-    let parsed: any = {};
-    try { parsed = JSON.parse(content); } catch { /* keep empty */ }
+    const parsed: any = toolRes.data;
 
     const update = {
       template_key,
