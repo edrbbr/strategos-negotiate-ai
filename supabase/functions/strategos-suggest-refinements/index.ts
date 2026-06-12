@@ -2,7 +2,7 @@
 // using the cheapest model. Caches result on cases.quick_suggestions.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callAnthropicTool, CLAUDE_MODEL } from "../_shared/anthropic.ts";
+import { callAnthropicTool } from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
