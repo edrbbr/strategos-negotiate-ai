@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { callAnthropicTool } from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,7 +7,6 @@ const corsHeaders = {
 };
 
 const EMBED_MODEL = "google/gemini-embedding-001";
-const CHAT_MODEL = "google/gemini-2.5-flash";
 
 type Role = "support_readonly" | "sachbearbeiter" | "manager" | "leitung";
 const roleRank: Record<Role, number> = { support_readonly: 0, sachbearbeiter: 1, manager: 2, leitung: 3 };
@@ -118,22 +118,48 @@ ANWEISUNG DES MITARBEITENDEN: ${instruction}
 
 Passe die Empfehlung entsprechend an und erkläre kurz die Änderung.`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: CHAT_MODEL,
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
-        response_format: { type: "json_object" },
-      }),
-    });
-    if (!aiRes.ok) {
-      const t = await aiRes.text();
-      return new Response(JSON.stringify({ error: "ai_failed", detail: t.slice(0,500) }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!anthropicKey) {
+      return new Response(JSON.stringify({ error: "anthropic_key_missing" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const aiJson = await aiRes.json();
-    let parsed: any = {};
-    try { parsed = JSON.parse(aiJson.choices?.[0]?.message?.content ?? "{}"); } catch { parsed = {}; }
+    const toolRes = await callAnthropicTool({
+      apiKey: anthropicKey,
+      systemPrompt,
+      userMessage: userPrompt,
+      maxTokens: 3000,
+      tool: {
+        name: "return_retail_refinement",
+        description: "Return the updated single Retail-Shield recommendation as strict JSON.",
+        input_schema: {
+          type: "object",
+          properties: {
+            analysis: { type: "string" },
+            risk_assessment: { type: "string" },
+            recommendation: {
+              type: "object",
+              properties: {
+                amount_eur: { type: "number" },
+                percent_of_purchase: { type: "number" },
+                rationale: { type: "string" },
+                customer_wording: { type: "string" },
+                email_draft: { type: "string" },
+                required_role: { type: "string", enum: ["sachbearbeiter", "manager", "leitung"] },
+                confidence: { type: "string", enum: ["low", "medium", "high"] },
+              },
+              required: ["amount_eur", "percent_of_purchase", "rationale", "customer_wording", "email_draft", "required_role", "confidence"],
+              additionalProperties: false,
+            },
+            change_summary: { type: "string" },
+          },
+          required: ["analysis", "risk_assessment", "recommendation", "change_summary"],
+          additionalProperties: false,
+        },
+      },
+    });
+    if (!toolRes.ok) {
+      return new Response(JSON.stringify({ error: "ai_failed", detail: toolRes.error?.slice(0, 500) }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const parsed: any = toolRes.data;
 
     const recommended = parsed.recommendation ?? null;
     const options = recommended ? [recommended] : [];
