@@ -351,12 +351,12 @@ Deno.serve(async (req: Request) => {
     const currentStrategy: string = latest.strategy ?? "";
     const currentLabels: string[] = Array.isArray(latest.strategy_labels) ? latest.strategy_labels : [];
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
     // ---- EXTRACT REFINEMENT ATTACHMENTS (cost-optimized: gemini-flash-lite) ----
     let attachmentsContext = "";
     const usedAttachmentIds: string[] = [];
-    if (attachment_ids.length > 0 && LOVABLE_API_KEY) {
+    if (attachment_ids.length > 0 && ANTHROPIC_API_KEY) {
       try {
         const { data: atts } = await service
           .from("case_attachments")
@@ -382,42 +382,23 @@ Deno.serve(async (req: Request) => {
               for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
               const b64 = btoa(bin);
               const mime = a.mime_type || "application/octet-stream";
-              const geminiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: EXTRACTION_MODEL,
-                  messages: [
-                    {
-                      role: "user",
-                      content: [
-                        {
-                          type: "text",
-                          text:
-                            "Extract all relevant text content from this document. Keep it concise, no commentary. Reproduce factual content (names, dates, amounts, clauses) verbatim where possible. Max ~1500 words.",
-                        },
-                        { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
-                      ],
-                    },
-                  ],
-                }),
+              const visionRes = await callAnthropicVisionExtract({
+                apiKey: ANTHROPIC_API_KEY,
+                mediaType: mime,
+                base64: b64,
+                instruction:
+                  "Extract all relevant text content from this document. Keep it concise, no commentary. Reproduce factual content (names, dates, amounts, clauses) verbatim where possible. Max ~1500 words.",
+                maxTokens: 2000,
               });
-              if (geminiResp.ok) {
-                const gj = await geminiResp.json();
-                const extracted = gj?.choices?.[0]?.message?.content;
-                if (typeof extracted === "string" && extracted.trim().length > 10) {
-                  const trimmed = extracted.slice(0, 4000);
-                  parts.push(`[${a.file_name}]\n${trimmed}`);
-                  await service
-                    .from("case_attachments")
-                    .update({ extracted_text: trimmed })
-                    .eq("id", a.id);
-                }
-              } else {
-                console.warn("Refinement attachment extract failed", geminiResp.status);
+              if (visionRes.ok && visionRes.text.length > 10) {
+                const trimmed = visionRes.text.slice(0, 4000);
+                parts.push(`[${a.file_name}]\n${trimmed}`);
+                await service
+                  .from("case_attachments")
+                  .update({ extracted_text: trimmed })
+                  .eq("id", a.id);
+              } else if (!visionRes.ok) {
+                console.warn("Refinement attachment extract failed", visionRes.status, visionRes.error);
               }
             } catch (e) {
               console.warn("refinement attachment extract error", a.file_name, e);
@@ -430,7 +411,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (!LOVABLE_API_KEY) {
+    if (!ANTHROPIC_API_KEY) {
       const newDraft = `${currentDraft}\n\n[Refinement (mock): ${instruction}]`;
       return await persistAndReply(service, caseRow, latest, {
         analysis: pinnedAnalysis,
@@ -456,7 +437,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Smart classifier: does this instruction require a new strategy?
-    const classification = await classifyInstruction(LOVABLE_API_KEY, instruction, currentStrategy);
+    const classification = await classifyInstruction(ANTHROPIC_API_KEY, instruction, currentStrategy);
     let nextStrategy = currentStrategy;
     let nextLabels = currentLabels;
 
@@ -472,13 +453,13 @@ Deno.serve(async (req: Request) => {
         `Previous strategy:\n"""\n${currentStrategy}\n"""\n\n` +
         `User instruction (highest priority — change strategy accordingly):\n${instruction}\n\n` +
         `Now produce the new strategy text in ${caseRow.language_label}.`;
-      const stratRes = await callPlainGateway(
-        LOVABLE_API_KEY,
-        STRATEGY_MODEL,
-        STRATEGY_REGEN_PROMPT,
-        stratUser,
-        0.5,
-      );
+      const stratRes = await callAnthropicText({
+        apiKey: ANTHROPIC_API_KEY,
+        systemPrompt: STRATEGY_REGEN_PROMPT,
+        userMessage: stratUser,
+        temperature: 0.5,
+        maxTokens: 800,
+      });
       if (stratRes.ok && stratRes.text) {
         nextStrategy = stratRes.text;
         if (classification.strategy_labels.length > 0) {
@@ -504,7 +485,7 @@ Deno.serve(async (req: Request) => {
       tonalityNote +
       (extraNudge ? `\n\n${extraNudge}` : "");
 
-    let result = await callGateway(LOVABLE_API_KEY, SYSTEM_PROMPT, buildUserContent());
+    let result = await callDraft(ANTHROPIC_API_KEY, SYSTEM_PROMPT, buildUserContent());
     if (!result.ok) {
       if (result.status === 429) return json({ error: "Rate limit" }, 429);
       if (result.status === 402) return json({ error: "AI credits exhausted" }, 402);
@@ -518,8 +499,8 @@ Deno.serve(async (req: Request) => {
     const sim = similarityRatio(newDraft, currentDraft);
     if (sim > 0.85) {
       console.log("Refinement too similar (ratio=", sim, "), retrying with stronger nudge");
-      const retry = await callGateway(
-        LOVABLE_API_KEY,
+      const retry = await callDraft(
+        ANTHROPIC_API_KEY,
         SYSTEM_PROMPT,
         buildUserContent(
           "The previous attempt was too similar to the old draft. Rewrite more boldly: change structure, opening, and wording.",
@@ -533,7 +514,7 @@ Deno.serve(async (req: Request) => {
       strategy: nextStrategy,
       strategy_labels: nextLabels,
       draft: newDraft,
-      change_rationale: await buildRationale(LOVABLE_API_KEY, {
+      change_rationale: await buildRationale(ANTHROPIC_API_KEY, {
         instruction,
         previousStrategy: currentStrategy,
         nextStrategy,
