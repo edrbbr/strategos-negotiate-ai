@@ -1507,7 +1507,10 @@ export type Database = {
           curator_notes: string | null
           generated_post: string | null
           id: string
+          post_title: string | null
+          post_url: string | null
           posted_at: string | null
+          refinement_history: Json
           status: string
           template_key: string | null
           updated_at: string
@@ -1525,7 +1528,10 @@ export type Database = {
           curator_notes?: string | null
           generated_post?: string | null
           id?: string
+          post_title?: string | null
+          post_url?: string | null
           posted_at?: string | null
+          refinement_history?: Json
           status?: string
           template_key?: string | null
           updated_at?: string
@@ -1543,7 +1549,10 @@ export type Database = {
           curator_notes?: string | null
           generated_post?: string | null
           id?: string
+          post_title?: string | null
+          post_url?: string | null
           posted_at?: string | null
+          refinement_history?: Json
           status?: string
           template_key?: string | null
           updated_at?: string

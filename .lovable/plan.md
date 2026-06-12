@@ -1,52 +1,46 @@
 ## Ziel
-Alle KI-Funktionen ausschließlich auf **`claude-sonnet-4-5`** umstellen — auf allen Tiers (Free, Single, Pro, Elite). Embeddings bleiben `google/gemini-embedding-001` (Anthropic bietet keine Embeddings). Elite-Pipeline wird ein **Single-Call mit kombinierter Antwort** (Analyse + Strategie + Draft in einem strukturierten JSON-Output).
+Im Admin-LinkedIn-Curator (`/admin/content`) folgende Erweiterungen:
+1. **Titel** für den Post (separat editierbar).
+2. **Refinement-Block**: Freitext-Anweisung an Claude, um Stil/Inhalt/Botschaft anzupassen.
+3. **Post-URL** nach Veröffentlichung speichern und anzeigen.
+4. **Roh-Situation** des Cases bereits vor Generierung sichtbar (nicht nur „Case + ID").
+5. **Öffentliche Verlinkung** auf der Homepage zu veröffentlichten Posts.
 
-## Änderungen
+## DB-Migration
+`linkedin_pool` um Spalten erweitern:
+- `post_title text` — Titel für den Post.
+- `post_url text` — LinkedIn-URL nach Veröffentlichung.
+- `refinement_history jsonb default '[]'::jsonb` — Audit-Log angewendeter Refinements.
 
-### 1. DB-Migration: `plans`-Tabelle
-- `free.model_id` → `claude-sonnet-4-5`
-- `single_case.model_id` → `claude-sonnet-4-5`
-- `pro.model_id` → `claude-sonnet-4-5`
-- `elite.model_id` → `claude-sonnet-4-5` (war `gpt-5`)
-- `elite.pipeline_config` → neuer Typ `combined_sections` (ein Call, drei Sections)
+Neue Policy: `SELECT` für `anon`/`authenticated` auf Zeilen mit `status = 'posted'` (für die öffentliche Liste auf der Homepage). Bestehende Admin-Policies bleiben.
 
-### 2. Edge Functions – Model-Konstanten auf Sonnet 4.5
-- `strategos-ai-router`
-- `strategos-upgrade-preview`
-- `strategos-suggest-refinements`
-- `strategos-refinement`
-- `retail-shield-pipeline`
-- alle weiteren Stellen mit hartkodiertem Gemini/GPT-Default
+## Edge Function — `linkedin-case-generator`
+- **Initialgenerierung**: Tool-Schema/Prompt liefert zusätzlich `post_title` (kurz, sachlich, max ~80 Zeichen).
+- **Neuer Modus `mode: "refine"`** mit Body `{ pool_id, refinement_instruction }`:
+  - Lädt aktuellen Post + Titel + anonymisierte Felder.
+  - Claude-Call (Sonnet 4.5, `callAnthropicTool`) mit Anweisung: bestehenden Post gemäss Instruktion umschreiben, Tonalität (ruhig, du-Form) und Anonymisierung wahren.
+  - Tool-Schema: `{ post_title, post }`. Anonymisierte Situation/Outcome bleiben unverändert.
+  - Append-Eintrag in `refinement_history` (`{ instruction, at, by }`).
+- Modell und Provider bleiben Claude Sonnet 4.5.
 
-Embeddings (`google/gemini-embedding-001`) unverändert.
+## Frontend
 
-### 3. Neue Pipeline `combinedSections.ts`
-- **Ein** Claude-Aufruf via Tool-Use / JSON-Schema, Output:
-  ```json
-  { "analysis": "...", "strategy": "...", "draft": "..." }
-  ```
-- Frontend-kompatibel: Stages werden nacheinander emittiert (`onStageComplete("analysis" → "strategy" → "draft")`).
-- Default bei `pipeline_config.type === "combined_sections"`.
-- `multiStage.ts` und `singleCall.ts` bleiben als Fallback.
+### `src/pages/AdminContent.tsx`
+- **Vor Generierung**: Anonymisierte Roh-Situation (max ~400 Zeichen, mit „mehr anzeigen") direkt unter dem Card-Header anzeigen. Quelle: `cases.situation_text` über zusätzlichen Join/Select (Service-Role-Edge-Helper oder direkte RLS-Erweiterung — bevorzugt: bestehende Admin-RLS auf `cases` deckt das ab; ansonsten kleine Edge-Function `linkedin-pool-list` für Admin-View mit eingebetteter Situation). Entscheidung: prüfen, ob Admin-Select auf `cases` möglich ist — falls ja, direkter Join via zweitem Query; falls nein, neue Admin-Edge-Function.
+- **Nach Generierung**:
+  - Titel-Anzeige mit Inline-Edit (Direkt-Update auf `post_title` ohne AI-Call für Tippfehler).
+  - Refinement-Bereich: `<Textarea>` „Was soll am Post angepasst werden?" + Button „Verfeinern" → ruft `linkedin-case-generator` mit `mode: "refine"` auf.
+  - Klappbare Liste „Bisherige Anpassungen" aus `refinement_history`.
+  - „Titel + Post kopieren"-Button zusätzlich zum bestehenden „Post kopieren".
+- **„Als gepostet markieren"** ersetzen durch Mini-Dialog: Eingabe der LinkedIn-Post-URL (Pflicht) → setzt `status='posted'`, `posted_at`, `post_url`. Bei bereits geposteten Einträgen: URL editierbar + „Auf LinkedIn öffnen"-Link.
 
-### 4. Provider-Cleanup
-- `providers/openai.ts` und `providers/gemini.ts` bleiben (Embeddings + Backward Compat), werden aber von Default-Pipelines nicht mehr aufgerufen.
-- `OPENAI_API_KEY` bleibt als Secret, ungenutzt.
-
-### 5. Sichtbarkeit
-- `business_case_logs.model_used` und `cases.model_used` enthalten künftig immer `claude-sonnet-4-5`.
-- Admin „AI Usage" zeigt damit nur noch Claude Sonnet 4.5.
-
-## Kosten (geschätzt pro „Pipeline starten")
-| Tier | Vorher | Nachher |
-|---|---|---|
-| Free | < $0,001 | **~$0,04 – $0,06** |
-| Single / Pro | ~$0,04 – $0,06 | ~$0,04 – $0,06 |
-| Elite | ~$0,08 – $0,12 (3 Calls) | **~$0,04 – $0,06** (1 Call) |
-
-Abrechnung über `ANTHROPIC_API_KEY`, nicht über Lovable-AI-Credits. Free wird spürbar teurer pro Case.
+### Öffentliche Posts-Seite
+- Neue Route `/insights` (oder `/cases`, finale Benennung im Build): listet alle `linkedin_pool`-Einträge mit `status='posted'`, sortiert nach `posted_at desc`.
+- Karten zeigen `post_title`, gekürzten `generated_post`, Datum, „Auf LinkedIn ansehen"-Link auf `post_url`.
+- SEO: Title/Meta, JSON-LD `ItemList`.
+- **Verlinkung auf Homepage** (`src/pages/Landing.tsx`): dezenter Abschnitt „Aus der Praxis" mit den 3 neuesten Posts + Link „Alle Insights ansehen" zur neuen Route. Auch im Footer (`PublicHeader`/Footer-Komponente) ein Link.
 
 ## Nicht im Scope
-- Embedding-Provider-Wechsel
-- Lovable Editor AI
-- Preisseiten / UI-Texte
+- Keine Änderungen am Tier-/Modell-Setup, Embeddings oder anderen Edge Functions.
+- Kein automatisches Posten via LinkedIn-API (URL wird manuell hinterlegt).
+- Keine Kommentare/Reaktionen auf der öffentlichen Seite.

@@ -371,6 +371,8 @@ const Landing = () => {
         <div className="flex gap-6">
           <a href="#" className="hover:text-primary">Impressum</a>
           <Link to="/datenschutz" className="hover:text-primary">Datenschutz</Link>
+          <Link to="/insights" className="hover:text-primary">Insights</Link>
+          <Link to="/magazin" className="hover:text-primary">Magazin</Link>
           <span>© 2026</span>
         </div>
       </footer>
