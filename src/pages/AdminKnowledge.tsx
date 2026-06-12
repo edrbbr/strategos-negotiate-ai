@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, XCircle, Trash2, Play } from "lucide-react";
+import { Loader2, ArrowLeft, BookOpen, Upload, RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, XCircle, Trash2, Play, Download } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
@@ -245,6 +245,24 @@ const AdminKnowledge = () => {
     }
   };
 
+  const handleDownload = async (book: Book) => {
+    if (!book.file_path) return;
+    try {
+      const { data, error } = await supabase.storage
+        .from("knowledge-base")
+        .createSignedUrl(book.file_path, 60, { download: `${book.book_key}.pdf` });
+      if (error || !data?.signedUrl) throw error ?? new Error("Keine URL erhalten.");
+      const a = document.createElement("a");
+      a.href = data.signedUrl;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {
+      toast.error(`Download fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   const totalChunks = (books ?? []).reduce((sum, b) => sum + (b.chunk_count ?? 0), 0);
   const readyCount = (books ?? []).filter((b) => b.status === "ready").length;
 
@@ -432,6 +450,15 @@ const AdminKnowledge = () => {
                       {isUploading ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Upload className="w-3.5 h-3.5 mr-2" />}
                       {b.file_path ? "PDF ersetzen" : "PDF hochladen"}
                     </Button>
+                    {b.file_path && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDownload(b)}
+                      >
+                        <Download className="w-3.5 h-3.5 mr-2" /> Herunterladen
+                      </Button>
+                    )}
                     {b.status === "indexing" && (
                       <Button
                         variant="ghost"
