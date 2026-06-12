@@ -51,6 +51,92 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
+    const mode = String(body?.mode ?? "generate");
+
+    // ============ REFINE MODE ============
+    if (mode === "refine") {
+      const pool_id = String(body?.pool_id ?? "");
+      const instruction = String(body?.refinement_instruction ?? "").trim();
+      if (!pool_id || !instruction) {
+        return new Response(JSON.stringify({ error: "missing_params" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const { data: existing } = await admin
+        .from("linkedin_pool")
+        .select("id, generated_post, post_title, anonymized_situation, anonymized_outcome, refinement_history")
+        .eq("id", pool_id)
+        .maybeSingle();
+      if (!existing || !existing.generated_post) {
+        return new Response(JSON.stringify({ error: "post_not_found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const refineSystem = `Du bist Senior-Content-Stratege für PALLANX. Du überarbeitest einen bestehenden LinkedIn-Post gemäss einer konkreten Anweisung.
+Regeln:
+- Deutsch, du-Form, ruhig und souverän. Keine reisserischen Floskeln.
+- Anonymisierung muss erhalten bleiben (keine Klarnamen, Firmen, Orte oder identifizierbaren Zahlen einfügen).
+- Halte dich an die Anweisung, ohne den Kern der Geschichte zu verfälschen.
+- Liefere zusätzlich einen kurzen, sachlichen Titel (max ~80 Zeichen, ohne Clickbait).`;
+
+      const refineUser = `Aktueller Titel: ${existing.post_title ?? "(noch keiner)"}
+
+Aktueller Post:
+${existing.generated_post}
+
+Anonymisierte Situation (Kontext, nicht ändern):
+${existing.anonymized_situation ?? ""}
+
+Anonymisiertes Ergebnis (Kontext, nicht ändern):
+${existing.anonymized_outcome ?? ""}
+
+Anweisung zur Überarbeitung:
+${instruction}`;
+
+      const refineRes = await callAnthropicTool({
+        apiKey: ANTHROPIC_API_KEY,
+        systemPrompt: refineSystem,
+        userMessage: refineUser,
+        maxTokens: 2000,
+        tool: {
+          name: "return_refined_post",
+          description: "Return the refined LinkedIn post with title.",
+          input_schema: {
+            type: "object",
+            properties: {
+              post_title: { type: "string" },
+              post: { type: "string" },
+            },
+            required: ["post_title", "post"],
+            additionalProperties: false,
+          },
+        },
+      });
+      if (!refineRes.ok) {
+        console.error("refine error", refineRes.status, refineRes.error);
+        const status = refineRes.status === 429 ? 429 : 502;
+        return new Response(JSON.stringify({ error: status === 429 ? "rate_limited" : "ai_error" }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const refined: any = refineRes.data;
+      const history = Array.isArray(existing.refinement_history) ? existing.refinement_history : [];
+      history.push({ instruction, at: new Date().toISOString(), by: callerId });
+
+      const { error: refUpdErr } = await admin
+        .from("linkedin_pool")
+        .update({
+          generated_post: refined.post ?? existing.generated_post,
+          post_title: refined.post_title ?? existing.post_title,
+          refinement_history: history,
+          curated_by: callerId,
+          curated_at: new Date().toISOString(),
+        })
+        .eq("id", pool_id);
+      if (refUpdErr) {
+        return new Response(JSON.stringify({ error: "db_error", details: refUpdErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ ok: true, post_title: refined.post_title, post: refined.post }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ============ GENERATE MODE (default) ============
     const pool_id = String(body?.pool_id ?? "");
     const template_key = String(body?.template_key ?? "");
     if (!pool_id || !template_key) {
@@ -106,12 +192,8 @@ Stilregeln:
 - Eine Beobachtung > drei Behauptungen.
 - PALLANX nur dezent erwähnen, höchstens einmal.
 
-Antworte ausschließlich als JSON mit den Feldern:
-{
-  "anonymized_situation": "...",
-  "anonymized_outcome": "...",
-  "post": "..."
-}`;
+Liefere zusätzlich einen kurzen sachlichen Titel (max ~80 Zeichen, kein Clickbait).
+Antworte ausschließlich über das bereitgestellte Tool.`;
 
     const toolRes = await callAnthropicTool({
       apiKey: ANTHROPIC_API_KEY,
@@ -124,11 +206,12 @@ Antworte ausschließlich als JSON mit den Feldern:
         input_schema: {
           type: "object",
           properties: {
+            post_title: { type: "string" },
             anonymized_situation: { type: "string" },
             anonymized_outcome: { type: "string" },
             post: { type: "string" },
           },
-          required: ["anonymized_situation", "anonymized_outcome", "post"],
+          required: ["post_title", "anonymized_situation", "anonymized_outcome", "post"],
           additionalProperties: false,
         },
       },
@@ -144,6 +227,7 @@ Antworte ausschließlich als JSON mit den Feldern:
 
     const update = {
       template_key,
+      post_title: parsed.post_title ?? null,
       anonymized_situation: parsed.anonymized_situation ?? null,
       anonymized_outcome: parsed.anonymized_outcome ?? null,
       generated_post: parsed.post ?? null,
