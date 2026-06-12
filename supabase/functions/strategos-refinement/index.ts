@@ -3,6 +3,12 @@
 // from the latest case_versions row, then writes a new version.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import {
+  callAnthropicText,
+  callAnthropicTool,
+  callAnthropicVisionExtract,
+  CLAUDE_MODEL,
+} from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,10 +36,7 @@ Hard rules:
 - Match the requested medium (email/WhatsApp/SMS/letter) — length and tone.
 - Output ONLY the rewritten draft text. No preamble, no labels, no explanation, no markdown fences.`;
 
-const MODEL = "google/gemini-2.5-flash";
-const CLASSIFIER_MODEL = "google/gemini-2.5-flash-lite";
-const STRATEGY_MODEL = "google/gemini-2.5-flash";
-const EXTRACTION_MODEL = "google/gemini-2.5-flash-lite";
+const MODEL = CLAUDE_MODEL;
 
 const STRATEGY_CLASSIFIER_PROMPT = `You decide whether a user's refinement instruction
 requires a NEW negotiation strategy or only changes draft style/tone/length.
@@ -84,13 +87,13 @@ async function buildRationale(
       (ctx.attachmentsContext
         ? `Refinement attachments excerpt:\n"""\n${ctx.attachmentsContext.slice(0, 1500)}\n"""\n`
         : "No new attachments.\n");
-    const res = await callPlainGateway(
+    const res = await callAnthropicText({
       apiKey,
-      CLASSIFIER_MODEL,
-      RATIONALE_PROMPT,
-      userContent,
-      0.4,
-    );
+      systemPrompt: RATIONALE_PROMPT,
+      userMessage: userContent,
+      temperature: 0.4,
+      maxTokens: 600,
+    });
     if (res.ok && res.text) return res.text.slice(0, 800);
     return null;
   } catch (e) {
@@ -119,63 +122,20 @@ function similarityRatio(a: string, b: string): number {
   return overlap / Math.max(aTokens.length, bTokens.length);
 }
 
-async function callGateway(
+async function callDraft(
   apiKey: string,
   systemPrompt: string,
   userContent: string,
 ): Promise<{ ok: true; text: string } | { ok: false; status: number; body: string }> {
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.7,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
-      ],
-    }),
+  const res = await callAnthropicText({
+    apiKey,
+    systemPrompt,
+    userMessage: userContent,
+    temperature: 0.7,
+    maxTokens: 4000,
   });
-  if (!res.ok) {
-    const body = await res.text();
-    return { ok: false, status: res.status, body };
-  }
-  const data = await res.json();
-  const text: string = (data?.choices?.[0]?.message?.content ?? "").trim();
-  return { ok: true, text };
-}
-
-async function callPlainGateway(
-  apiKey: string,
-  model: string,
-  systemPrompt: string,
-  userContent: string,
-  temperature = 0.5,
-): Promise<{ ok: true; text: string } | { ok: false; status: number }> {
-  try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        temperature,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-      }),
-    });
-    if (!res.ok) return { ok: false, status: res.status };
-    const data = await res.json();
-    const text: string = (data?.choices?.[0]?.message?.content ?? "").trim();
-    return { ok: true, text };
-  } catch (e) {
-    console.error("plain gateway error", e);
-    return { ok: false, status: 0 };
-  }
+  if (!res.ok) return { ok: false, status: res.status, body: res.error };
+  return { ok: true, text: res.text };
 }
 
 const VALID_STRATEGY_LABELS = new Set([
@@ -187,63 +147,44 @@ async function classifyInstruction(
   instruction: string,
   currentStrategy: string,
 ): Promise<{ regenerate_strategy: boolean; strategy_labels: string[] }> {
-  try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: CLASSIFIER_MODEL,
-        temperature: 0,
-        messages: [
-          { role: "system", content: STRATEGY_CLASSIFIER_PROMPT },
-          {
-            role: "user",
-            content:
-              `Current strategy:\n"""\n${currentStrategy.slice(0, 600)}\n"""\n\n` +
-              `User instruction:\n"""\n${instruction}\n"""`,
+  const res = await callAnthropicTool({
+    apiKey,
+    systemPrompt: STRATEGY_CLASSIFIER_PROMPT,
+    userMessage:
+      `Current strategy:\n"""\n${currentStrategy.slice(0, 600)}\n"""\n\n` +
+      `User instruction:\n"""\n${instruction}\n"""`,
+    temperature: 0,
+    maxTokens: 400,
+    tool: {
+      name: "classify",
+      description: "Classify whether the instruction requires regenerating the negotiation strategy.",
+      input_schema: {
+        type: "object",
+        properties: {
+          regenerate_strategy: { type: "boolean" },
+          strategy_labels: {
+            type: "array",
+            items: { type: "string", enum: [...VALID_STRATEGY_LABELS] },
           },
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "classify",
-            description: "Classify whether the instruction requires regenerating the negotiation strategy.",
-            parameters: {
-              type: "object",
-              properties: {
-                regenerate_strategy: { type: "boolean" },
-                strategy_labels: {
-                  type: "array",
-                  items: { type: "string", enum: [...VALID_STRATEGY_LABELS] },
-                },
-              },
-              required: ["regenerate_strategy", "strategy_labels"],
-              additionalProperties: false,
-            },
-          },
-        }],
-        tool_choice: { type: "function", function: { name: "classify" } },
-      }),
-    });
-    if (!res.ok) {
-      console.warn("classifier non-OK", res.status);
-      return { regenerate_strategy: false, strategy_labels: [] };
-    }
-    const data = await res.json();
-    const argsStr = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-    if (!argsStr) return { regenerate_strategy: false, strategy_labels: [] };
-    const parsed = JSON.parse(argsStr);
-    const labels: string[] = Array.isArray(parsed.strategy_labels)
-      ? parsed.strategy_labels.filter((l: unknown) => typeof l === "string" && VALID_STRATEGY_LABELS.has(l))
-      : [];
-    return {
-      regenerate_strategy: Boolean(parsed.regenerate_strategy),
-      strategy_labels: labels,
-    };
-  } catch (e) {
-    console.warn("classifier failed, fallback to draft-only", e);
+        },
+        required: ["regenerate_strategy", "strategy_labels"],
+        additionalProperties: false,
+      },
+    },
+  });
+  if (!res.ok) {
+    console.warn("classifier failed", res.status, res.error);
     return { regenerate_strategy: false, strategy_labels: [] };
   }
+  const labels: string[] = Array.isArray(res.data.strategy_labels)
+    ? (res.data.strategy_labels as unknown[]).filter(
+        (l): l is string => typeof l === "string" && VALID_STRATEGY_LABELS.has(l),
+      )
+    : [];
+  return {
+    regenerate_strategy: Boolean(res.data.regenerate_strategy),
+    strategy_labels: labels,
+  };
 }
 
 Deno.serve(async (req: Request) => {
