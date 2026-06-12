@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Loader2, Linkedin, Copy, Sparkles, ArrowLeft, Check } from "lucide-react";
+import { Loader2, Linkedin, Copy, Sparkles, ArrowLeft, Check, Wand2, ExternalLink, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -21,12 +23,16 @@ type PoolEntry = {
   user_consent: boolean;
   status: string;
   template_key: string | null;
+  post_title: string | null;
+  post_url: string | null;
   anonymized_situation: string | null;
   anonymized_outcome: string | null;
   generated_post: string | null;
+  refinement_history: Array<{ instruction: string; at: string; by: string }> | null;
   created_at: string;
   curated_at: string | null;
   posted_at: string | null;
+  case_situation?: string | null;
 };
 
 type Template = { key: string; label: string };
@@ -48,7 +54,17 @@ function usePool() {
         .eq("user_consent", true)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as PoolEntry[];
+      const entries = (data ?? []) as PoolEntry[];
+      const caseIds = Array.from(new Set(entries.map((e) => e.case_id))).filter(Boolean);
+      if (caseIds.length > 0) {
+        const { data: cases } = await supabase
+          .from("cases")
+          .select("id, situation_text")
+          .in("id", caseIds);
+        const byId = new Map((cases ?? []).map((c: { id: string; situation_text: string | null }) => [c.id, c.situation_text]));
+        for (const e of entries) e.case_situation = byId.get(e.case_id) ?? null;
+      }
+      return entries;
     },
   });
 }
