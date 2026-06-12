@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { callAnthropicTool } from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,7 +7,6 @@ const corsHeaders = {
 };
 
 const EMBED_MODEL = "google/gemini-embedding-001";
-const CHAT_MODEL = "google/gemini-2.5-flash";
 
 type Role = "support_readonly" | "sachbearbeiter" | "manager" | "leitung";
 const roleRank: Record<Role, number> = { support_readonly: 0, sachbearbeiter: 1, manager: 2, leitung: 3 };
@@ -63,6 +63,10 @@ Deno.serve(async (req) => {
     }
 
     const lovableKey = Deno.env.get("LOVABLE_API_KEY")!;
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!anthropicKey) {
+      return new Response(JSON.stringify({ error: "anthropic_key_missing" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // RAG retrieval (tenant-scoped + global)
     const query = `${caseRow.product_category ?? ""} ${caseRow.product_name ?? ""}\nKundenforderung: ${caseRow.claimed_amount} EUR bei Kaufpreis ${caseRow.purchase_price_total} EUR\nSituation: ${caseRow.situation_text ?? ""}`.slice(0, 6000);
@@ -139,22 +143,43 @@ ${caseRow.situation_text ?? "(keine Beschreibung)"}
 Erzeuge eine EINZIGE faire Empfehlung mit Begründung und E-Mail-Entwurf.`;
 
     const userPromptExtra = `\nAktueller Mitarbeiter-Rolle: ${userRole} (eigene Obergrenze ${userLimit}%).`;
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: CHAT_MODEL,
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt + userPromptExtra }],
-        response_format: { type: "json_object" },
-      }),
+    const toolRes = await callAnthropicTool({
+      apiKey: anthropicKey,
+      systemPrompt,
+      userMessage: userPrompt + userPromptExtra,
+      maxTokens: 3000,
+      tool: {
+        name: "return_retail_recommendation",
+        description: "Return the single fair Retail-Shield recommendation as strict JSON.",
+        input_schema: {
+          type: "object",
+          properties: {
+            analysis: { type: "string" },
+            risk_assessment: { type: "string" },
+            recommendation: {
+              type: "object",
+              properties: {
+                amount_eur: { type: "number" },
+                percent_of_purchase: { type: "number" },
+                rationale: { type: "string" },
+                customer_wording: { type: "string" },
+                email_draft: { type: "string" },
+                required_role: { type: "string", enum: ["sachbearbeiter", "manager", "leitung"] },
+                confidence: { type: "string", enum: ["low", "medium", "high"] },
+              },
+              required: ["amount_eur", "percent_of_purchase", "rationale", "customer_wording", "email_draft", "required_role", "confidence"],
+              additionalProperties: false,
+            },
+          },
+          required: ["analysis", "risk_assessment", "recommendation"],
+          additionalProperties: false,
+        },
+      },
     });
-    if (!aiRes.ok) {
-      const t = await aiRes.text();
-      return new Response(JSON.stringify({ error: "ai_failed", detail: t.slice(0,500) }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!toolRes.ok) {
+      return new Response(JSON.stringify({ error: "ai_failed", detail: toolRes.error?.slice(0, 500) }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const aiJson = await aiRes.json();
-    let parsed: any = {};
-    try { parsed = JSON.parse(aiJson.choices?.[0]?.message?.content ?? "{}"); } catch { parsed = {}; }
+    const parsed: any = toolRes.data;
 
     const recommended = parsed.recommendation ?? null;
     const options = recommended ? [recommended] : [];
