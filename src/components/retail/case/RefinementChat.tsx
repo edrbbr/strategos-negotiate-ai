@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Paperclip, Send, Sparkles, User, X, Copy, CheckCircle2, ShieldAlert } from "lucide-react";
+import { Loader2, Paperclip, Send, Sparkles, User, X, Copy, CheckCircle2, ShieldAlert, Scale, MessageSquareQuote, Gavel, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useBusinessCaseVersions, useRefineBusinessCase, type BusinessCaseVersion, type BusinessCase } from "@/hooks/useBusinessCases";
@@ -14,6 +14,7 @@ export function RefinementChat({ caseRow, style = "chatgpt" }: { caseRow: Busine
   const { data: versions = [] } = useBusinessCaseVersions(caseRow.id);
   const refine = useRefineBusinessCase();
   const [input, setInput] = useState("");
+  const [customerResponse, setCustomerResponse] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { toast } = useToast();
@@ -30,8 +31,13 @@ export function RefinementChat({ caseRow, style = "chatgpt" }: { caseRow: Busine
     const instruction = (prompt ?? input).trim();
     if (instruction.length < 2) return;
     try {
-      await refine.mutateAsync({ case_id: caseRow.id, instruction });
+      await refine.mutateAsync({
+        case_id: caseRow.id,
+        instruction,
+        customer_response: customerResponse.trim() || undefined,
+      });
       setInput("");
+      setCustomerResponse("");
     } catch (e: any) {
       toast({ title: "Verfeinerung fehlgeschlagen", description: e.message, variant: "destructive" });
     }
@@ -102,7 +108,24 @@ export function RefinementChat({ caseRow, style = "chatgpt" }: { caseRow: Busine
       </div>
 
       <div className={isChat ? "sticky bottom-0 bg-background pt-3 pb-2" : "border-t border-border/30 pt-3 mt-2"}>
+        <div className="space-y-2">
+        <div className="rounded-2xl border border-border/40 bg-muted/30 p-3">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+            <MessageSquareQuote className="w-3.5 h-3.5" />Kundenreaktion (optional)
+          </div>
+          <textarea
+            value={customerResponse}
+            onChange={(e) => setCustomerResponse(e.target.value)}
+            disabled={refine.isPending}
+            placeholder="Was hat der Kunde geantwortet? z. B. 'Reparatur reicht nicht, ich will Minderung 300 €, sonst 1-Stern-Bewertung.'"
+            rows={2}
+            className="w-full bg-transparent focus:outline-none resize-none text-sm leading-6 disabled:opacity-50"
+          />
+        </div>
         <div className="relative bg-card border border-border/40 rounded-2xl p-3 focus-within:border-primary/60 transition">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+            <Sparkles className="w-3.5 h-3.5" />Deine Anweisung an die KI
+          </div>
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
               {attachments.map((f, i) => (
@@ -121,7 +144,7 @@ export function RefinementChat({ caseRow, style = "chatgpt" }: { caseRow: Busine
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
             disabled={refine.isPending}
-            placeholder="Anweisung zur Anpassung… (Enter sendet, Shift+Enter = neue Zeile)"
+            placeholder="Was soll die KI als Nächstes tun? z. B. 'Deeskalieren, Reparatur halten, Pflegeset als Geste anbieten.' (Enter sendet)"
             rows={2}
             className="w-full bg-transparent focus:outline-none resize-none text-[15px] leading-6 pr-24 disabled:opacity-50"
           />
@@ -138,6 +161,7 @@ export function RefinementChat({ caseRow, style = "chatgpt" }: { caseRow: Busine
           <Button size="icon" onClick={() => send()} disabled={refine.isPending || input.trim().length < 2} className="absolute bottom-2 right-2 h-9 w-9 rounded-full" aria-label="Senden">
             {refine.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </Button>
+        </div>
         </div>
       </div>
 
@@ -180,9 +204,24 @@ function VersionTurn({
 }) {
   const analysis = version.ai_analysis as any;
   const options = (version.ai_options ?? []) as any[];
-  const rec = options[version.recommended_index ?? 0] ?? options[0] ?? null;
+  const recIdx = version.recommended_index ?? 0;
+  const rec = options[recIdx] ?? options[0] ?? null;
   const closed = caseRow.status === "closed" || caseRow.status === "rejected";
   const { toast } = useToast();
+  const [openOption, setOpenOption] = useState<number>(recIdx);
+  const closure = analysis?.closure_recommendation ?? null;
+
+  // parse structured user_prompt {instruction, customer_response}
+  let displayPrompt: { instruction?: string; customer_response?: string | null } | null = null;
+  if (version.user_prompt) {
+    try {
+      const obj = typeof version.user_prompt === "string" && version.user_prompt.startsWith("{")
+        ? JSON.parse(version.user_prompt) : null;
+      displayPrompt = obj && typeof obj === "object" ? obj : { instruction: version.user_prompt };
+    } catch {
+      displayPrompt = { instruction: version.user_prompt };
+    }
+  }
 
   async function copy(text: string, what: string) {
     try { await navigator.clipboard.writeText(text); toast({ title: `${what} kopiert` }); }
@@ -191,9 +230,17 @@ function VersionTurn({
 
   return (
     <>
-      {version.kind === "refinement" && version.user_prompt && (
+      {version.kind === "refinement" && displayPrompt && (
         <ChatTurn role="user" style={style}>
-          <div className="text-sm whitespace-pre-wrap">{version.user_prompt}</div>
+          {displayPrompt.customer_response && (
+            <div className="mb-2 text-xs">
+              <span className="font-medium uppercase tracking-wide opacity-70">Kundenreaktion: </span>
+              <span className="whitespace-pre-wrap">{displayPrompt.customer_response}</span>
+            </div>
+          )}
+          {displayPrompt.instruction && (
+            <div className="text-sm whitespace-pre-wrap">{displayPrompt.instruction}</div>
+          )}
         </ChatTurn>
       )}
       <ChatTurn role="ai" style={style}>
@@ -201,52 +248,111 @@ function VersionTurn({
           <div className="text-[10px] uppercase tracking-wide font-mono opacity-70">
             V{version.version_number} · {version.kind}{analysis?.change_summary ? ` · ${analysis.change_summary}` : ""}
           </div>
+          {analysis?.round_summary && (
+            <div className="text-xs p-2 rounded bg-muted border border-border/40">
+              <span className="font-medium uppercase tracking-wide">Stand: </span>{analysis.round_summary}
+            </div>
+          )}
           {analysis?.analysis && <div className="text-sm leading-relaxed">{analysis.analysis}</div>}
+          {analysis?.legal_position && (
+            <div className="text-xs p-2 rounded bg-primary/5 border border-primary/20">
+              <span className="font-medium uppercase tracking-wide inline-flex items-center gap-1"><Scale className="w-3 h-3" />Rechtliche Position: </span>{analysis.legal_position}
+            </div>
+          )}
           {analysis?.risk_assessment && (
             <div className="text-xs p-2 rounded bg-destructive/5 border border-destructive/20">
               <span className="font-medium uppercase tracking-wide">Risiken: </span>{analysis.risk_assessment}
             </div>
           )}
 
-          {rec && (
+          {options.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              {options.map((o, i) => {
+                const isRec = i === recIdx;
+                const isOpen = i === openOption;
+                return (
+                  <button key={i} type="button" onClick={() => setOpenOption(i)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition ${isOpen ? "border-primary bg-primary/10" : "border-border/50 hover:border-primary/40"}`}>
+                    {o.strategy_label ?? o.strategy_key ?? `Option ${i + 1}`}
+                    {isRec && <span className="ml-1.5 text-primary">★</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {closure && (
+            <div className={`rounded-xl p-3 border ${closure.trigger === "legal_required" ? "border-amber-500/40 bg-amber-500/5" : "border-orange-500/40 bg-orange-500/5"}`}>
+              <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide mb-1">
+                {closure.trigger === "legal_required" ? <Gavel className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                Abschluss-Empfehlung — {closure.trigger === "legal_required" ? "rechtlich geboten" : "Geschäftsentscheidung"}
+                {closure.requires_role_approval && <Badge variant="outline" className="ml-1">Freigabe nötig</Badge>}
+              </div>
+              {closure.rationale && <div className="text-sm mb-1">{closure.rationale}</div>}
+              {closure.cost_comparison && <div className="text-xs text-muted-foreground">{closure.cost_comparison}</div>}
+              {typeof closure.proposed_amount_eur === "number" && (
+                <div className="text-sm mt-1"><span className="font-medium">Vorgeschlagene Summe: </span>{formatEuro(closure.proposed_amount_eur)}</div>
+              )}
+            </div>
+          )}
+
+          {(() => {
+            const shown = options[openOption] ?? rec;
+            if (!shown) return null;
+            return (
             <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-3">
               <div className="flex items-start justify-between gap-2 flex-wrap">
                 <div>
-                  <div className="text-[10px] uppercase tracking-wide text-primary font-medium">Empfehlung</div>
+                  <div className="text-[10px] uppercase tracking-wide text-primary font-medium">
+                    {shown.strategy_label ? shown.strategy_label : "Empfehlung"}{openOption === recIdx ? " · Empfehlung" : ""}
+                  </div>
                   <div className="text-2xl font-bold mt-1">
-                    {formatEuro(rec.amount_eur)}{" "}
+                    {formatEuro(shown.amount_eur)}{" "}
                     <span className="text-sm font-normal text-muted-foreground">
-                      ({Number(rec.percent_of_purchase || 0).toFixed(1)} % vom Kaufpreis)
+                      ({Number(shown.percent_of_purchase || 0).toFixed(1)} % vom Kaufpreis)
                     </span>
                   </div>
+                  {typeof shown.goodwill_beyond_legal_eur === "number" && shown.goodwill_beyond_legal_eur > 0 && (
+                    <div className="text-xs text-muted-foreground mt-1">davon freiwillige Kulanz: {formatEuro(shown.goodwill_beyond_legal_eur)}</div>
+                  )}
                 </div>
-                {rec.confidence && (
-                  <Badge variant="outline" className="text-xs">Konfidenz: {rec.confidence}</Badge>
+                {shown.confidence && (
+                  <Badge variant="outline" className="text-xs">Konfidenz: {shown.confidence}</Badge>
                 )}
               </div>
-              {rec.rationale && (
-                <div className="text-sm"><span className="font-medium">Begründung:</span> {rec.rationale}</div>
+              {Array.isArray(shown.legal_levers) && shown.legal_levers.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {shown.legal_levers.map((l: string, i: number) => (
+                    <Badge key={i} variant="secondary" className="text-[10px] font-normal">{l}</Badge>
+                  ))}
+                </div>
               )}
-              {rec.customer_wording && (
+              {shown.rationale && (
+                <div className="text-sm"><span className="font-medium">Begründung:</span> {shown.rationale}</div>
+              )}
+              {shown.reciprocity_ask && (
+                <div className="text-sm"><span className="font-medium">Gegenwert (Reziprozität):</span> {shown.reciprocity_ask}</div>
+              )}
+              {shown.customer_wording && (
                 <div className="text-sm p-3 bg-background/60 rounded border-l-2 border-primary/40">
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-medium text-xs uppercase text-muted-foreground">Wortlaut für den Kunden</span>
-                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => copy(rec.customer_wording, "Wortlaut")}>
+                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => copy(shown.customer_wording, "Wortlaut")}>
                       <Copy className="w-3.5 h-3.5 mr-1" />Kopieren
                     </Button>
                   </div>
-                  <div className="whitespace-pre-wrap">{rec.customer_wording}</div>
+                  <div className="whitespace-pre-wrap">{shown.customer_wording}</div>
                 </div>
               )}
-              {rec.email_draft && (
+              {shown.email_draft && (
                 <div className="text-sm p-3 bg-background/60 rounded border-l-2 border-primary/40">
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-medium text-xs uppercase text-muted-foreground">E-Mail-Entwurf</span>
-                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => copy(rec.email_draft, "E-Mail-Entwurf")}>
+                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => copy(shown.email_draft, "E-Mail-Entwurf")}>
                       <Copy className="w-3.5 h-3.5 mr-1" />Kopieren
                     </Button>
                   </div>
-                  <div className="whitespace-pre-wrap text-[13px] font-mono">{rec.email_draft}</div>
+                  <div className="whitespace-pre-wrap text-[13px] font-mono">{shown.email_draft}</div>
                 </div>
               )}
 
@@ -261,7 +367,8 @@ function VersionTurn({
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
       </ChatTurn>
     </>
