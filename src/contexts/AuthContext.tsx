@@ -60,6 +60,7 @@ interface AuthContextValue {
     email: string,
     password: string,
     fullName: string,
+    context?: "b2c" | "b2b",
   ) => Promise<AuthResult>;
   signInWithGoogle: () => Promise<OAuthResult>;
   signOut: () => Promise<void>;
