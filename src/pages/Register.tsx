@@ -13,7 +13,7 @@ const Register = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const intendedPlan = params.get("plan");
-  const { signUpWithEmail, signInWithGoogle } = useAuth();
+  const { signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -74,6 +74,19 @@ const Register = () => {
       // Browser is navigating away — keep spinner until unload.
       return;
     }
+    if (err) {
+      setError(err);
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
+  };
+
+  const handleApple = async () => {
+    setLoading(true);
+    setError(null);
+    const { error: err, redirected } = await signInWithApple();
+    if (redirected) return;
     if (err) {
       setError(err);
       setLoading(false);
@@ -210,6 +223,18 @@ const Register = () => {
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
               </svg>
               Mit Google fortfahren
+            </button>
+
+            <button
+              type="button"
+              onClick={handleApple}
+              disabled={loading}
+              className="w-full border border-border/60 hover:border-primary/40 py-3 flex items-center justify-center gap-3 font-sans uppercase tracking-[0.2em] text-xs text-foreground hover:text-primary transition-colors rounded-sm disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M16.365 1.43c0 1.14-.46 2.23-1.21 3.01-.81.85-2.16 1.51-3.27 1.42-.13-1.09.41-2.23 1.16-2.96.83-.83 2.27-1.45 3.32-1.47zM20.5 17.27c-.6 1.38-.88 2-1.65 3.22-1.08 1.7-2.6 3.82-4.48 3.84-1.67.02-2.1-1.09-4.36-1.08-2.26.01-2.74 1.1-4.41 1.08-1.88-.02-3.32-1.93-4.4-3.63C-1.04 16.83-1.36 11.5 1.39 8.69c1.6-1.63 4.13-2.45 6.06-1.31.86.51 1.78.86 2.7.85.92-.01 1.79-.36 2.69-.86 1.27-.7 3.07-.91 4.55-.19-1.27.78-2.74 2.29-2.7 4.45.05 2.58 2.39 3.45 2.6 3.64z" />
+              </svg>
+              Mit Apple fortfahren
             </button>
 
             <p className="text-center font-serif italic text-sm text-muted-foreground pt-4">
