@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 export default function RetailLogin() {
-  const { signInWithEmail } = useAuth();
+  const { signInWithEmail, signInWithGoogle, signInWithApple } = useAuth();
   const nav = useNavigate();
   const [params] = useSearchParams();
   const { toast } = useToast();
@@ -23,6 +23,15 @@ export default function RetailLogin() {
     setLoading(false);
     if (error) { toast({ title: "Anmeldung fehlgeschlagen", description: error, variant: "destructive" }); return; }
     nav(params.get("returnUrl") || "/select-context");
+  }
+
+  async function oauth(kind: "google" | "apple") {
+    setLoading(true);
+    const fn = kind === "google" ? signInWithGoogle : signInWithApple;
+    const { error, redirected } = await fn();
+    if (redirected) return;
+    setLoading(false);
+    if (error) toast({ title: "Anmeldung fehlgeschlagen", description: error, variant: "destructive" });
   }
 
   return (
@@ -40,6 +49,17 @@ export default function RetailLogin() {
             <div><Label>Passwort</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
             <Button type="submit" className="w-full" disabled={loading}>{loading ? "Anmeldung..." : "Anmelden"}</Button>
           </form>
+          <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex-1 h-px bg-border" /> Oder <span className="flex-1 h-px bg-border" />
+          </div>
+          <div className="space-y-2">
+            <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={() => oauth("google")}>
+              Mit Google anmelden
+            </Button>
+            <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={() => oauth("apple")}>
+              Mit Apple anmelden
+            </Button>
+          </div>
           <div className="mt-6 text-center text-sm text-muted-foreground">
             Noch kein Konto? <Link to="/retail/register" className="text-primary hover:underline">Registrieren</Link>
           </div>

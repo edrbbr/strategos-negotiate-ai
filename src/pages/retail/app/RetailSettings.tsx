@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { RoleHierarchyEditor } from "@/components/retail/settings/RoleHierarchyEditor";
-import { RoleAdminsSection } from "@/components/retail/settings/RoleAdminsSection";
 import { useCanManageRoles } from "@/hooks/useRoleHierarchy";
 
 export default function RetailSettings() {
@@ -64,9 +63,6 @@ export default function RetailSettings() {
         </CardContent>
       </Card>
       {canEdit && <Button onClick={save} disabled={saving}>{saving ? "Speichere…" : "Speichern"}</Button>}
-      {m?.business_account_id && m.role === "leitung" && (
-        <RoleAdminsSection accountId={m.business_account_id} />
-      )}
     </div>
   );
 }

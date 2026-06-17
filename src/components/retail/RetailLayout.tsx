@@ -1,7 +1,7 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBusinessMembership, roleLabel } from "@/hooks/useBusinessAccount";
-import { Shield, LayoutDashboard, Files, Inbox, Users, Settings, LifeBuoy, Receipt, BookOpen, LogOut } from "lucide-react";
+import { Shield, LayoutDashboard, Files, Inbox, Users, Settings, LifeBuoy, Receipt, BookOpen, LogOut, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const items = [
@@ -23,10 +23,10 @@ export function RetailLayout() {
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 w-64 border-r bg-card hidden md:flex flex-col">
         <div className="p-5 border-b">
-          <div className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <Shield className="w-5 h-5 text-primary" />
             <span className="font-semibold tracking-tight">Retail Shield</span>
-          </div>
+          </Link>
           {m && (
             <div className="mt-3 text-xs text-muted-foreground">
               <div className="font-medium text-foreground truncate">{m.business_account?.name}</div>
@@ -47,15 +47,23 @@ export function RetailLayout() {
           ))}
         </nav>
         <div className="p-3 border-t">
+          <Button asChild variant="ghost" className="w-full justify-start mb-1">
+            <Link to="/"><Home className="w-4 h-4 mr-2" /> Zur Pallanx-Startseite</Link>
+          </Button>
           <Button variant="ghost" className="w-full justify-start" onClick={async () => { await signOut(); nav("/retail/login"); }}>
             <LogOut className="w-4 h-4 mr-2" /> Abmelden
           </Button>
         </div>
       </aside>
       <main className="md:pl-64">
-        <div className="md:hidden border-b p-4 flex items-center gap-2 bg-card">
-          <Shield className="w-5 h-5 text-primary" />
-          <span className="font-semibold">Retail Shield</span>
+        <div className="md:hidden border-b p-4 flex items-center justify-between bg-card">
+          <Link to="/" className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-primary" />
+            <span className="font-semibold">Retail Shield</span>
+          </Link>
+          <Link to="/" className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1">
+            <Home className="w-3.5 h-3.5" /> Home
+          </Link>
         </div>
         <div className="p-6 max-w-7xl mx-auto">
           <Outlet />

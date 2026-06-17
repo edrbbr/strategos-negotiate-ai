@@ -63,6 +63,7 @@ interface AuthContextValue {
     context?: "b2c" | "b2b",
   ) => Promise<AuthResult>;
   signInWithGoogle: () => Promise<OAuthResult>;
+  signInWithApple: () => Promise<OAuthResult>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -184,6 +185,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  const signInWithApple = useCallback(async (): Promise<OAuthResult> => {
+    try {
+      const result = await lovable.auth.signInWithOAuth("apple", {
+        redirect_uri: `${window.location.origin}/app/dashboard`,
+      });
+      if (result.error) {
+        const msg =
+          result.error instanceof Error ? result.error.message : String(result.error);
+        console.error("[Apple OAuth] error:", result.error);
+        return { error: msg, redirected: false };
+      }
+      const redirected = !!(result as { redirected?: boolean }).redirected;
+      return { error: null, redirected };
+    } catch (e) {
+      console.error("[Apple OAuth] exception:", e);
+      return {
+        error: e instanceof Error ? e.message : "Apple sign-in fehlgeschlagen.",
+        redirected: false,
+      };
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setProfile(null);
@@ -203,6 +226,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       signInWithEmail,
       signUpWithEmail,
       signInWithGoogle,
+      signInWithApple,
       signOut,
       refreshProfile,
     }),
@@ -214,6 +238,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       signInWithEmail,
       signUpWithEmail,
       signInWithGoogle,
+      signInWithApple,
       signOut,
       refreshProfile,
     ],
