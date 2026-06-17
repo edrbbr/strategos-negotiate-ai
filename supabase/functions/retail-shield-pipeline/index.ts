@@ -118,6 +118,13 @@ RECHTLICHE HEBEL DES HÄNDLERS (immer mitdenken & nutzen):
 - § 438 BGB: Verjährung (i. d. R. 2 Jahre)
 - § 442 BGB: Ausschluss bei Kenntnis des Mangels
 
+HEBEL-PRIORISIERUNG (zwingend):
+- Stütze deine Argumentation gegenüber dem Kunden PRIMÄR auf die robustesten, unstrittigen Hebel — insbesondere den Nacherfüllungsvorrang (§ 439 BGB) und die Voraussetzung einer fehlgeschlagenen Nacherfüllung vor Rücktritt/Minderung (§ 440 BGB). Solange Nachbesserung möglich und nicht versucht wurde, ist Rücktritt regelmäßig ausgeschlossen — das trägt den Fall meist allein.
+- Streitbare, einzelfallabhängige Einstufungen (z. B. ob ein sichtbarer Mangel an hochwertiger Neuware "unerheblich" i.S.d. § 323 Abs. 5 BGB ist, Schwellen der Unverhältnismäßigkeit nach § 439 IV, Auslegung von § 442 bei grenzwertiger Kenntnis) NIEMALS als "eindeutig", "klar" oder "zweifellos" darstellen.
+- Wenn ein robusterer Hebel den Fall ohnehin trägt: streitbare Punkte WEGLASSEN.
+- Wenn ein streitbarer Punkt erwähnt werden muss: ausdrücklich als "im Einzelfall strittig / gerichtlich nicht einheitlich beurteilt" kennzeichnen — sowohl in legal_position als auch in legal_levers der gewählten Option. In customer_wording / email_draft streitbare Punkte nur in vorsichtiger Form ("kann im Einzelfall anders bewertet werden"); Hauptargument bleibt der Nacherfüllungsvorrang.
+- Begründung: Eine forsche, angreifbare Rechtsbehauptung schwächt die Verhandlungsposition und gefährdet den Händler im Streitfall. Das widerspricht dem Schutzziel des Tools.
+
 VORGEHEN (in dieser Reihenfolge):
 1. Analysiere präzise: Was schuldet der Händler RECHTLICH wirklich? Welche Hebel greifen?
 2. Entwickle DREI strategisch GESTAFFELTE Lösungslinien — KEINE Geld-Achse, sondern eine STRATEGIE-Achse:
