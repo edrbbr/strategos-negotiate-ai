@@ -72,9 +72,11 @@ Deno.serve(async (req) => {
       })();
       const userInstr = promptObj?.instruction ?? v.user_prompt ?? "—";
       const custResp = promptObj?.customer_response ?? "";
+      const concession = chosen ? Number(chosen.customer_concession_eur ?? chosen.amount_eur ?? 0) : 0;
+      const internalCost = chosen ? Number(chosen.merchant_internal_cost_eur ?? 0) : 0;
       return `--- V${v.version_number} (${v.kind}) ---
 ${v.kind !== "initial" ? `Mitarbeiter-Anweisung: ${userInstr}\n${custResp ? `Kundenreaktion zuvor: ${custResp}\n` : ""}` : ""}Analyse: ${a.analysis ?? "—"}
-${a.legal_position ? `Rechtliche Position: ${a.legal_position}\n` : ""}${a.change_summary ? `Änderung ggü. Vorversion: ${a.change_summary}\n` : ""}Gewählte Linie: ${chosen?.strategy_label ?? chosen?.strategy_key ?? "—"} · ${chosen?.amount_eur ?? "?"} EUR (${chosen?.percent_of_purchase ?? "?"}%) · davon Kulanz über Gesetz: ${chosen?.goodwill_beyond_legal_eur ?? 0} EUR
+${a.legal_position ? `Rechtliche Position: ${a.legal_position}\n` : ""}${a.change_summary ? `Änderung ggü. Vorversion: ${a.change_summary}\n` : ""}Gewählte Linie: ${chosen?.strategy_label ?? chosen?.strategy_key ?? "—"} · Zugeständnis an Kunde: ${concession} EUR (${chosen?.percent_of_purchase ?? "?"}%) · interne Umsetzungskosten: ${internalCost} EUR · davon Kulanz über Gesetz: ${chosen?.goodwill_beyond_legal_eur ?? 0} EUR
 An Kunde geschickter Wortlaut: ${chosen?.customer_wording ?? "—"}`;
     }).join("\n\n");
 
@@ -131,6 +133,13 @@ ${policyContext ? "MANDANTEN-RICHTLINIEN:\n" + policyContext + "\n\n" : ""}${glo
 
 SPRACHE: interne Strategie verkäuferorientiert; an den Kunden gerichtete Texte IMMER höflich, wertschätzend, wahrheitsgemäß.
 
+KOSTEN-TRENNUNG (zwingend):
+- customer_concession_eur = was der KUNDE als Geld/Gutschein/Wertausgleich erhält. Reine Nacherfüllung/Reparatur => 0.
+- merchant_internal_cost_eur = interne Umsetzungskosten (Reparatur, Anfahrt, Ersatzteil). Niemals an Kunde kommunizieren.
+- percent_of_purchase und Approval-Limits basieren NUR auf customer_concession_eur.
+- customer_wording und email_draft enthalten NIEMALS interne Kosten / Reparaturaufwand in EUR.
+- closure_recommendation.proposed_amount_eur = Kundenzugeständnis.
+
 OUTPUT: Liefere die aktualisierte Empfehlung als EINE Linie (die nächste strategisch beste Antwort) mit Runden-Zusammenfassung, nächster kleinster Konzession (mit Gegenwert) und optional einer Abschluss-Empfehlung A oder B.`;
 
     const userPrompt = `URSPRUNGSFALL:
@@ -172,18 +181,19 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
               properties: {
                 strategy_key: { type: "string", enum: ["optimal_for_merchant", "balanced", "relationship_protection"] },
                 strategy_label: { type: "string" },
-                amount_eur: { type: "number" },
-                percent_of_purchase: { type: "number" },
+                customer_concession_eur: { type: "number", description: "Was der KUNDE als Geld/Gutschein/Wertausgleich erhält. Reparatur ohne Auszahlung = 0." },
+                merchant_internal_cost_eur: { type: "number", description: "Interne Umsetzungskosten. Niemals an Kunde kommunizieren." },
+                percent_of_purchase: { type: "number", description: "customer_concession_eur / Kaufpreis * 100." },
                 goodwill_beyond_legal_eur: { type: "number" },
                 legal_levers: { type: "array", items: { type: "string" } },
                 reciprocity_ask: { type: "string", description: "Welcher Gegenwert wird im Gegenzug zur Konzession verlangt (z. B. Abschluss, Verzicht auf weitere Forderungen)." },
                 rationale: { type: "string" },
-                customer_wording: { type: "string" },
-                email_draft: { type: "string" },
+                customer_wording: { type: "string", description: "Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
+                email_draft: { type: "string", description: "Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
                 required_role: { type: "string", enum: ["sachbearbeiter", "manager", "leitung"] },
                 confidence: { type: "string", enum: ["low", "medium", "high"] },
               },
-              required: ["strategy_key", "strategy_label", "amount_eur", "percent_of_purchase", "goodwill_beyond_legal_eur", "legal_levers", "reciprocity_ask", "rationale", "customer_wording", "email_draft", "required_role", "confidence"],
+              required: ["strategy_key", "strategy_label", "customer_concession_eur", "merchant_internal_cost_eur", "percent_of_purchase", "goodwill_beyond_legal_eur", "legal_levers", "reciprocity_ask", "rationale", "customer_wording", "email_draft", "required_role", "confidence"],
               additionalProperties: false,
             },
             closure_recommendation: {
@@ -191,7 +201,7 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
               properties: {
                 trigger: { type: "string", enum: ["legal_required", "economic_business_decision"] },
                 cost_comparison: { type: "string", description: "Strittige Summe vs. erwartete Kosten des Weiterstreitens (Anwalt, Gericht, Zeit, Reputation)." },
-                proposed_amount_eur: { type: "number" },
+                proposed_amount_eur: { type: "number", description: "Vorgeschlagenes Kundenzugeständnis (kein interner Kostenwert)." },
                 requires_role_approval: { type: "boolean" },
                 rationale: { type: "string" },
               },
@@ -221,6 +231,7 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
       if (pct > (limits.manager_max_percent ?? 25)) requiredRole = "leitung";
       else if (pct > (limits.sachbearbeiter_max_percent ?? 10)) requiredRole = requiredRole === "leitung" ? "leitung" : "manager";
     }
+    const recConcession = recommended ? Number(recommended.customer_concession_eur ?? recommended.amount_eur ?? 0) : null;
 
     // determine next version_number
     const nextNum = (latestVersion?.version_number ?? 0) + 1;
@@ -254,7 +265,7 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
       current_version_id: newVersion.id,
       ai_analysis: newVersion.ai_analysis,
       ai_options: options,
-      suggested_offer: recommended?.amount_eur ?? null,
+      suggested_offer: recConcession,
       suggested_offer_percent: recommended?.percent_of_purchase ?? null,
       required_approval_role: requiredRole,
     }).eq("id", case_id);

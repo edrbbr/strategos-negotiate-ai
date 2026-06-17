@@ -98,7 +98,26 @@ export function useRunPipeline() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (case_id: string) => {
-      const { data, error } = await supabase.functions.invoke("retail-shield-pipeline", { body: { case_id } });
+      // cold-start retry: edge function may have just booted; retry transient network/5xx once
+      const isTransient = (err: any) => {
+        if (!err) return false;
+        const name = String(err?.name ?? "");
+        const msg = String(err?.message ?? "");
+        const status = Number((err?.context && err.context.status) ?? err?.status ?? 0);
+        if (name === "FunctionsFetchError") return true;
+        if (status === 0 || status === 502 || status === 503 || status === 504) return true;
+        if (/fetch|network|failed to send|timeout|aborted/i.test(msg)) return true;
+        return false;
+      };
+      const invokeOnce = async () => {
+        const res = await supabase.functions.invoke("retail-shield-pipeline", { body: { case_id } });
+        return res;
+      };
+      let { data, error } = await invokeOnce();
+      if (error && isTransient(error)) {
+        await new Promise((r) => setTimeout(r, 1500));
+        ({ data, error } = await invokeOnce());
+      }
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       return data;
