@@ -26,6 +26,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 import NotFound from "./pages/NotFound";
 import Unsubscribe from "./pages/Unsubscribe";
 import Privacy from "./pages/Privacy";
+import SelectContext from "./pages/SelectContext";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { FloatingThemeToggle } from "@/components/FloatingThemeToggle";
 import { CookieConsent } from "@/components/CookieConsent";
@@ -90,6 +91,7 @@ const App = () => (
             <Route path="/unsubscribe" element={<Unsubscribe />} />
             <Route path="/datenschutz" element={<Privacy />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/select-context" element={<SelectContext />} />
 
             {/* Retail Shield (B2B) public */}
             <Route path="/retail" element={<RetailLanding />} />
