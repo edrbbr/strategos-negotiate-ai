@@ -35,6 +35,12 @@ export const PublicHeader = ({ active }: PublicHeaderProps) => {
         </Link>
       </nav>
       <div className="flex items-center gap-4">
+        <Link
+          to="/retail"
+          className="md:hidden font-sans uppercase tracking-[0.18em] text-[10px] text-muted-foreground hover:text-primary"
+        >
+          Business
+        </Link>
         {isAuthed ? (
           <Link to="/app/dashboard">
             <Button variant="gold-outline" size="sm" className="normal-case tracking-normal">
