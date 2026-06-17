@@ -306,15 +306,31 @@ function VersionTurn({
                   <div className="text-[10px] uppercase tracking-wide text-primary font-medium">
                     {shown.strategy_label ? shown.strategy_label : "Empfehlung"}{openOption === recIdx ? " · Empfehlung" : ""}
                   </div>
-                  <div className="text-2xl font-bold mt-1">
-                    {formatEuro(shown.amount_eur)}{" "}
-                    <span className="text-sm font-normal text-muted-foreground">
-                      ({Number(shown.percent_of_purchase || 0).toFixed(1)} % vom Kaufpreis)
-                    </span>
-                  </div>
-                  {typeof shown.goodwill_beyond_legal_eur === "number" && shown.goodwill_beyond_legal_eur > 0 && (
-                    <div className="text-xs text-muted-foreground mt-1">davon freiwillige Kulanz: {formatEuro(shown.goodwill_beyond_legal_eur)}</div>
-                  )}
+                  {(() => {
+                    const concession = Number(shown.customer_concession_eur ?? shown.amount_eur ?? 0);
+                    const internal = Number(shown.merchant_internal_cost_eur ?? 0);
+                    return (
+                      <>
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-1">Zugeständnis an Kunde</div>
+                        <div className="text-2xl font-bold">
+                          {formatEuro(concession)}{" "}
+                          <span className="text-sm font-normal text-muted-foreground">
+                            ({Number(shown.percent_of_purchase || 0).toFixed(1)} % vom Kaufpreis)
+                          </span>
+                        </div>
+                        {typeof shown.goodwill_beyond_legal_eur === "number" && shown.goodwill_beyond_legal_eur > 0 && (
+                          <div className="text-xs text-muted-foreground mt-0.5">davon freiwillige Kulanz: {formatEuro(shown.goodwill_beyond_legal_eur)}</div>
+                        )}
+                        {internal > 0 && (
+                          <div className="mt-2 inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md bg-muted/60 border border-border/40" title="Nur intern — wird dem Kunden nicht kommuniziert.">
+                            <span className="uppercase tracking-wide text-[10px] text-muted-foreground">Interne Umsetzungskosten</span>
+                            <span className="font-medium">{formatEuro(internal)}</span>
+                            <span className="text-[10px] text-muted-foreground">(nur intern)</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
                 {shown.confidence && (
                   <Badge variant="outline" className="text-xs">Konfidenz: {shown.confidence}</Badge>
