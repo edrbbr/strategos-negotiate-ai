@@ -140,7 +140,15 @@ ${kulanzRules || "(keine — branchenüblich)"}
 
 ${policyContext ? "MANDANTEN-RICHTLINIEN (RAG):\n" + policyContext + "\n\n" : ""}${globalContext ? "VERHANDLUNGSWISSEN (RAG):\n" + globalContext : ""}
 
-SPRACHE: interne Strategie-Sprache klar verkäuferorientiert/durchsetzungsstark; an den Endkunden gerichtete Texte (customer_wording, email_draft) IMMER höflich, wertschätzend, wahrheitsgemäß. Keine Formulierungen wie "abwimmeln/abblocken/loswerden".`;
+SPRACHE: interne Strategie-Sprache klar verkäuferorientiert/durchsetzungsstark; an den Endkunden gerichtete Texte (customer_wording, email_draft) IMMER höflich, wertschätzend, wahrheitsgemäß. Keine Formulierungen wie "abwimmeln/abblocken/loswerden".
+
+KOSTEN-TRENNUNG (zwingend, pro Option):
+- customer_concession_eur: das, was der KUNDE tatsächlich als Geld/Gutschein/Wertausgleich erhält. Bei reiner Nacherfüllung / Reparatur / Austausch ohne Auszahlung an den Kunden ist dieser Wert IMMER 0.
+- merchant_internal_cost_eur: rein INTERNE Umsetzungskosten für den Händler (Reparaturkosten, Anfahrt, Ersatzteil, Logistik). Reine Entscheidungs-Info — wird dem KUNDEN niemals genannt.
+- goodwill_beyond_legal_eur bezieht sich ausschließlich auf customer_concession_eur (Anteil über das gesetzlich Geschuldete hinaus).
+- percent_of_purchase wird AUSSCHLIESSLICH aus customer_concession_eur / Kaufpreis berechnet (interne Kosten zählen NICHT).
+- customer_wording und email_draft dürfen NUR das tatsächliche Kunden-Zugeständnis kommunizieren — niemals interne Kosten oder Reparatur-Aufwand in EUR.
+- Approval-Limits (required_role) beziehen sich nur auf customer_concession_eur.`;
 
     const userPrompt = `Reklamationsfall:
 - Produkt: ${caseRow.product_name ?? "n/a"} (Kategorie: ${caseRow.product_category ?? "n/a"})
@@ -180,17 +188,18 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
                 properties: {
                   strategy_key: { type: "string", enum: ["optimal_for_merchant", "balanced", "relationship_protection"] },
                   strategy_label: { type: "string" },
-                  amount_eur: { type: "number", description: "Geschätzte Händler-Kosten dieser Option in EUR (0 wenn nur Reparatur ohne Auslage)." },
-                  percent_of_purchase: { type: "number" },
-                  goodwill_beyond_legal_eur: { type: "number", description: "Welcher Anteil davon ist freiwillige Kulanz über das gesetzlich Geschuldete hinaus." },
+                  customer_concession_eur: { type: "number", description: "Was der KUNDE als Geld/Gutschein/Wertausgleich tatsächlich erhält. Reine Reparatur/Nacherfüllung = 0." },
+                  merchant_internal_cost_eur: { type: "number", description: "Interne Umsetzungskosten für den Händler (Reparatur, Anfahrt, Ersatzteil). Niemals an Kunde kommunizieren." },
+                  percent_of_purchase: { type: "number", description: "customer_concession_eur / Kaufpreis * 100. Interne Kosten zählen NICHT." },
+                  goodwill_beyond_legal_eur: { type: "number", description: "Anteil des Kundenzugeständnisses über das gesetzlich Geschuldete hinaus." },
                   legal_levers: { type: "array", items: { type: "string" }, description: "Genutzte BGB-Hebel z. B. ['§ 439 Nacherfüllungsvorrang']." },
                   rationale: { type: "string", description: "Verhandlungslogik, warum genau diese Linie — KEINE Begründung über 'Limit erlaubt es'." },
-                  customer_wording: { type: "string", description: "Höflicher, wertschätzender Wortlaut für Mitarbeitende gegenüber Kunde, framt die Lösung als attraktiv (2-4 Sätze)." },
-                  email_draft: { type: "string", description: "Vollständige E-Mail an Kunde, höflich, wahrheitsgemäß, mit positivem Framing." },
+                  customer_wording: { type: "string", description: "Höflicher Wortlaut an Kunde (2-4 Sätze). Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
+                  email_draft: { type: "string", description: "Vollständige E-Mail an Kunde. Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
                   required_role: { type: "string", enum: ["sachbearbeiter", "manager", "leitung"] },
                   confidence: { type: "string", enum: ["low", "medium", "high"] },
                 },
-                required: ["strategy_key", "strategy_label", "amount_eur", "percent_of_purchase", "goodwill_beyond_legal_eur", "legal_levers", "rationale", "customer_wording", "email_draft", "required_role", "confidence"],
+                required: ["strategy_key", "strategy_label", "customer_concession_eur", "merchant_internal_cost_eur", "percent_of_purchase", "goodwill_beyond_legal_eur", "legal_levers", "rationale", "customer_wording", "email_draft", "required_role", "confidence"],
                 additionalProperties: false,
               },
             },
@@ -224,6 +233,9 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
     const needsEscalation = roleRank[requiredRole] > roleRank[userRole];
     const newStatus = needsEscalation ? "waiting_approval" : "in_review";
 
+    const concessionOf = (o: any) => Number(o?.customer_concession_eur ?? o?.amount_eur ?? 0);
+    const recConcession = recommended ? concessionOf(recommended) : null;
+
     await svc.from("business_cases").update({
       ai_analysis: {
         analysis: parsed.analysis,
@@ -232,7 +244,7 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
         recommendation_rationale: parsed.recommendation_rationale,
       },
       ai_options: options,
-      suggested_offer: recommended?.amount_eur ?? null,
+      suggested_offer: recConcession,
       suggested_offer_percent: recommended?.percent_of_purchase ?? null,
       required_approval_role: requiredRole,
       status: newStatus,
@@ -275,7 +287,7 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
       await svc.from("business_approvals").insert({
         case_id, business_account_id: caseRow.business_account_id,
         requested_by_user_id: userId, requested_by_role: userRole, required_role: requiredRole,
-        requested_amount: recommended.amount_eur ?? 0,
+        requested_amount: recConcession ?? 0,
         requested_percent: recommended.percent_of_purchase ?? 0,
         ai_recommendation: recommended,
         justification: parsed.analysis ?? "",
