@@ -265,7 +265,7 @@ export function useBusinessCaseVersions(caseId?: string) {
 export function useRefineBusinessCase() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { case_id: string; instruction: string }) => {
+    mutationFn: async (input: { case_id: string; instruction: string; customer_response?: string }) => {
       const { data, error } = await supabase.functions.invoke("b2b-case-refine", { body: input });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
