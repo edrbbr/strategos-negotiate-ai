@@ -98,9 +98,34 @@ Deno.serve(async (req) => {
       }
     } catch (e) { console.warn("rag error", e); }
 
-    const systemPrompt = `Du bist Pallanx Retail Shield — ein AI-Verhandlungsassistent für rechtssichere und FAIRE Reklamationsbearbeitung im Einzelhandel.
+    const systemPrompt = `Du bist Pallanx Retail Shield — ein ELITE-VERHANDLER auf Diplomaten-Niveau, kompromisslos auf der Seite des HÄNDLERS (Verkäufers). Dein Ziel: das wirtschaftlich BESTE Ergebnis für den Händler. Du beherrschst tactical empathy (Chris Voss), Anchoring, Framing, Reziprozität und spieltheoretische Verhandlungsführung und setzt sie konsequent für den Händler ein.
 
-DEINE AUFGABE: Liefere GENAU EINE Empfehlung — den kleinstmöglichen Betrag, mit dem der Kunde sich noch als Gewinner fühlt. Limits sind OBERGRENZEN, nicht Default. Bevorzuge Reparatur > Austausch > Teilgutschrift > Erstattung. Nutze BGB-Hebel und Branchenpraxis.
+LEITSPRUCH: "Tatlı dil yılanı deliğinden çıkarır" — eine sanfte Zunge lockt die Schlange aus ihrem Loch. Mit überlegener, höflicher Rhetorik führst du den Kunden dazu, die für den Händler günstigste Lösung FREIWILLIG zu wählen und sich dabei als Gewinner zu fühlen.
+
+ROTE LINIE (NICHT VERHANDELBAR):
+- Du steuerst die WAHL des Kunden durch überlegenes Framing — du täuschst NIEMALS über die Rechtslage.
+- Behaupte NIE wahrheitswidrig, der Kunde habe ein Recht nicht.
+- Verschweige zustehende Rechte NICHT auf ausdrückliche Nachfrage.
+- Halte den Kunden NICHT durch Falschaussagen von der Rechtsausübung ab.
+- Deine Macht liegt in der besseren Argumentation, nicht in Täuschung (§ 123 BGB, § 5 UWG).
+
+RECHTLICHE HEBEL DES HÄNDLERS (immer mitdenken & nutzen):
+- § 439 BGB Nacherfüllungsvorrang (Reparatur/Austausch geht Minderung/Rücktritt vor)
+- § 323 Abs. 5 BGB: Unerheblichkeit (kein Rücktritt bei unerheblichem Mangel)
+- § 439 Abs. 4 BGB: Unverhältnismäßigkeit der Nacherfüllungsart
+- § 440 BGB: Rücktritt erst nach fehlgeschlagener Nacherfüllung
+- § 477 BGB: Beweislastumkehr nur in den ersten 12 Monaten
+- § 438 BGB: Verjährung (i. d. R. 2 Jahre)
+- § 442 BGB: Ausschluss bei Kenntnis des Mangels
+
+VORGEHEN (in dieser Reihenfolge):
+1. Analysiere präzise: Was schuldet der Händler RECHTLICH wirklich? Welche Hebel greifen?
+2. Entwickle DREI strategisch GESTAFFELTE Lösungslinien — KEINE Geld-Achse, sondern eine STRATEGIE-Achse:
+   (a) "optimal_for_merchant": die rhetorisch-strategisch beste Linie, die den Kunden zur HÄNDLERGÜNSTIGSTEN Lösung führt (z. B. kostenlose Reparatur als sofortige, bequeme Lösung geframt). Maximal attraktiv für den Kunden geframt: Schnelligkeit, kein Warten, persönliche Wertschätzung. KEIN Zugeständnis über das gesetzlich Geschuldete hinaus, wenn nicht nötig.
+   (b) "balanced": händlergünstige Lösung + KLEINE Reziprozitäts-Geste (z. B. Pflegeset, kleiner Gutschein, kostenfreie Lieferung) zur Absicherung der Kundenzufriedenheit.
+   (c) "relationship_protection": bewusst großzügigere Linie für Bewertungs-/Stammkunden-Risiko — klar als strategische GESCHÄFTSENTSCHEIDUNG gekennzeichnet, nicht als Rechtspflicht.
+3. Jede Option enthält fertigen, höflichen, wertschätzenden Kundentext nach dem Prinzip "tatlı dil" — und einen vollständigen E-Mail-Entwurf.
+4. Empfehle standardmäßig Option (a). Nur wenn rechtlich klar (z. B. zweite Nacherfüllung fehlgeschlagen → § 440) oder wirtschaftlich zwingend (öffentliche Eskalation droht, Stammkunde mit hohem CLV), empfiehl (b) oder (c) und begründe transparent.
 
 BRANCHE: ${industryLabel}
 ${industryContext ? "Branchenspezifische Leitplanken:\n" + industryContext + "\n" : ""}
@@ -115,20 +140,7 @@ ${kulanzRules || "(keine — branchenüblich)"}
 
 ${policyContext ? "MANDANTEN-RICHTLINIEN (RAG):\n" + policyContext + "\n\n" : ""}${globalContext ? "VERHANDLUNGSWISSEN (RAG):\n" + globalContext : ""}
 
-Antworte AUSSCHLIESSLICH mit gültigem JSON nach diesem Schema:
-{
-  "analysis": "Kurzanalyse 2-4 Sätze: Sachlage, Rechtslage, Branche",
-  "risk_assessment": "Risiken (Image, Folgekosten, Präzedenz)",
-  "recommendation": {
-    "amount_eur": Zahl,
-    "percent_of_purchase": Zahl,
-    "rationale": "Warum genau dieser Betrag — Verhandlungslogik, BGB-Hebel, Branchenpraxis. KEINE Begründung über 'Limit erlaubt es'.",
-    "customer_wording": "Konkreter, höflicher, fairer Wortlaut für Mitarbeitende gegenüber Kunde (2-4 Sätze)",
-    "email_draft": "Vollständige E-Mail an Kunde mit Anrede, Inhalt, Grußformel. Tonalität: rechtssicher und fair.",
-    "required_role": "sachbearbeiter|manager|leitung",
-    "confidence": "low|medium|high"
-  }
-}`;
+SPRACHE: interne Strategie-Sprache klar verkäuferorientiert/durchsetzungsstark; an den Endkunden gerichtete Texte (customer_wording, email_draft) IMMER höflich, wertschätzend, wahrheitsgemäß. Keine Formulierungen wie "abwimmeln/abblocken/loswerden".`;
 
     const userPrompt = `Reklamationsfall:
 - Produkt: ${caseRow.product_name ?? "n/a"} (Kategorie: ${caseRow.product_category ?? "n/a"})
@@ -142,36 +154,50 @@ ${caseRow.situation_text ?? "(keine Beschreibung)"}
 
 Erzeuge eine EINZIGE faire Empfehlung mit Begründung und E-Mail-Entwurf.`;
 
-    const userPromptExtra = `\nAktueller Mitarbeiter-Rolle: ${userRole} (eigene Obergrenze ${userLimit}%).`;
+    const userPromptExtra = `\nAktueller Mitarbeiter-Rolle: ${userRole} (eigene Obergrenze ${userLimit}%).
+
+Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balanced / relationship_protection) mit Begründung, BGB-Hebeln, Kundentext und E-Mail-Entwurf. Empfehle standardmäßig Option (a) — abweichen NUR mit transparenter Begründung.`;
     const toolRes = await callAnthropicTool({
       apiKey: anthropicKey,
       systemPrompt,
       userMessage: userPrompt + userPromptExtra,
-      maxTokens: 3000,
+      maxTokens: 4500,
       tool: {
-        name: "return_retail_recommendation",
-        description: "Return the single fair Retail-Shield recommendation as strict JSON.",
+        name: "return_retail_strategy",
+        description: "Return the three strategically tiered Retail-Shield options as strict JSON.",
         input_schema: {
           type: "object",
           properties: {
-            analysis: { type: "string" },
+            analysis: { type: "string", description: "Rechtliche Einordnung + Verhandlungssituation, 3-5 Sätze." },
+            legal_position: { type: "string", description: "Was schuldet der Händler rechtlich wirklich? Welche BGB-Hebel greifen? 2-4 Sätze." },
             risk_assessment: { type: "string" },
-            recommendation: {
-              type: "object",
-              properties: {
-                amount_eur: { type: "number" },
-                percent_of_purchase: { type: "number" },
-                rationale: { type: "string" },
-                customer_wording: { type: "string" },
-                email_draft: { type: "string" },
-                required_role: { type: "string", enum: ["sachbearbeiter", "manager", "leitung"] },
-                confidence: { type: "string", enum: ["low", "medium", "high"] },
+            options: {
+              type: "array",
+              minItems: 3,
+              maxItems: 3,
+              items: {
+                type: "object",
+                properties: {
+                  strategy_key: { type: "string", enum: ["optimal_for_merchant", "balanced", "relationship_protection"] },
+                  strategy_label: { type: "string" },
+                  amount_eur: { type: "number", description: "Geschätzte Händler-Kosten dieser Option in EUR (0 wenn nur Reparatur ohne Auslage)." },
+                  percent_of_purchase: { type: "number" },
+                  goodwill_beyond_legal_eur: { type: "number", description: "Welcher Anteil davon ist freiwillige Kulanz über das gesetzlich Geschuldete hinaus." },
+                  legal_levers: { type: "array", items: { type: "string" }, description: "Genutzte BGB-Hebel z. B. ['§ 439 Nacherfüllungsvorrang']." },
+                  rationale: { type: "string", description: "Verhandlungslogik, warum genau diese Linie — KEINE Begründung über 'Limit erlaubt es'." },
+                  customer_wording: { type: "string", description: "Höflicher, wertschätzender Wortlaut für Mitarbeitende gegenüber Kunde, framt die Lösung als attraktiv (2-4 Sätze)." },
+                  email_draft: { type: "string", description: "Vollständige E-Mail an Kunde, höflich, wahrheitsgemäß, mit positivem Framing." },
+                  required_role: { type: "string", enum: ["sachbearbeiter", "manager", "leitung"] },
+                  confidence: { type: "string", enum: ["low", "medium", "high"] },
+                },
+                required: ["strategy_key", "strategy_label", "amount_eur", "percent_of_purchase", "goodwill_beyond_legal_eur", "legal_levers", "rationale", "customer_wording", "email_draft", "required_role", "confidence"],
+                additionalProperties: false,
               },
-              required: ["amount_eur", "percent_of_purchase", "rationale", "customer_wording", "email_draft", "required_role", "confidence"],
-              additionalProperties: false,
             },
+            recommended_option_index: { type: "integer", minimum: 0, maximum: 2, description: "Empfohlener Index (0 = optimal_for_merchant ist Default)." },
+            recommendation_rationale: { type: "string", description: "Warum diese Option empfohlen wird — besonders bei Abweichung von Option 0." },
           },
-          required: ["analysis", "risk_assessment", "recommendation"],
+          required: ["analysis", "legal_position", "risk_assessment", "options", "recommended_option_index", "recommendation_rationale"],
           additionalProperties: false,
         },
       },
@@ -181,9 +207,9 @@ Erzeuge eine EINZIGE faire Empfehlung mit Begründung und E-Mail-Entwurf.`;
     }
     const parsed: any = toolRes.data;
 
-    const recommended = parsed.recommendation ?? null;
-    const options = recommended ? [recommended] : [];
-    const recIdx = 0;
+    const options: any[] = Array.isArray(parsed.options) ? parsed.options : [];
+    const recIdx = Math.min(Math.max(Number(parsed.recommended_option_index ?? 0), 0), Math.max(options.length - 1, 0));
+    const recommended = options[recIdx] ?? options[0] ?? null;
 
     let requiredRole: Role = "sachbearbeiter";
     if (recommended) {
@@ -199,7 +225,12 @@ Erzeuge eine EINZIGE faire Empfehlung mit Begründung und E-Mail-Entwurf.`;
     const newStatus = needsEscalation ? "waiting_approval" : "in_review";
 
     await svc.from("business_cases").update({
-      ai_analysis: { analysis: parsed.analysis, risk_assessment: parsed.risk_assessment },
+      ai_analysis: {
+        analysis: parsed.analysis,
+        legal_position: parsed.legal_position,
+        risk_assessment: parsed.risk_assessment,
+        recommendation_rationale: parsed.recommendation_rationale,
+      },
       ai_options: options,
       suggested_offer: recommended?.amount_eur ?? null,
       suggested_offer_percent: recommended?.percent_of_purchase ?? null,
@@ -217,9 +248,14 @@ Erzeuge eine EINZIGE faire Empfehlung mit Begründung und E-Mail-Entwurf.`;
           case_id, business_account_id: caseRow.business_account_id,
           version_number: 1, kind: "initial",
           user_prompt: null,
-          ai_analysis: { analysis: parsed.analysis, risk_assessment: parsed.risk_assessment },
+          ai_analysis: {
+            analysis: parsed.analysis,
+            legal_position: parsed.legal_position,
+            risk_assessment: parsed.risk_assessment,
+            recommendation_rationale: parsed.recommendation_rationale,
+          },
           ai_options: options,
-          recommended_index: options.length ? (parsed.recommended_option_index ?? 0) : null,
+          recommended_index: options.length ? recIdx : null,
           required_role: requiredRole,
           created_by_user_id: userId,
         }).select("id").single();

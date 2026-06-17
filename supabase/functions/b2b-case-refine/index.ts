@@ -25,10 +25,11 @@ Deno.serve(async (req) => {
     if (!userRes?.user) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const userId = userRes.user.id;
 
-    const { case_id, instruction } = await req.json();
+    const { case_id, instruction, customer_response } = await req.json();
     if (!case_id || !instruction || String(instruction).trim().length < 2) {
       return new Response(JSON.stringify({ error: "case_id and instruction required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    const customerResponseText = typeof customer_response === "string" ? customer_response.trim() : "";
 
     const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -51,11 +52,31 @@ Deno.serve(async (req) => {
       if (ind) { industryLabel = ind.label; industryContext = ind.ai_context ?? ""; }
     }
 
-    // load latest version (current_version_id or highest version_number)
-    const { data: latestVersion } = await svc.from("business_case_versions")
-      .select("*").eq("case_id", case_id).order("version_number", { ascending: false }).limit(1).maybeSingle();
+    // load ALL versions chronologically for full negotiation history
+    const { data: allVersions } = await svc.from("business_case_versions")
+      .select("*").eq("case_id", case_id).order("version_number", { ascending: true });
+    const versions = (allVersions ?? []) as any[];
+    const latestVersion = versions[versions.length - 1] ?? null;
     const baseAnalysis = latestVersion?.ai_analysis ?? caseRow.ai_analysis ?? {};
     const baseOptions = (latestVersion?.ai_options ?? caseRow.ai_options ?? []) as any[];
+
+    // build compact transcript of all prior rounds
+    const transcript = versions.map((v) => {
+      const opts = (v.ai_options ?? []) as any[];
+      const idx = typeof v.recommended_index === "number" ? v.recommended_index : 0;
+      const chosen = opts[idx] ?? opts[0] ?? null;
+      const a = v.ai_analysis ?? {};
+      const promptObj = (() => {
+        try { return typeof v.user_prompt === "string" && v.user_prompt.startsWith("{") ? JSON.parse(v.user_prompt) : null; }
+        catch { return null; }
+      })();
+      const userInstr = promptObj?.instruction ?? v.user_prompt ?? "—";
+      const custResp = promptObj?.customer_response ?? "";
+      return `--- V${v.version_number} (${v.kind}) ---
+${v.kind !== "initial" ? `Mitarbeiter-Anweisung: ${userInstr}\n${custResp ? `Kundenreaktion zuvor: ${custResp}\n` : ""}` : ""}Analyse: ${a.analysis ?? "—"}
+${a.legal_position ? `Rechtliche Position: ${a.legal_position}\n` : ""}${a.change_summary ? `Änderung ggü. Vorversion: ${a.change_summary}\n` : ""}Gewählte Linie: ${chosen?.strategy_label ?? chosen?.strategy_key ?? "—"} · ${chosen?.amount_eur ?? "?"} EUR (${chosen?.percent_of_purchase ?? "?"}%) · davon Kulanz über Gesetz: ${chosen?.goodwill_beyond_legal_eur ?? 0} EUR
+An Kunde geschickter Wortlaut: ${chosen?.customer_wording ?? "—"}`;
+    }).join("\n\n");
 
     const lovableKey = Deno.env.get("LOVABLE_API_KEY")!;
 
@@ -82,8 +103,23 @@ Deno.serve(async (req) => {
       }
     } catch (e) { console.warn("rag error", e); }
 
-    const systemPrompt = `Du bist Pallanx Retail Shield. Du verfeinerst die bestehende EINZIGE Empfehlung gemäß Anweisung des Mitarbeitenden.
-REGEL: Liefere wieder GENAU EINE Empfehlung — kein Optionen-Set. Limits sind Obergrenzen, nicht Default. Faire, rechtssichere, branchenrealistische Verhandlung.
+    const systemPrompt = `Du bist Pallanx Retail Shield — ein ELITE-VERHANDLER auf Diplomaten-Niveau, kompromisslos auf der Seite des HÄNDLERS. Du führst eine LAUFENDE Verhandlung über mehrere Runden im Sinne des Händlers.
+
+LEITSPRUCH: "Tatlı dil yılanı deliğinden çıkarır" — sanfte Zunge + tactical empathy (Chris Voss) + Anchoring + Reziprozität + Spieltheorie.
+
+ROTE LINIE (unverändert über alle Runden): Du steuerst die Wahl durch überlegenes Framing — du täuschst NIE über die Rechtslage. Keine wahrheitswidrige Behauptung, der Kunde habe ein Recht nicht; kein Verschweigen zustehender Rechte auf direkte Nachfrage; keine Falschaussagen, um den Kunden von der Rechtsausübung abzuhalten (§ 123 BGB, § 5 UWG).
+
+VERHANDLUNGSLOGIK:
+- Gib NUR in kleinen, kontrollierten Schritten nach — möglichst mit GEGENWERT (Reziprozität: Konzession gegen Abschluss/Verzicht auf weitere Forderungen).
+- Beginne NIE mit dem Maximalzugeständnis. Halte das Kostenniveau für den Händler so lange wie möglich niedrig.
+- Ist der Kunde verärgert: ZUERST deeskalieren (Emotion anerkennen, Wertschätzung), DANN erst inhaltlich nachbessern.
+- Berücksichtige, was in vorherigen Runden BEREITS angeboten und vom Kunden ABGELEHNT wurde — verhandle nicht im Kreis.
+
+RECHTLICHE HEBEL: §§ 439 (Nacherfüllungsvorrang), 323 V (Unerheblichkeit), 439 IV (Unverhältnismäßigkeit), 440 (Rücktritt erst nach fehlgeschlagener Nacherfüllung), 477 (Beweislast), 438 (Verjährung), 442 (Kenntnis).
+
+ZWEI ABBRUCH-AUSLÖSER:
+(A) RECHTLICH GEBOTEN — wenn der Anspruch des Kunden rechtlich eindeutig berechtigt ist (z. B. zweite Nacherfüllung fehlgeschlagen → § 440, eindeutiger Mangel in Beweislastumkehr, berechtigte Minderung/Rücktritt): empfiehl rechtskonforme Erfüllung. Weiterverhandeln wäre rechtswidrig/aussichtslos. Begründe es wirtschaftlich (verlorener Rechtsstreit kostet mehr).
+(B) WIRTSCHAFTLICH GEBOTEN — wenn sich die Verhandlung festfährt (Kunde bewegt sich über mehrere Runden nicht, droht glaubhaft mit Anwalt/öffentlicher Eskalation, Zeit-/Reputationsaufwand übersteigt erkennbar die strittige Summe): LEGE DEM HÄNDLER eine Abschluss-Empfehlung VOR (transparente Rechnung: strittige Summe vs. erwartete Kosten des Weiterstreitens). Das ist eine GESCHÄFTSENTSCHEIDUNG, keine Rechtspflicht — kennzeichne sie klar und lege sie zur Freigabe vor.
 
 BRANCHE: ${industryLabel}
 ${industryContext ? "Branchenleitplanken:\n" + industryContext + "\n" : ""}
@@ -93,30 +129,24 @@ Kulanzregeln: ${kulanzRules || "(branchenüblich)"}
 
 ${policyContext ? "MANDANTEN-RICHTLINIEN:\n" + policyContext + "\n\n" : ""}${globalContext ? "VERHANDLUNGSWISSEN:\n" + globalContext : ""}
 
-Antworte AUSSCHLIESSLICH mit gültigem JSON:
-{
-  "analysis": "Aktualisierte Kurzanalyse",
-  "risk_assessment": "Aktualisierte Risiken",
-  "recommendation": {
-    "amount_eur": 0, "percent_of_purchase": 0,
-    "rationale": "...", "customer_wording": "...", "email_draft": "...",
-    "required_role": "sachbearbeiter|manager|leitung", "confidence": "low|medium|high"
-  },
-  "change_summary": "Was wurde gegenüber der Vorversion geändert (1-2 Sätze)"
-}`;
+SPRACHE: interne Strategie verkäuferorientiert; an den Kunden gerichtete Texte IMMER höflich, wertschätzend, wahrheitsgemäß.
 
-    const userPrompt = `Reklamationsfall:
+OUTPUT: Liefere die aktualisierte Empfehlung als EINE Linie (die nächste strategisch beste Antwort) mit Runden-Zusammenfassung, nächster kleinster Konzession (mit Gegenwert) und optional einer Abschluss-Empfehlung A oder B.`;
+
+    const userPrompt = `URSPRUNGSFALL:
 - Produkt: ${caseRow.product_name ?? "n/a"} (${caseRow.product_category ?? "n/a"})
 - Kaufpreis: ${caseRow.purchase_price_total} EUR · Menge ${caseRow.quantity}
 - Kundenforderung: ${caseRow.claimed_amount} EUR
 - Situation: ${caseRow.situation_text ?? "—"}
+- Kundentyp: ${caseRow.customer_type ?? "unbekannt"}
 
-VORHERIGE ANALYSE: ${JSON.stringify(baseAnalysis)}
-VORHERIGE EMPFEHLUNG: ${JSON.stringify(baseOptions[0] ?? null)}
+VERHANDLUNGSHISTORIE (Runde 1 = Erstanalyse, dann alle Refinements chronologisch):
+${transcript || "(noch keine)"}
 
-ANWEISUNG DES MITARBEITENDEN: ${instruction}
+AKTUELLE RUNDE (V${(latestVersion?.version_number ?? 0) + 1}):
+${customerResponseText ? `Kundenreaktion auf das zuletzt gesendete Angebot:\n${customerResponseText}\n\n` : ""}Anweisung des Mitarbeitenden: ${instruction}
 
-Passe die Empfehlung entsprechend an und erkläre kurz die Änderung.`;
+Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (Stand / was hat der Kunde abgelehnt / was war zuletzt angeboten), dann die aktualisierte Empfehlung (kleinste sinnvolle Konzession mit Gegenwert), Kundenwortlaut + E-Mail-Entwurf. Wenn Abbruch-Auslöser A oder B greift, fülle closure_recommendation.`;
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) {
@@ -126,32 +156,50 @@ Passe die Empfehlung entsprechend an und erkläre kurz die Änderung.`;
       apiKey: anthropicKey,
       systemPrompt,
       userMessage: userPrompt,
-      maxTokens: 3000,
+      maxTokens: 3500,
       tool: {
         name: "return_retail_refinement",
-        description: "Return the updated single Retail-Shield recommendation as strict JSON.",
+        description: "Return the updated Retail-Shield negotiation step as strict JSON.",
         input_schema: {
           type: "object",
           properties: {
-            analysis: { type: "string" },
+            round_summary: { type: "string", description: "Wo stehen wir? Was hat der Kunde abgelehnt? Was war zuletzt angeboten?" },
+            analysis: { type: "string", description: "Aktualisierte Kurzanalyse." },
             risk_assessment: { type: "string" },
+            change_summary: { type: "string", description: "Was wurde gegenüber der Vorversion geändert (1-2 Sätze)." },
             recommendation: {
               type: "object",
               properties: {
+                strategy_key: { type: "string", enum: ["optimal_for_merchant", "balanced", "relationship_protection"] },
+                strategy_label: { type: "string" },
                 amount_eur: { type: "number" },
                 percent_of_purchase: { type: "number" },
+                goodwill_beyond_legal_eur: { type: "number" },
+                legal_levers: { type: "array", items: { type: "string" } },
+                reciprocity_ask: { type: "string", description: "Welcher Gegenwert wird im Gegenzug zur Konzession verlangt (z. B. Abschluss, Verzicht auf weitere Forderungen)." },
                 rationale: { type: "string" },
                 customer_wording: { type: "string" },
                 email_draft: { type: "string" },
                 required_role: { type: "string", enum: ["sachbearbeiter", "manager", "leitung"] },
                 confidence: { type: "string", enum: ["low", "medium", "high"] },
               },
-              required: ["amount_eur", "percent_of_purchase", "rationale", "customer_wording", "email_draft", "required_role", "confidence"],
+              required: ["strategy_key", "strategy_label", "amount_eur", "percent_of_purchase", "goodwill_beyond_legal_eur", "legal_levers", "reciprocity_ask", "rationale", "customer_wording", "email_draft", "required_role", "confidence"],
               additionalProperties: false,
             },
-            change_summary: { type: "string" },
+            closure_recommendation: {
+              type: ["object", "null"],
+              properties: {
+                trigger: { type: "string", enum: ["legal_required", "economic_business_decision"] },
+                cost_comparison: { type: "string", description: "Strittige Summe vs. erwartete Kosten des Weiterstreitens (Anwalt, Gericht, Zeit, Reputation)." },
+                proposed_amount_eur: { type: "number" },
+                requires_role_approval: { type: "boolean" },
+                rationale: { type: "string" },
+              },
+              required: ["trigger", "cost_comparison", "proposed_amount_eur", "requires_role_approval", "rationale"],
+              additionalProperties: false,
+            },
           },
-          required: ["analysis", "risk_assessment", "recommendation", "change_summary"],
+          required: ["round_summary", "analysis", "risk_assessment", "recommendation", "change_summary"],
           additionalProperties: false,
         },
       },
@@ -177,11 +225,23 @@ Passe die Empfehlung entsprechend an und erkläre kurz die Änderung.`;
     // determine next version_number
     const nextNum = (latestVersion?.version_number ?? 0) + 1;
 
+    // structured user_prompt so transcript can recover customer_response in later rounds
+    const structuredPrompt = JSON.stringify({
+      instruction,
+      customer_response: customerResponseText || null,
+    });
+
     const { data: newVersion, error: insErr } = await svc.from("business_case_versions").insert({
       case_id, business_account_id: caseRow.business_account_id,
       version_number: nextNum, kind: "refinement",
-      user_prompt: instruction,
-      ai_analysis: { analysis: parsed.analysis, risk_assessment: parsed.risk_assessment, change_summary: parsed.change_summary },
+      user_prompt: structuredPrompt,
+      ai_analysis: {
+        analysis: parsed.analysis,
+        risk_assessment: parsed.risk_assessment,
+        change_summary: parsed.change_summary,
+        round_summary: parsed.round_summary,
+        closure_recommendation: parsed.closure_recommendation ?? null,
+      },
       ai_options: options,
       recommended_index: recIdx,
       required_role: requiredRole,
@@ -201,7 +261,7 @@ Passe die Empfehlung entsprechend an und erkläre kurz die Änderung.`;
 
     await svc.from("business_case_logs").insert({
       case_id, business_account_id: caseRow.business_account_id, user_id: userId,
-      action: "refinement", system_suggestion: { instruction, result: parsed },
+      action: "refinement", system_suggestion: { instruction, customer_response: customerResponseText || null, result: parsed },
     });
 
     return new Response(JSON.stringify({
@@ -209,6 +269,8 @@ Passe die Empfehlung entsprechend an und erkläre kurz die Änderung.`;
       required_role: requiredRole,
       escalated: roleRank[requiredRole] > roleRank[userRole],
       change_summary: parsed.change_summary ?? null,
+      round_summary: parsed.round_summary ?? null,
+      closure_recommendation: parsed.closure_recommendation ?? null,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("refine error", e);
