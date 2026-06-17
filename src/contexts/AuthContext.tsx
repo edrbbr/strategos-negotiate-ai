@@ -43,6 +43,7 @@ export type AuthProfile = {
   theme_preference: "light" | "dark" | null;
   refinements_used_period?: number;
   refinements_period_start?: string | null;
+  b2c_enabled?: boolean;
 };
 
 type AuthResult = { error: string | null };
@@ -68,7 +69,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const PROFILE_SELECT =
-  "id, full_name, organization, avatar_url, plan_id, cases_used, extra_credits, cases_period_start, refinements_used_period, refinements_period_start, aggressive_mode, archive_mode, subscription_status, billing_cycle, theme_preference, plan:plans!inner(id, name, tier_label, case_limit, case_limit_type, tier_key, bookable_directly, initial_attachments_limit, refinement_attachments_limit, refinements_per_case, refinements_per_month, allows_tonality, allows_deep_doc_analysis, support_sla_hours)";
+  "id, full_name, organization, avatar_url, plan_id, cases_used, extra_credits, cases_period_start, refinements_used_period, refinements_period_start, aggressive_mode, archive_mode, subscription_status, billing_cycle, theme_preference, b2c_enabled, plan:plans!inner(id, name, tier_label, case_limit, case_limit_type, tier_key, bookable_directly, initial_attachments_limit, refinement_attachments_limit, refinements_per_case, refinements_per_month, allows_tonality, allows_deep_doc_analysis, support_sla_hours)";
 
 const fetchProfile = async (userId: string): Promise<AuthProfile | null> => {
   const { data, error } = await supabase
@@ -143,13 +144,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email: string,
       password: string,
       fullName: string,
+      context: "b2c" | "b2b" = "b2c",
     ): Promise<AuthResult> => {
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/app/dashboard`,
-          data: { full_name: fullName },
+          emailRedirectTo: `${window.location.origin}${context === "b2b" ? "/retail/app/dashboard" : "/app/dashboard"}`,
+          data: { full_name: fullName, signup_context: context },
         },
       });
       return { error: error?.message ?? null };
