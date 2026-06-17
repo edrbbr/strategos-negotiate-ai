@@ -22,7 +22,7 @@ export default function RetailLogin() {
     const { error } = await signInWithEmail(email, password);
     setLoading(false);
     if (error) { toast({ title: "Anmeldung fehlgeschlagen", description: error, variant: "destructive" }); return; }
-    nav(params.get("returnUrl") || "/retail/app/dashboard");
+    nav(params.get("returnUrl") || "/select-context");
   }
 
   return (

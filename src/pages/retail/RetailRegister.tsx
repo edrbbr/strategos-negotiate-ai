@@ -29,7 +29,7 @@ export default function RetailRegister() {
     setLoading(true);
     try {
       if (!isAuthenticated) {
-        const { error } = await signUpWithEmail(f.email, f.password, f.full_name);
+        const { error } = await signUpWithEmail(f.email, f.password, f.full_name, "b2b");
         if (error) throw new Error(error);
         // wait briefly for session
         await new Promise((r) => setTimeout(r, 400));

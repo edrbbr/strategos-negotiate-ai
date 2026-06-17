@@ -1866,6 +1866,7 @@ export type Database = {
           aggressive_mode: boolean
           archive_mode: boolean
           avatar_url: string | null
+          b2c_enabled: boolean
           billing_cycle: string | null
           cases_period_start: string | null
           cases_used: number
@@ -1886,6 +1887,7 @@ export type Database = {
           aggressive_mode?: boolean
           archive_mode?: boolean
           avatar_url?: string | null
+          b2c_enabled?: boolean
           billing_cycle?: string | null
           cases_period_start?: string | null
           cases_used?: number
@@ -1906,6 +1908,7 @@ export type Database = {
           aggressive_mode?: boolean
           archive_mode?: boolean
           avatar_url?: string | null
+          b2c_enabled?: boolean
           billing_cycle?: string | null
           cases_period_start?: string | null
           cases_used?: number
@@ -2255,6 +2258,7 @@ export type Database = {
         Args: { _account: string; _user: string }
         Returns: number
       }
+      enable_b2c_for_self: { Args: never; Returns: boolean }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
         Returns: number

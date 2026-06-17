@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Seo } from "@/components/Seo";
-import { postAuthRedirect } from "@/lib/firstCaseFlow";
+import { hasFirstCasePrefill } from "@/lib/firstCaseFlow";
 import { track } from "@/lib/analytics";
 
 const Login = () => {
@@ -15,7 +15,10 @@ const Login = () => {
   const [params] = useSearchParams();
   // If the user arrived from the landing hero with a stashed situation,
   // skip the dashboard and drop them straight into a pre-filled new case.
-  const returnUrl = params.get("returnUrl") || postAuthRedirect();
+  const fromParam = params.get("returnUrl");
+  // If user has stashed first-case prefill, honour that flow; otherwise route
+  // via /select-context which auto-redirects based on B2C/B2B entitlements.
+  const returnUrl = fromParam || (hasFirstCasePrefill() ? "/app/case/new" : "/select-context");
   const { signInWithEmail, signInWithGoogle, isAuthenticated } = useAuth();
 
   const [email, setEmail] = useState("");
