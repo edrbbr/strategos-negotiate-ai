@@ -15,7 +15,8 @@ const Login = () => {
   const [params] = useSearchParams();
   // If the user arrived from the landing hero with a stashed situation,
   // skip the dashboard and drop them straight into a pre-filled new case.
-  const returnUrl = params.get("returnUrl") || postAuthRedirect();
+  const explicitReturn = params.get("returnUrl") || postAuthRedirect();
+  const returnUrl = explicitReturn || "/select-context";
   const { signInWithEmail, signInWithGoogle, isAuthenticated } = useAuth();
 
   const [email, setEmail] = useState("");
