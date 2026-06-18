@@ -149,6 +149,13 @@ ${policyContext ? "MANDANTEN-RICHTLINIEN (RAG):\n" + policyContext + "\n\n" : ""
 
 SPRACHE: interne Strategie-Sprache klar verkäuferorientiert/durchsetzungsstark; an den Endkunden gerichtete Texte (customer_wording, email_draft) IMMER höflich, wertschätzend, wahrheitsgemäß. Keine Formulierungen wie "abwimmeln/abblocken/loswerden".
 
+PFLICHT — KUNDEN-KOMMUNIKATION (NICHT VERHANDELBAR):
+- customer_wording UND email_draft sind in JEDER der drei Optionen PFLICHT und müssen vollständig ausformuliert sein, auch wenn customer_concession_eur = 0.
+- Bei 0-€-Strategien (reine Nacherfüllung/Begutachtung): höflicher Deeskalations-Text mit Anerkennung der Emotion + konkretem nächsten Schritt (z. B. kostenfreier Techniker-/Begutachtungs-Termin) + freundlicher Abschluss.
+- email_draft enthält Anrede, Fließtext-Hauptteil, konkreten Lösungsvorschlag/nächsten Schritt, höfliche Grußformel. Mindestens 200 Zeichen.
+- customer_wording ist ein kompakter Wortlaut (mind. 60 Zeichen) für die mündliche/kurze schriftliche Antwort.
+- Leere, einsilbige oder nur platzhalterhafte Felder sind unzulässig.
+
 KOSTEN-TRENNUNG (zwingend, pro Option):
 - customer_concession_eur: das, was der KUNDE tatsächlich als Geld/Gutschein/Wertausgleich erhält. Bei reiner Nacherfüllung / Reparatur / Austausch ohne Auszahlung an den Kunden ist dieser Wert IMMER 0.
 - merchant_internal_cost_eur: rein INTERNE Umsetzungskosten für den Händler (Reparaturkosten, Anfahrt, Ersatzteil, Logistik). Reine Entscheidungs-Info — wird dem KUNDEN niemals genannt.
