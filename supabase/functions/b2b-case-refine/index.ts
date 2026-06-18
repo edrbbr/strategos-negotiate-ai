@@ -13,6 +13,22 @@ const roleRank: Record<Role, number> = { support_readonly: 0, sachbearbeiter: 1,
 
 function vec(v: number[]) { return `[${v.join(",")}]`; }
 
+function extractJsonObject(text: string): Record<string, unknown> | null {
+  const cleaned = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try { return JSON.parse(cleaned.slice(start, end + 1)); }
+  catch { return null; }
+}
+
+function defaultCustomerText(caseRow: any, recommended: any) {
+  const product = caseRow.product_name || "dem Produkt";
+  const wording = `Vielen Dank für Ihre Rückmeldung — ich verstehe, dass Sie eine schnelle und klare Lösung erwarten. Wir möchten den Sachverhalt jetzt sauber klären und bieten Ihnen eine kostenfreie Begutachtung der ${product} an. Danach stimmen wir den passenden nächsten Schritt mit Ihnen ab, selbstverständlich im Rahmen Ihrer gesetzlichen Gewährleistungsrechte.`;
+  const email = `Sehr geehrte/r [Kundenname],\n\nvielen Dank für Ihre Rückmeldung. Ich verstehe, dass Sie eine schnelle und verbindliche Klärung erwarten. Uns ist wichtig, die Angelegenheit sachlich, fair und ohne weitere Verzögerung zu lösen.\n\nAls nächsten Schritt bieten wir Ihnen eine kostenfreie Begutachtung der ${product} an. Sobald die Ursache geklärt ist, stimmen wir mit Ihnen die passende Lösung ab, zum Beispiel eine sachgerechte Nachbesserung, selbstverständlich im Rahmen Ihrer gesetzlichen Gewährleistungsrechte.\n\nBitte nennen Sie uns kurz zwei passende Termine, damit wir die Begutachtung zeitnah koordinieren können.\n\nMit freundlichen Grüßen\n[Ihr Name]`;
+  return { customer_wording: recommended?.customer_wording || wording, email_draft: recommended?.email_draft || email };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
