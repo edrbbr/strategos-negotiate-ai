@@ -249,7 +249,19 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
     }
     const parsed: any = toolRes.data;
 
-    const recommended = parsed.recommendation ?? null;
+    const recommended = parsed.recommendation ?? {
+      strategy_key: "optimal_for_merchant",
+      strategy_label: "Kostenfreie Begutachtung als nächster Schritt",
+      customer_concession_eur: 0,
+      merchant_internal_cost_eur: 0,
+      percent_of_purchase: 0,
+      goodwill_beyond_legal_eur: 0,
+      legal_levers: ["§ 439 BGB Nacherfüllungsvorrang", "§ 440 BGB Rücktritt erst nach fehlgeschlagener Nacherfüllung"],
+      reciprocity_ask: "Kunde ermöglicht die Begutachtung und wartet die sachliche Klärung ab.",
+      rationale: parsed.analysis || "Die nächste händlergünstige und faire Antwort ist Deeskalation mit konkreter Begutachtung, bevor finanzielle Zugeständnisse gemacht werden.",
+      required_role: "sachbearbeiter",
+      confidence: "medium",
+    };
 
     // Fallback: ensure customer_wording + email_draft are present and substantial.
     if (recommended) {
@@ -264,12 +276,20 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
         if (filler.ok) {
           try {
             const txt = filler.text.replace(/^```json\s*|\s*```$/g, "").trim();
-            const j = JSON.parse(txt);
-            if (j.customer_wording) recommended.customer_wording = String(j.customer_wording);
-            if (j.email_draft) recommended.email_draft = String(j.email_draft);
+            const j = extractJsonObject(txt);
+            if (j?.customer_wording) recommended.customer_wording = String(j.customer_wording);
+            if (j?.email_draft) recommended.email_draft = String(j.email_draft);
           } catch (e) { console.warn("filler parse failed", e); }
         }
       }
+    }
+
+    const fallbackText = defaultCustomerText(caseRow, recommended);
+    if (!recommended.customer_wording || String(recommended.customer_wording).trim().length < 60) {
+      recommended.customer_wording = fallbackText.customer_wording;
+    }
+    if (!recommended.email_draft || String(recommended.email_draft).trim().length < 200) {
+      recommended.email_draft = fallbackText.email_draft;
     }
 
     const options = recommended ? [recommended] : [];
