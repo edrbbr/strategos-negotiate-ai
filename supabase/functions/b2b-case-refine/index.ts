@@ -306,12 +306,7 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
       required_approval_role: requiredRole,
     }).eq("id", case_id);
 
-    await svc.from("business_case_logs").insert({
-      case_id, business_account_id: caseRow.business_account_id, user_id: userId,
-      action: "refinement", system_suggestion: { instruction, customer_response: customerResponseText || null, result: parsed },
-    });
-
-    return new Response(JSON.stringify({
+    const response = new Response(JSON.stringify({
       ok: true, version: newVersion, options, recommended,
       required_role: requiredRole,
       escalated: roleRank[requiredRole] > roleRank[userRole],
@@ -319,6 +314,19 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
       round_summary: parsed.round_summary ?? null,
       closure_recommendation: parsed.closure_recommendation ?? null,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    // Defer log insert so the HTTP response flushes immediately.
+    // @ts-ignore — Supabase Edge Runtime global
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        await svc.from("business_case_logs").insert({
+          case_id, business_account_id: caseRow.business_account_id, user_id: userId,
+          action: "refinement", system_suggestion: { instruction, customer_response: customerResponseText || null, result: parsed },
+        });
+      } catch (e) { console.warn("refine log insert failed", e); }
+    })());
+
+    return response;
   } catch (e) {
     console.error("refine error", e);
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
