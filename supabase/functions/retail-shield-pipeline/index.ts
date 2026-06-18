@@ -13,6 +13,22 @@ const roleRank: Record<Role, number> = { support_readonly: 0, sachbearbeiter: 1,
 
 function vec(v: number[]) { return `[${v.join(",")}]`; }
 
+function extractJsonObject(text: string): Record<string, unknown> | null {
+  const cleaned = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try { return JSON.parse(cleaned.slice(start, end + 1)); }
+  catch { return null; }
+}
+
+function defaultCustomerText(caseRow: any, recommended: any) {
+  const product = caseRow.product_name || "dem Produkt";
+  const wording = `Vielen Dank für Ihre Nachricht — ich verstehe gut, dass die Situation für Sie ärgerlich ist. Wir möchten das schnell und fair klären und bieten Ihnen deshalb eine kostenfreie Begutachtung der ${product} an. Danach stimmen wir den passenden nächsten Schritt mit Ihnen ab, selbstverständlich im Rahmen Ihrer gesetzlichen Gewährleistungsrechte.`;
+  const email = `Sehr geehrte/r [Kundenname],\n\nvielen Dank für Ihre Nachricht. Ich kann nachvollziehen, dass die Situation für Sie enttäuschend und ärgerlich ist. Uns ist wichtig, den Sachverhalt zügig und fair zu klären.\n\nDamit wir die Ursache zuverlässig beurteilen können, bieten wir Ihnen eine kostenfreie Begutachtung der ${product} an. Im Anschluss besprechen wir mit Ihnen den passenden nächsten Schritt, zum Beispiel eine sachgerechte Nachbesserung, selbstverständlich im Rahmen Ihrer gesetzlichen Gewährleistungsrechte.\n\nBitte teilen Sie uns kurz mit, wann Ihnen ein Termin am besten passt.\n\nMit freundlichen Grüßen\n[Ihr Name]`;
+  return { customer_wording: recommended?.customer_wording || wording, email_draft: recommended?.email_draft || email };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -234,6 +250,22 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
     const recIdx = Math.min(Math.max(Number(parsed.recommended_option_index ?? 0), 0), Math.max(options.length - 1, 0));
     let recommended = options[recIdx] ?? options[0] ?? null;
 
+    if (!recommended) {
+      recommended = {
+        strategy_key: "optimal_for_merchant",
+        strategy_label: "Kostenfreie Begutachtung als erster Schritt",
+        customer_concession_eur: 0,
+        merchant_internal_cost_eur: 0,
+        percent_of_purchase: 0,
+        goodwill_beyond_legal_eur: 0,
+        legal_levers: ["§ 439 BGB Nacherfüllungsvorrang", "§ 440 BGB Rücktritt erst nach fehlgeschlagener Nacherfüllung"],
+        rationale: parsed.recommendation_rationale || parsed.analysis || "Zunächst muss die Ursache geklärt werden; die händlergünstigste faire Linie ist eine kostenfreie Begutachtung mit anschließender Nacherfüllung.",
+        required_role: "sachbearbeiter",
+        confidence: "medium",
+      };
+      options.push(recommended);
+    }
+
     // Fallback: ensure customer_wording + email_draft for the recommended option.
     const needsWording = !!recommended && (
       !recommended.customer_wording || String(recommended.customer_wording).trim().length < 60 ||
@@ -246,13 +278,22 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
       if (filler.ok) {
         try {
           const txt = filler.text.replace(/^```json\s*|\s*```$/g, "").trim();
-          const j = JSON.parse(txt);
-          if (j.customer_wording) recommended.customer_wording = String(j.customer_wording);
-          if (j.email_draft) recommended.email_draft = String(j.email_draft);
+          const j = extractJsonObject(txt);
+          if (j?.customer_wording) recommended.customer_wording = String(j.customer_wording);
+          if (j?.email_draft) recommended.email_draft = String(j.email_draft);
           if (options[recIdx]) options[recIdx] = recommended;
         } catch (e) { console.warn("filler parse failed", e); }
       }
     }
+
+    const fallbackText = defaultCustomerText(caseRow, recommended);
+    if (!recommended.customer_wording || String(recommended.customer_wording).trim().length < 60) {
+      recommended.customer_wording = fallbackText.customer_wording;
+    }
+    if (!recommended.email_draft || String(recommended.email_draft).trim().length < 200) {
+      recommended.email_draft = fallbackText.email_draft;
+    }
+    options[recIdx] = recommended;
 
     let requiredRole: Role = "sachbearbeiter";
     if (recommended) {
