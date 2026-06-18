@@ -279,8 +279,8 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
         try {
           const txt = filler.text.replace(/^```json\s*|\s*```$/g, "").trim();
           const j = extractJsonObject(txt);
-          if (j.customer_wording) recommended.customer_wording = String(j.customer_wording);
-          if (j.email_draft) recommended.email_draft = String(j.email_draft);
+          if (j?.customer_wording) recommended.customer_wording = String(j.customer_wording);
+          if (j?.email_draft) recommended.email_draft = String(j.email_draft);
           if (options[recIdx]) options[recIdx] = recommended;
         } catch (e) { console.warn("filler parse failed", e); }
       }
