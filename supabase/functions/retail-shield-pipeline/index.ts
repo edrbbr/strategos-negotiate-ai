@@ -250,6 +250,22 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
     const recIdx = Math.min(Math.max(Number(parsed.recommended_option_index ?? 0), 0), Math.max(options.length - 1, 0));
     let recommended = options[recIdx] ?? options[0] ?? null;
 
+    if (!recommended) {
+      recommended = {
+        strategy_key: "optimal_for_merchant",
+        strategy_label: "Kostenfreie Begutachtung als erster Schritt",
+        customer_concession_eur: 0,
+        merchant_internal_cost_eur: 0,
+        percent_of_purchase: 0,
+        goodwill_beyond_legal_eur: 0,
+        legal_levers: ["§ 439 BGB Nacherfüllungsvorrang", "§ 440 BGB Rücktritt erst nach fehlgeschlagener Nacherfüllung"],
+        rationale: parsed.recommendation_rationale || parsed.analysis || "Zunächst muss die Ursache geklärt werden; die händlergünstigste faire Linie ist eine kostenfreie Begutachtung mit anschließender Nacherfüllung.",
+        required_role: "sachbearbeiter",
+        confidence: "medium",
+      };
+      options.push(recommended);
+    }
+
     // Fallback: ensure customer_wording + email_draft for the recommended option.
     const needsWording = !!recommended && (
       !recommended.customer_wording || String(recommended.customer_wording).trim().length < 60 ||
@@ -262,13 +278,22 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
       if (filler.ok) {
         try {
           const txt = filler.text.replace(/^```json\s*|\s*```$/g, "").trim();
-          const j = JSON.parse(txt);
+          const j = extractJsonObject(txt);
           if (j.customer_wording) recommended.customer_wording = String(j.customer_wording);
           if (j.email_draft) recommended.email_draft = String(j.email_draft);
           if (options[recIdx]) options[recIdx] = recommended;
         } catch (e) { console.warn("filler parse failed", e); }
       }
     }
+
+    const fallbackText = defaultCustomerText(caseRow, recommended);
+    if (!recommended.customer_wording || String(recommended.customer_wording).trim().length < 60) {
+      recommended.customer_wording = fallbackText.customer_wording;
+    }
+    if (!recommended.email_draft || String(recommended.email_draft).trim().length < 200) {
+      recommended.email_draft = fallbackText.email_draft;
+    }
+    options[recIdx] = recommended;
 
     let requiredRole: Role = "sachbearbeiter";
     if (recommended) {
