@@ -118,7 +118,26 @@ export function useRunPipeline() {
         await new Promise((r) => setTimeout(r, 1500));
         ({ data, error } = await invokeOnce());
       }
-      if (error) throw error;
+      if (error) {
+        // The edge function may have completed server-side even though the
+        // HTTP connection dropped (long-running Anthropic call + HTTP/2 reset).
+        // Poll the case row for up to ~90s to detect successful completion.
+        const deadline = Date.now() + 90_000;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const { data: row } = await (supabase as any)
+            .from("business_cases")
+            .select("ai_analysis, ai_options, updated_at")
+            .eq("id", case_id)
+            .maybeSingle();
+          const hasAnalysis = row && row.ai_analysis && Object.keys(row.ai_analysis || {}).length > 0;
+          const hasOptions = row && Array.isArray(row.ai_options) && row.ai_options.length > 0;
+          if (hasAnalysis && hasOptions) {
+            return { ok: true, recovered: true } as any;
+          }
+        }
+        throw error;
+      }
       if ((data as any)?.error) throw new Error((data as any).error);
       return data;
     },
