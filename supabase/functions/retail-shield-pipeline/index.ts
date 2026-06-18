@@ -183,7 +183,7 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
       apiKey: anthropicKey,
       systemPrompt,
       userMessage: userPrompt + userPromptExtra,
-      maxTokens: 4500,
+      maxTokens: 3500,
       tool: {
         name: "return_retail_strategy",
         description: "Return the three strategically tiered Retail-Shield options as strict JSON.",
