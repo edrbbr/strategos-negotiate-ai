@@ -234,6 +234,28 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
     const parsed: any = toolRes.data;
 
     const recommended = parsed.recommendation ?? null;
+
+    // Fallback: ensure customer_wording + email_draft are present and substantial.
+    if (recommended) {
+      const needsWording = (
+        !recommended.customer_wording || String(recommended.customer_wording).trim().length < 60 ||
+        !recommended.email_draft || String(recommended.email_draft).trim().length < 200
+      );
+      if (needsWording) {
+        const fillerSystem = `Du bist Pallanx Retail Shield. Formuliere für eine bereits beschlossene Verhandlungslinie zwei Texte an einen Endkunden. Höflich, wertschätzend, wahrheitsgemäß. Niemals interne Kosten / Reparaturaufwand in EUR nennen. Bei 0-€-Strategien: Emotion anerkennen + konkreten nächsten Schritt (z. B. kostenfreier Techniker-/Begutachtungs-Termin) anbieten. Antworte ausschließlich mit reinem JSON {"customer_wording":"...","email_draft":"..."} (ohne Codeblock).`;
+        const fillerUser = `Fall: ${caseRow.product_name ?? "n/a"} (${caseRow.product_category ?? "n/a"}), Kaufpreis ${caseRow.purchase_price_total} EUR, Kundenforderung ${caseRow.claimed_amount} EUR.\nSituation: ${caseRow.situation_text ?? "—"}\n${customerResponseText ? `Letzte Kundenreaktion: ${customerResponseText}\n` : ""}Anweisung des Mitarbeitenden: ${instruction}\n\nGewählte Strategie: ${recommended.strategy_label ?? recommended.strategy_key ?? "Empfehlung"}\nKundenzugeständnis: ${Number(recommended.customer_concession_eur ?? 0)} EUR (${Number(recommended.percent_of_purchase ?? 0)}%)\nGegenwert (Reziprozität): ${recommended.reciprocity_ask ?? "—"}\nBegründung intern: ${recommended.rationale ?? ""}\nRechtliche Hebel: ${(recommended.legal_levers ?? []).join(", ")}\n\ncustomer_wording: mind. 60 Zeichen, 2-4 Sätze.\nemail_draft: mind. 200 Zeichen, mit Anrede, Hauptteil, Lösungsvorschlag, Grußformel.`;
+        const filler = await callAnthropicText({ apiKey: anthropicKey, systemPrompt: fillerSystem, userMessage: fillerUser, maxTokens: 900 });
+        if (filler.ok) {
+          try {
+            const txt = filler.text.replace(/^```json\s*|\s*```$/g, "").trim();
+            const j = JSON.parse(txt);
+            if (j.customer_wording) recommended.customer_wording = String(j.customer_wording);
+            if (j.email_draft) recommended.email_draft = String(j.email_draft);
+          } catch (e) { console.warn("filler parse failed", e); }
+        }
+      }
+    }
+
     const options = recommended ? [recommended] : [];
     const recIdx = 0;
 
