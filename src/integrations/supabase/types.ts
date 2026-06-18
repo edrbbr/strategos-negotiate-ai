@@ -2136,6 +2136,30 @@ export type Database = {
           },
         ]
       }
+      linkedin_pool_public: {
+        Row: {
+          generated_post: string | null
+          id: string | null
+          post_title: string | null
+          post_url: string | null
+          posted_at: string | null
+        }
+        Insert: {
+          generated_post?: string | null
+          id?: string | null
+          post_title?: string | null
+          post_url?: string | null
+          posted_at?: string | null
+        }
+        Update: {
+          generated_post?: string | null
+          id?: string | null
+          post_title?: string | null
+          post_url?: string | null
+          posted_at?: string | null
+        }
+        Relationships: []
+      }
       plans_public: {
         Row: {
           allows_deep_doc_analysis: boolean | null

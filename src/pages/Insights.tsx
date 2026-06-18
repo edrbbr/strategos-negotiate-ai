@@ -17,9 +17,8 @@ function useInsights() {
     queryKey: ["public-insights"],
     queryFn: async (): Promise<PublicPost[]> => {
       const { data, error } = await supabase
-        .from("linkedin_pool")
+        .from("linkedin_pool_public" as any)
         .select("id, post_title, generated_post, post_url, posted_at")
-        .eq("status", "posted")
         .order("posted_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as unknown as PublicPost[];
