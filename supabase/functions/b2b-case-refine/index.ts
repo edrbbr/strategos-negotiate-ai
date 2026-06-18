@@ -140,6 +140,13 @@ ${policyContext ? "MANDANTEN-RICHTLINIEN:\n" + policyContext + "\n\n" : ""}${glo
 
 SPRACHE: interne Strategie verkäuferorientiert; an den Kunden gerichtete Texte IMMER höflich, wertschätzend, wahrheitsgemäß.
 
+PFLICHT — KUNDEN-KOMMUNIKATION (NICHT VERHANDELBAR):
+- recommendation.customer_wording UND recommendation.email_draft sind in JEDER Runde PFLICHT — auch wenn customer_concession_eur = 0.
+- Bei 0-€-Strategien (reine Nacherfüllung, Begutachtung, Halten der Linie): höflicher Deeskalations-Text mit Anerkennung der Emotion + konkretem nächsten Schritt (z. B. kostenfreier Techniker-/Begutachtungs-Termin, klare Reparatur-Zusage) + freundlicher Abschluss.
+- email_draft enthält Anrede, Hauptteil, konkreten Lösungsvorschlag/nächsten Schritt, Grußformel. Mindestens 200 Zeichen.
+- customer_wording ist ein kompakter Wortlaut (mind. 60 Zeichen).
+- Leere, einsilbige oder platzhalterhafte Felder sind unzulässig.
+
 KOSTEN-TRENNUNG (zwingend):
 - customer_concession_eur = was der KUNDE als Geld/Gutschein/Wertausgleich erhält. Reine Nacherfüllung/Reparatur => 0.
 - merchant_internal_cost_eur = interne Umsetzungskosten (Reparatur, Anfahrt, Ersatzteil). Niemals an Kunde kommunizieren.
