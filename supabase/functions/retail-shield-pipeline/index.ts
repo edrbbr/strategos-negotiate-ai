@@ -284,54 +284,63 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
       status: newStatus,
     }).eq("id", case_id);
 
-    // Write V1 (initial) snapshot for the chat/version timeline
-    try {
-      const { data: existingV1 } = await svc.from("business_case_versions")
-        .select("id").eq("case_id", case_id).eq("kind", "initial").maybeSingle();
-      let versionId = existingV1?.id ?? null;
-      if (!versionId) {
-        const { data: v1 } = await svc.from("business_case_versions").insert({
-          case_id, business_account_id: caseRow.business_account_id,
-          version_number: 1, kind: "initial",
-          user_prompt: null,
-          ai_analysis: {
-            analysis: parsed.analysis,
-            legal_position: parsed.legal_position,
-            risk_assessment: parsed.risk_assessment,
-            recommendation_rationale: parsed.recommendation_rationale,
-          },
-          ai_options: options,
-          recommended_index: options.length ? recIdx : null,
-          required_role: requiredRole,
-          created_by_user_id: userId,
-        }).select("id").single();
-        versionId = v1?.id ?? null;
-      }
-      if (versionId) {
-        await svc.from("business_cases").update({ current_version_id: versionId }).eq("id", case_id);
-      }
-    } catch (e) { console.warn("v1 snapshot failed", e); }
-
-    await svc.from("business_case_logs").insert({
-      case_id, business_account_id: caseRow.business_account_id, user_id: userId,
-      action: "ai_suggestion", system_suggestion: parsed,
-    });
-
-    if (needsEscalation && recommended) {
-      await svc.from("business_approvals").insert({
-        case_id, business_account_id: caseRow.business_account_id,
-        requested_by_user_id: userId, requested_by_role: userRole, required_role: requiredRole,
-        requested_amount: recConcession ?? 0,
-        requested_percent: recommended.percent_of_purchase ?? 0,
-        ai_recommendation: recommended,
-        justification: parsed.analysis ?? "",
-      });
-    }
-
-    return new Response(JSON.stringify({
+    const response = new Response(JSON.stringify({
       ok: true, options, recommended, required_role: requiredRole,
       escalated: needsEscalation, analysis: parsed.analysis, risk_assessment: parsed.risk_assessment,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    // Defer non-critical writes so the HTTP response flushes immediately.
+    // @ts-ignore — Supabase Edge Runtime global
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        const { data: existingV1 } = await svc.from("business_case_versions")
+          .select("id").eq("case_id", case_id).eq("kind", "initial").maybeSingle();
+        let versionId = existingV1?.id ?? null;
+        if (!versionId) {
+          const { data: v1 } = await svc.from("business_case_versions").insert({
+            case_id, business_account_id: caseRow.business_account_id,
+            version_number: 1, kind: "initial",
+            user_prompt: null,
+            ai_analysis: {
+              analysis: parsed.analysis,
+              legal_position: parsed.legal_position,
+              risk_assessment: parsed.risk_assessment,
+              recommendation_rationale: parsed.recommendation_rationale,
+            },
+            ai_options: options,
+            recommended_index: options.length ? recIdx : null,
+            required_role: requiredRole,
+            created_by_user_id: userId,
+          }).select("id").single();
+          versionId = v1?.id ?? null;
+        }
+        if (versionId) {
+          await svc.from("business_cases").update({ current_version_id: versionId }).eq("id", case_id);
+        }
+      } catch (e) { console.warn("v1 snapshot failed", e); }
+
+      try {
+        await svc.from("business_case_logs").insert({
+          case_id, business_account_id: caseRow.business_account_id, user_id: userId,
+          action: "ai_suggestion", system_suggestion: parsed,
+        });
+      } catch (e) { console.warn("log insert failed", e); }
+
+      if (needsEscalation && recommended) {
+        try {
+          await svc.from("business_approvals").insert({
+            case_id, business_account_id: caseRow.business_account_id,
+            requested_by_user_id: userId, requested_by_role: userRole, required_role: requiredRole,
+            requested_amount: recConcession ?? 0,
+            requested_percent: recommended.percent_of_purchase ?? 0,
+            ai_recommendation: recommended,
+            justification: parsed.analysis ?? "",
+          });
+        } catch (e) { console.warn("approval insert failed", e); }
+      }
+    })());
+
+    return response;
   } catch (e) {
     console.error("pipeline error", e);
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
