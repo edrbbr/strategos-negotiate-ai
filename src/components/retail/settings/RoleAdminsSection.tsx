@@ -17,7 +17,7 @@ export function RoleAdminsSection({ accountId }: { accountId: string }) {
     queryKey: ["business-managers", accountId],
     queryFn: async () => {
       const { data } = await (supabase as any).from("business_users")
-        .select("id, full_name, email, role").eq("business_account_id", accountId).eq("status", "active").eq("role", "manager");
+        .select("id, auth_user_id, full_name, email, role").eq("business_account_id", accountId).eq("status", "active").eq("role", "manager");
       return data ?? [];
     },
   });
@@ -54,7 +54,7 @@ export function RoleAdminsSection({ accountId }: { accountId: string }) {
         <div className="space-y-2">
           {managers.map((u: any) => (
             <label key={u.id} className="flex items-center gap-2 cursor-pointer">
-              <Checkbox checked={selected.includes(u.id)} onCheckedChange={() => toggle(u.id)} />
+              <Checkbox checked={selected.includes(u.auth_user_id)} onCheckedChange={() => toggle(u.auth_user_id)} />
               <span className="text-sm">{u.full_name} <span className="text-xs text-muted-foreground">({u.email})</span></span>
             </label>
           ))}
