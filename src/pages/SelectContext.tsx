@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, Shield, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBusinessMembership } from "@/hooks/useBusinessAccount";
@@ -14,27 +14,37 @@ export default function SelectContext() {
   const nav = useNavigate();
   const { toast } = useToast();
   const [enabling, setEnabling] = useState(false);
+  const [showFallback, setShowFallback] = useState(false);
   const requestEnable = params.get("enable") === "b2c";
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) nav("/login", { replace: true });
   }, [isLoading, isAuthenticated, nav]);
 
-  if (isLoading || mLoading || !profile) {
+  // If still waiting after 1.5s, render the picker anyway so the user isn't trapped.
+  useEffect(() => {
+    const t = setTimeout(() => setShowFallback(true), 1500);
+    return () => clearTimeout(t);
+  }, []);
+
+  const hasB2C = profile?.b2c_enabled === true;
+  const hasB2B = !!membership;
+  const ready = !isLoading && !mLoading && !!profile;
+
+  // Auto-redirect when entitlements are known and unambiguous.
+  useEffect(() => {
+    if (!ready || requestEnable) return;
+    if (hasB2C && !hasB2B) nav("/app/dashboard", { replace: true });
+    else if (hasB2B && !hasB2C) nav("/retail/app/dashboard", { replace: true });
+  }, [ready, requestEnable, hasB2C, hasB2B, nav]);
+
+  if (!ready && !showFallback) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="w-6 h-6 text-primary animate-spin" />
       </div>
     );
   }
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-
-  const hasB2C = profile.b2c_enabled === true;
-  const hasB2B = !!membership;
-
-  // Auto-redirect if only one option available and no explicit enable request
-  if (!requestEnable && hasB2C && !hasB2B) return <Navigate to="/app/dashboard" replace />;
-  if (!requestEnable && hasB2B && !hasB2C) return <Navigate to="/retail/app/dashboard" replace />;
 
   async function enableB2C() {
     setEnabling(true);

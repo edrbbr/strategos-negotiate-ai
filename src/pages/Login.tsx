@@ -16,9 +16,6 @@ const Login = () => {
   // If the user arrived from the landing hero with a stashed situation,
   // skip the dashboard and drop them straight into a pre-filled new case.
   const fromParam = params.get("returnUrl");
-  // If user has stashed first-case prefill, honour that flow; otherwise route
-  // via /select-context which auto-redirects based on B2C/B2B entitlements.
-  const returnUrl = fromParam || (hasFirstCasePrefill() ? "/app/case/new" : "/select-context");
   const { signInWithEmail, signInWithGoogle, signInWithApple, isAuthenticated } = useAuth();
 
   const [email, setEmail] = useState("");
@@ -27,9 +24,42 @@ const Login = () => {
   const [error, setError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState(false);
 
+  // Resolve the post-login destination based on entitlements so single-context
+  // users (only B2C or only B2B) don't get parked on a /select-context spinner.
+  const resolveDestination = async (): Promise<string> => {
+    if (fromParam) return fromParam;
+    if (hasFirstCasePrefill()) return "/app/case/new";
+    try {
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes?.user?.id;
+      if (!uid) return "/select-context";
+      const [{ data: prof }, { data: mem }] = await Promise.all([
+        supabase.from("profiles").select("b2c_enabled").eq("id", uid).maybeSingle(),
+        (supabase as any).from("business_users")
+          .select("business_account_id")
+          .eq("auth_user_id", uid).eq("status", "active").maybeSingle(),
+      ]);
+      const hasB2C = prof?.b2c_enabled === true;
+      const hasB2B = !!mem;
+      if (hasB2C && !hasB2B) return "/app/dashboard";
+      if (!hasB2C && hasB2B) return "/retail/app/dashboard";
+      if (hasB2C && hasB2B) return "/select-context";
+      return "/select-context?enable=b2c";
+    } catch {
+      return "/select-context";
+    }
+  };
+
   useEffect(() => {
-    if (isAuthenticated) navigate(returnUrl, { replace: true });
-  }, [isAuthenticated, navigate, returnUrl]);
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      const dest = await resolveDestination();
+      if (!cancelled) navigate(dest, { replace: true });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +78,8 @@ const Login = () => {
       return;
     }
     track("login_completed", { method: "email" });
-    navigate(returnUrl, { replace: true });
+    const dest = await resolveDestination();
+    navigate(dest, { replace: true });
   };
 
   const resendConfirm = async () => {

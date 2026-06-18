@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callAnthropicTool } from "../_shared/anthropic.ts";
+import { callAnthropicTool, callAnthropicText } from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -149,6 +149,13 @@ ${policyContext ? "MANDANTEN-RICHTLINIEN (RAG):\n" + policyContext + "\n\n" : ""
 
 SPRACHE: interne Strategie-Sprache klar verkäuferorientiert/durchsetzungsstark; an den Endkunden gerichtete Texte (customer_wording, email_draft) IMMER höflich, wertschätzend, wahrheitsgemäß. Keine Formulierungen wie "abwimmeln/abblocken/loswerden".
 
+PFLICHT — KUNDEN-KOMMUNIKATION (NICHT VERHANDELBAR):
+- customer_wording UND email_draft sind in JEDER der drei Optionen PFLICHT und müssen vollständig ausformuliert sein, auch wenn customer_concession_eur = 0.
+- Bei 0-€-Strategien (reine Nacherfüllung/Begutachtung): höflicher Deeskalations-Text mit Anerkennung der Emotion + konkretem nächsten Schritt (z. B. kostenfreier Techniker-/Begutachtungs-Termin) + freundlicher Abschluss.
+- email_draft enthält Anrede, Fließtext-Hauptteil, konkreten Lösungsvorschlag/nächsten Schritt, höfliche Grußformel. Mindestens 200 Zeichen.
+- customer_wording ist ein kompakter Wortlaut (mind. 60 Zeichen) für die mündliche/kurze schriftliche Antwort.
+- Leere, einsilbige oder nur platzhalterhafte Felder sind unzulässig.
+
 KOSTEN-TRENNUNG (zwingend, pro Option):
 - customer_concession_eur: das, was der KUNDE tatsächlich als Geld/Gutschein/Wertausgleich erhält. Bei reiner Nacherfüllung / Reparatur / Austausch ohne Auszahlung an den Kunden ist dieser Wert IMMER 0.
 - merchant_internal_cost_eur: rein INTERNE Umsetzungskosten für den Händler (Reparaturkosten, Anfahrt, Ersatzteil, Logistik). Reine Entscheidungs-Info — wird dem KUNDEN niemals genannt.
@@ -176,7 +183,7 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
       apiKey: anthropicKey,
       systemPrompt,
       userMessage: userPrompt + userPromptExtra,
-      maxTokens: 4500,
+      maxTokens: 3500,
       tool: {
         name: "return_retail_strategy",
         description: "Return the three strategically tiered Retail-Shield options as strict JSON.",
@@ -201,8 +208,8 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
                   goodwill_beyond_legal_eur: { type: "number", description: "Anteil des Kundenzugeständnisses über das gesetzlich Geschuldete hinaus." },
                   legal_levers: { type: "array", items: { type: "string" }, description: "Genutzte BGB-Hebel z. B. ['§ 439 Nacherfüllungsvorrang']." },
                   rationale: { type: "string", description: "Verhandlungslogik, warum genau diese Linie — KEINE Begründung über 'Limit erlaubt es'." },
-                  customer_wording: { type: "string", description: "Höflicher Wortlaut an Kunde (2-4 Sätze). Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
-                  email_draft: { type: "string", description: "Vollständige E-Mail an Kunde. Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
+                  customer_wording: { type: "string", minLength: 60, description: "Höflicher Wortlaut an Kunde (2-4 Sätze, mind. 60 Zeichen). PFLICHT — auch bei 0-€-Strategien (Deeskalation + nächster Schritt). Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
+                  email_draft: { type: "string", minLength: 200, description: "Vollständige E-Mail an Kunde mit Anrede, Hauptteil, Lösungsvorschlag, Grußformel (mind. 200 Zeichen). PFLICHT. Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
                   required_role: { type: "string", enum: ["sachbearbeiter", "manager", "leitung"] },
                   confidence: { type: "string", enum: ["low", "medium", "high"] },
                 },
@@ -225,7 +232,27 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
 
     const options: any[] = Array.isArray(parsed.options) ? parsed.options : [];
     const recIdx = Math.min(Math.max(Number(parsed.recommended_option_index ?? 0), 0), Math.max(options.length - 1, 0));
-    const recommended = options[recIdx] ?? options[0] ?? null;
+    let recommended = options[recIdx] ?? options[0] ?? null;
+
+    // Fallback: ensure customer_wording + email_draft for the recommended option.
+    const needsWording = !!recommended && (
+      !recommended.customer_wording || String(recommended.customer_wording).trim().length < 60 ||
+      !recommended.email_draft || String(recommended.email_draft).trim().length < 200
+    );
+    if (needsWording) {
+      const fillerSystem = `Du bist Pallanx Retail Shield. Formuliere für eine bereits beschlossene Verhandlungslinie zwei Texte an einen Endkunden. Höflich, wertschätzend, wahrheitsgemäß. Niemals interne Kosten / Reparaturaufwand in EUR nennen. Bei 0-€-Strategien: Emotion anerkennen + konkreten nächsten Schritt (z. B. kostenfreier Techniker-/Begutachtungs-Termin) anbieten. Antworte ausschließlich mit reinem JSON {"customer_wording":"...","email_draft":"..."} (ohne Codeblock).`;
+      const fillerUser = `Fall: ${caseRow.product_name ?? "n/a"} (${caseRow.product_category ?? "n/a"}), Kaufpreis ${caseRow.purchase_price_total} EUR, Kundenforderung ${caseRow.claimed_amount} EUR.\nSituation: ${caseRow.situation_text ?? "—"}\n\nGewählte Strategie: ${recommended.strategy_label ?? recommended.strategy_key ?? "Empfehlung"}\nKundenzugeständnis: ${Number(recommended.customer_concession_eur ?? 0)} EUR (${Number(recommended.percent_of_purchase ?? 0)}%)\nBegründung intern: ${recommended.rationale ?? ""}\nRechtliche Hebel: ${(recommended.legal_levers ?? []).join(", ")}\n\ncustomer_wording: mind. 60 Zeichen, 2-4 Sätze.\nemail_draft: mind. 200 Zeichen, mit Anrede, Hauptteil, Lösungsvorschlag, Grußformel.`;
+      const filler = await callAnthropicText({ apiKey: anthropicKey, systemPrompt: fillerSystem, userMessage: fillerUser, maxTokens: 900 });
+      if (filler.ok) {
+        try {
+          const txt = filler.text.replace(/^```json\s*|\s*```$/g, "").trim();
+          const j = JSON.parse(txt);
+          if (j.customer_wording) recommended.customer_wording = String(j.customer_wording);
+          if (j.email_draft) recommended.email_draft = String(j.email_draft);
+          if (options[recIdx]) options[recIdx] = recommended;
+        } catch (e) { console.warn("filler parse failed", e); }
+      }
+    }
 
     let requiredRole: Role = "sachbearbeiter";
     if (recommended) {
@@ -257,54 +284,63 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
       status: newStatus,
     }).eq("id", case_id);
 
-    // Write V1 (initial) snapshot for the chat/version timeline
-    try {
-      const { data: existingV1 } = await svc.from("business_case_versions")
-        .select("id").eq("case_id", case_id).eq("kind", "initial").maybeSingle();
-      let versionId = existingV1?.id ?? null;
-      if (!versionId) {
-        const { data: v1 } = await svc.from("business_case_versions").insert({
-          case_id, business_account_id: caseRow.business_account_id,
-          version_number: 1, kind: "initial",
-          user_prompt: null,
-          ai_analysis: {
-            analysis: parsed.analysis,
-            legal_position: parsed.legal_position,
-            risk_assessment: parsed.risk_assessment,
-            recommendation_rationale: parsed.recommendation_rationale,
-          },
-          ai_options: options,
-          recommended_index: options.length ? recIdx : null,
-          required_role: requiredRole,
-          created_by_user_id: userId,
-        }).select("id").single();
-        versionId = v1?.id ?? null;
-      }
-      if (versionId) {
-        await svc.from("business_cases").update({ current_version_id: versionId }).eq("id", case_id);
-      }
-    } catch (e) { console.warn("v1 snapshot failed", e); }
-
-    await svc.from("business_case_logs").insert({
-      case_id, business_account_id: caseRow.business_account_id, user_id: userId,
-      action: "ai_suggestion", system_suggestion: parsed,
-    });
-
-    if (needsEscalation && recommended) {
-      await svc.from("business_approvals").insert({
-        case_id, business_account_id: caseRow.business_account_id,
-        requested_by_user_id: userId, requested_by_role: userRole, required_role: requiredRole,
-        requested_amount: recConcession ?? 0,
-        requested_percent: recommended.percent_of_purchase ?? 0,
-        ai_recommendation: recommended,
-        justification: parsed.analysis ?? "",
-      });
-    }
-
-    return new Response(JSON.stringify({
+    const response = new Response(JSON.stringify({
       ok: true, options, recommended, required_role: requiredRole,
       escalated: needsEscalation, analysis: parsed.analysis, risk_assessment: parsed.risk_assessment,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    // Defer non-critical writes so the HTTP response flushes immediately.
+    // @ts-ignore — Supabase Edge Runtime global
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        const { data: existingV1 } = await svc.from("business_case_versions")
+          .select("id").eq("case_id", case_id).eq("kind", "initial").maybeSingle();
+        let versionId = existingV1?.id ?? null;
+        if (!versionId) {
+          const { data: v1 } = await svc.from("business_case_versions").insert({
+            case_id, business_account_id: caseRow.business_account_id,
+            version_number: 1, kind: "initial",
+            user_prompt: null,
+            ai_analysis: {
+              analysis: parsed.analysis,
+              legal_position: parsed.legal_position,
+              risk_assessment: parsed.risk_assessment,
+              recommendation_rationale: parsed.recommendation_rationale,
+            },
+            ai_options: options,
+            recommended_index: options.length ? recIdx : null,
+            required_role: requiredRole,
+            created_by_user_id: userId,
+          }).select("id").single();
+          versionId = v1?.id ?? null;
+        }
+        if (versionId) {
+          await svc.from("business_cases").update({ current_version_id: versionId }).eq("id", case_id);
+        }
+      } catch (e) { console.warn("v1 snapshot failed", e); }
+
+      try {
+        await svc.from("business_case_logs").insert({
+          case_id, business_account_id: caseRow.business_account_id, user_id: userId,
+          action: "ai_suggestion", system_suggestion: parsed,
+        });
+      } catch (e) { console.warn("log insert failed", e); }
+
+      if (needsEscalation && recommended) {
+        try {
+          await svc.from("business_approvals").insert({
+            case_id, business_account_id: caseRow.business_account_id,
+            requested_by_user_id: userId, requested_by_role: userRole, required_role: requiredRole,
+            requested_amount: recConcession ?? 0,
+            requested_percent: recommended.percent_of_purchase ?? 0,
+            ai_recommendation: recommended,
+            justification: parsed.analysis ?? "",
+          });
+        } catch (e) { console.warn("approval insert failed", e); }
+      }
+    })());
+
+    return response;
   } catch (e) {
     console.error("pipeline error", e);
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });

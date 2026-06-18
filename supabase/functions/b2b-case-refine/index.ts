@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callAnthropicTool } from "../_shared/anthropic.ts";
+import { callAnthropicTool, callAnthropicText } from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -140,6 +140,13 @@ ${policyContext ? "MANDANTEN-RICHTLINIEN:\n" + policyContext + "\n\n" : ""}${glo
 
 SPRACHE: interne Strategie verkäuferorientiert; an den Kunden gerichtete Texte IMMER höflich, wertschätzend, wahrheitsgemäß.
 
+PFLICHT — KUNDEN-KOMMUNIKATION (NICHT VERHANDELBAR):
+- recommendation.customer_wording UND recommendation.email_draft sind in JEDER Runde PFLICHT — auch wenn customer_concession_eur = 0.
+- Bei 0-€-Strategien (reine Nacherfüllung, Begutachtung, Halten der Linie): höflicher Deeskalations-Text mit Anerkennung der Emotion + konkretem nächsten Schritt (z. B. kostenfreier Techniker-/Begutachtungs-Termin, klare Reparatur-Zusage) + freundlicher Abschluss.
+- email_draft enthält Anrede, Hauptteil, konkreten Lösungsvorschlag/nächsten Schritt, Grußformel. Mindestens 200 Zeichen.
+- customer_wording ist ein kompakter Wortlaut (mind. 60 Zeichen).
+- Leere, einsilbige oder platzhalterhafte Felder sind unzulässig.
+
 KOSTEN-TRENNUNG (zwingend):
 - customer_concession_eur = was der KUNDE als Geld/Gutschein/Wertausgleich erhält. Reine Nacherfüllung/Reparatur => 0.
 - merchant_internal_cost_eur = interne Umsetzungskosten (Reparatur, Anfahrt, Ersatzteil). Niemals an Kunde kommunizieren.
@@ -195,8 +202,8 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
                 legal_levers: { type: "array", items: { type: "string" } },
                 reciprocity_ask: { type: "string", description: "Welcher Gegenwert wird im Gegenzug zur Konzession verlangt (z. B. Abschluss, Verzicht auf weitere Forderungen)." },
                 rationale: { type: "string" },
-                customer_wording: { type: "string", description: "Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
-                email_draft: { type: "string", description: "Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
+                customer_wording: { type: "string", minLength: 60, description: "Höflicher Wortlaut an Kunde (mind. 60 Zeichen). PFLICHT — auch bei 0-€-Strategien. Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
+                email_draft: { type: "string", minLength: 200, description: "Vollständige E-Mail mit Anrede, Hauptteil, Lösungsvorschlag, Grußformel (mind. 200 Zeichen). PFLICHT. Enthält NIEMALS interne Kosten / Reparaturaufwand in EUR." },
                 required_role: { type: "string", enum: ["sachbearbeiter", "manager", "leitung"] },
                 confidence: { type: "string", enum: ["low", "medium", "high"] },
               },
@@ -227,6 +234,28 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
     const parsed: any = toolRes.data;
 
     const recommended = parsed.recommendation ?? null;
+
+    // Fallback: ensure customer_wording + email_draft are present and substantial.
+    if (recommended) {
+      const needsWording = (
+        !recommended.customer_wording || String(recommended.customer_wording).trim().length < 60 ||
+        !recommended.email_draft || String(recommended.email_draft).trim().length < 200
+      );
+      if (needsWording) {
+        const fillerSystem = `Du bist Pallanx Retail Shield. Formuliere für eine bereits beschlossene Verhandlungslinie zwei Texte an einen Endkunden. Höflich, wertschätzend, wahrheitsgemäß. Niemals interne Kosten / Reparaturaufwand in EUR nennen. Bei 0-€-Strategien: Emotion anerkennen + konkreten nächsten Schritt (z. B. kostenfreier Techniker-/Begutachtungs-Termin) anbieten. Antworte ausschließlich mit reinem JSON {"customer_wording":"...","email_draft":"..."} (ohne Codeblock).`;
+        const fillerUser = `Fall: ${caseRow.product_name ?? "n/a"} (${caseRow.product_category ?? "n/a"}), Kaufpreis ${caseRow.purchase_price_total} EUR, Kundenforderung ${caseRow.claimed_amount} EUR.\nSituation: ${caseRow.situation_text ?? "—"}\n${customerResponseText ? `Letzte Kundenreaktion: ${customerResponseText}\n` : ""}Anweisung des Mitarbeitenden: ${instruction}\n\nGewählte Strategie: ${recommended.strategy_label ?? recommended.strategy_key ?? "Empfehlung"}\nKundenzugeständnis: ${Number(recommended.customer_concession_eur ?? 0)} EUR (${Number(recommended.percent_of_purchase ?? 0)}%)\nGegenwert (Reziprozität): ${recommended.reciprocity_ask ?? "—"}\nBegründung intern: ${recommended.rationale ?? ""}\nRechtliche Hebel: ${(recommended.legal_levers ?? []).join(", ")}\n\ncustomer_wording: mind. 60 Zeichen, 2-4 Sätze.\nemail_draft: mind. 200 Zeichen, mit Anrede, Hauptteil, Lösungsvorschlag, Grußformel.`;
+        const filler = await callAnthropicText({ apiKey: anthropicKey, systemPrompt: fillerSystem, userMessage: fillerUser, maxTokens: 900 });
+        if (filler.ok) {
+          try {
+            const txt = filler.text.replace(/^```json\s*|\s*```$/g, "").trim();
+            const j = JSON.parse(txt);
+            if (j.customer_wording) recommended.customer_wording = String(j.customer_wording);
+            if (j.email_draft) recommended.email_draft = String(j.email_draft);
+          } catch (e) { console.warn("filler parse failed", e); }
+        }
+      }
+    }
+
     const options = recommended ? [recommended] : [];
     const recIdx = 0;
 
@@ -277,12 +306,7 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
       required_approval_role: requiredRole,
     }).eq("id", case_id);
 
-    await svc.from("business_case_logs").insert({
-      case_id, business_account_id: caseRow.business_account_id, user_id: userId,
-      action: "refinement", system_suggestion: { instruction, customer_response: customerResponseText || null, result: parsed },
-    });
-
-    return new Response(JSON.stringify({
+    const response = new Response(JSON.stringify({
       ok: true, version: newVersion, options, recommended,
       required_role: requiredRole,
       escalated: roleRank[requiredRole] > roleRank[userRole],
@@ -290,6 +314,19 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
       round_summary: parsed.round_summary ?? null,
       closure_recommendation: parsed.closure_recommendation ?? null,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    // Defer log insert so the HTTP response flushes immediately.
+    // @ts-ignore — Supabase Edge Runtime global
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        await svc.from("business_case_logs").insert({
+          case_id, business_account_id: caseRow.business_account_id, user_id: userId,
+          action: "refinement", system_suggestion: { instruction, customer_response: customerResponseText || null, result: parsed },
+        });
+      } catch (e) { console.warn("refine log insert failed", e); }
+    })());
+
+    return response;
   } catch (e) {
     console.error("refine error", e);
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
