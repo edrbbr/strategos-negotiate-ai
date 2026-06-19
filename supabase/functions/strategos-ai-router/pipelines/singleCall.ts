@@ -165,6 +165,7 @@ export async function runSingleCall(params: SingleCallParams): Promise<Strategos
       model: modelId,
       systemPrompt,
       userMessage,
+      maxTokens: 8000,
       tool: {
         name: "return_strategos_analysis",
         description: "Return the elite negotiation analysis as a strict JSON object.",
