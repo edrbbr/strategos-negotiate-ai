@@ -39,7 +39,7 @@ export async function callAnthropic(
       },
       body: JSON.stringify({
         model: params.model,
-        max_tokens: params.maxTokens ?? 2048,
+        max_tokens: params.maxTokens ?? 8000,
         system: params.systemPrompt,
         tools: [params.tool],
         tool_choice: { type: "tool", name: params.tool.name },
