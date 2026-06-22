@@ -23,7 +23,7 @@ interface Settings {
 
 const DEFAULTS_BY_PROVIDER: Record<Provider, string> = {
   anthropic: "claude-sonnet-4-5",
-  kimi: "kimi-k2-0905-preview",
+  kimi: "kimi-k2.6",
 };
 
 const PROVIDER_LABEL: Record<Provider, string> = {

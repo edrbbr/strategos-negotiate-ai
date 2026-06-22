@@ -1,7 +1,7 @@
 // Shared Moonshot/Kimi helpers — OpenAI-compatible Chat Completions API.
 // Mirrors the surface of `_shared/anthropic.ts` so it can be swapped in 1:1.
 
-export const KIMI_MODEL = "kimi-k2-0905-preview";
+export const KIMI_MODEL = "kimi-k2.6";
 
 const KIMI_URL = "https://api.moonshot.ai/v1/chat/completions";
 const DEFAULT_TIMEOUT_MS = 90_000;
