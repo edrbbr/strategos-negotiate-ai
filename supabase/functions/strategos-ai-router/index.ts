@@ -13,7 +13,7 @@ import {
   type StageMeta,
 } from "./types.ts";
 import { retrieveKnowledge } from "./knowledge.ts";
-import { callAnthropicVisionExtract } from "../_shared/anthropic.ts";
+import { loadAiSettings, callVisionExtract } from "../_shared/aiProvider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -83,8 +83,16 @@ Deno.serve(async (req: Request) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? null;
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? null;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") ?? null;
-    const allKeysMissing = !ANTHROPIC_API_KEY && !OPENAI_API_KEY && !LOVABLE_API_KEY;
+    const KIMI_API_KEY = Deno.env.get("KIMI_API_KEY") ?? null;
+    const allKeysMissing = !ANTHROPIC_API_KEY && !OPENAI_API_KEY && !LOVABLE_API_KEY && !KIMI_API_KEY;
     const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // ---- AI-PROVIDER-SETTINGS (Admin-Schalter) ----
+    const aiSettings = await loadAiSettings(serviceClient);
+    const chatProviderOverride =
+      aiSettings.chat_provider === "kimi"
+        ? { provider: "kimi" as const, model: aiSettings.chat_model, apiKey: KIMI_API_KEY ?? "" }
+        : null;
 
     // ---- PROFILE + PLAN ----
     // Use service role to avoid RLS/grant edge cases on the joined `plans` table.
@@ -201,7 +209,9 @@ Deno.serve(async (req: Request) => {
 
     // ---- Build attachments context ----
     let attachmentsContext = "";
-    if (case_id && attachment_ids.length > 0 && ANTHROPIC_API_KEY) {
+    const visionProviderReady =
+      aiSettings.vision_provider === "kimi" ? !!KIMI_API_KEY : !!ANTHROPIC_API_KEY;
+    if (case_id && attachment_ids.length > 0 && visionProviderReady) {
       try {
         const { data: atts } = await serviceClient
           .from("case_attachments")
@@ -226,8 +236,9 @@ Deno.serve(async (req: Request) => {
               for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
               const b64 = btoa(bin);
               const mime = a.mime_type || "application/octet-stream";
-              const visionRes = await callAnthropicVisionExtract({
-                apiKey: ANTHROPIC_API_KEY,
+              const visionRes = await callVisionExtract({
+                provider: aiSettings.vision_provider,
+                model: aiSettings.vision_model,
                 mediaType: mime,
                 base64: b64,
                 instruction:
@@ -242,7 +253,7 @@ Deno.serve(async (req: Request) => {
                   .update({ extracted_text: trimmed })
                   .eq("id", a.id);
               } else if (!visionRes.ok) {
-                console.warn("Claude vision extract failed", visionRes.status, visionRes.error);
+                console.warn("Vision extract failed", aiSettings.vision_provider, visionRes.status, visionRes.error);
               }
             } catch (e) {
               console.warn("attachment extract error", a.file_name, e);
@@ -417,6 +428,7 @@ Deno.serve(async (req: Request) => {
             escalationLevel: escalation_level,
             knowledgeContext,
             knowledgeSources,
+            chatProviderOverride,
           });
           await persistInitialVersion({
             analysis: result.analysis,
@@ -509,6 +521,7 @@ Deno.serve(async (req: Request) => {
         escalationLevel: escalation_level,
         knowledgeContext,
         knowledgeSources,
+        chatProviderOverride,
       });
       const total = Date.now() - t0;
 
