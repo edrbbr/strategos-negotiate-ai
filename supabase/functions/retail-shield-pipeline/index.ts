@@ -79,9 +79,13 @@ Deno.serve(async (req) => {
     }
 
     const lovableKey = Deno.env.get("LOVABLE_API_KEY")!;
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!anthropicKey) {
-      return new Response(JSON.stringify({ error: "anthropic_key_missing" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const aiSettings = await loadAiSettings(svc);
+    const aiKeyPresent =
+      aiSettings.chat_provider === "kimi"
+        ? !!Deno.env.get("KIMI_API_KEY")
+        : !!Deno.env.get("ANTHROPIC_API_KEY");
+    if (!aiKeyPresent) {
+      return new Response(JSON.stringify({ error: "ai_key_missing" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // RAG retrieval (tenant-scoped + global)
@@ -195,8 +199,9 @@ Erzeuge eine EINZIGE faire Empfehlung mit Begründung und E-Mail-Entwurf.`;
     const userPromptExtra = `\nAktueller Mitarbeiter-Rolle: ${userRole} (eigene Obergrenze ${userLimit}%).
 
 Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balanced / relationship_protection) mit Begründung, BGB-Hebeln, Kundentext und E-Mail-Entwurf. Empfehle standardmäßig Option (a) — abweichen NUR mit transparenter Begründung.`;
-    const toolRes = await callAnthropicTool({
-      apiKey: anthropicKey,
+    const toolRes = await callChatTool({
+      provider: aiSettings.chat_provider,
+      model: aiSettings.chat_model,
       systemPrompt,
       userMessage: userPrompt + userPromptExtra,
       maxTokens: 3500,
@@ -274,7 +279,7 @@ Liefere die DREI strategisch gestaffelten Optionen (optimal_for_merchant / balan
     if (needsWording) {
       const fillerSystem = `Du bist Pallanx Retail Shield. Formuliere für eine bereits beschlossene Verhandlungslinie zwei Texte an einen Endkunden. Höflich, wertschätzend, wahrheitsgemäß. Niemals interne Kosten / Reparaturaufwand in EUR nennen. Bei 0-€-Strategien: Emotion anerkennen + konkreten nächsten Schritt (z. B. kostenfreier Techniker-/Begutachtungs-Termin) anbieten. Antworte ausschließlich mit reinem JSON {"customer_wording":"...","email_draft":"..."} (ohne Codeblock).`;
       const fillerUser = `Fall: ${caseRow.product_name ?? "n/a"} (${caseRow.product_category ?? "n/a"}), Kaufpreis ${caseRow.purchase_price_total} EUR, Kundenforderung ${caseRow.claimed_amount} EUR.\nSituation: ${caseRow.situation_text ?? "—"}\n\nGewählte Strategie: ${recommended.strategy_label ?? recommended.strategy_key ?? "Empfehlung"}\nKundenzugeständnis: ${Number(recommended.customer_concession_eur ?? 0)} EUR (${Number(recommended.percent_of_purchase ?? 0)}%)\nBegründung intern: ${recommended.rationale ?? ""}\nRechtliche Hebel: ${(recommended.legal_levers ?? []).join(", ")}\n\ncustomer_wording: mind. 60 Zeichen, 2-4 Sätze.\nemail_draft: mind. 200 Zeichen, mit Anrede, Hauptteil, Lösungsvorschlag, Grußformel.`;
-      const filler = await callAnthropicText({ apiKey: anthropicKey, systemPrompt: fillerSystem, userMessage: fillerUser, maxTokens: 900 });
+      const filler = await callChatText({ provider: aiSettings.chat_provider, model: aiSettings.chat_model, systemPrompt: fillerSystem, userMessage: fillerUser, maxTokens: 900 });
       if (filler.ok) {
         try {
           const txt = filler.text.replace(/^```json\s*|\s*```$/g, "").trim();
