@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callAnthropicTool, callAnthropicText } from "../_shared/anthropic.ts";
+import { loadAiSettings, callChatTool, callChatText } from "../_shared/aiProvider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
