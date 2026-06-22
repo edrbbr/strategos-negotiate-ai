@@ -56,6 +56,7 @@ import AdminB2BLeads from "./pages/admin/AdminB2BLeads";
 import AdminB2BAccount from "./pages/admin/AdminB2BAccount";
 import AdminB2BTickets from "./pages/admin/AdminB2BTickets";
 import AdminMagazin from "./pages/admin/AdminMagazin";
+import AdminAIProvider from "./pages/admin/AdminAIProvider";
 import { useUtmCapture, useHtmlLang } from "@/hooks/useUtmCapture";
 
 const queryClient = new QueryClient();
@@ -173,6 +174,7 @@ const App = () => (
             <Route path="/admin/b2b/tickets" element={<AdminRoute><AdminB2BTickets /></AdminRoute>} />
             <Route path="/admin/b2b/:id" element={<AdminRoute><AdminB2BAccount /></AdminRoute>} />
             <Route path="/admin/magazin" element={<AdminRoute><AdminMagazin /></AdminRoute>} />
+            <Route path="/admin/ai-provider" element={<AdminRoute><AdminAIProvider /></AdminRoute>} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>
