@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_provider_settings: {
+        Row: {
+          chat_model: string
+          chat_provider: string
+          id: string
+          updated_at: string
+          updated_by: string | null
+          vision_model: string
+          vision_provider: string
+        }
+        Insert: {
+          chat_model?: string
+          chat_provider?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          vision_model?: string
+          vision_provider?: string
+        }
+        Update: {
+          chat_model?: string
+          chat_provider?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          vision_model?: string
+          vision_provider?: string
+        }
+        Relationships: []
+      }
       analytics_events: {
         Row: {
           created_at: string

@@ -2,7 +2,7 @@
 // using the cheapest model. Caches result on cases.quick_suggestions.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callAnthropicTool } from "../_shared/anthropic.ts";
+import { loadAiSettings, callChatTool } from "../_shared/aiProvider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,7 +22,6 @@ Deno.serve(async (req: Request) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
     const body = await req.json().catch(() => ({}));
     const case_id: string | undefined = body?.case_id;
@@ -79,7 +78,12 @@ Deno.serve(async (req: Request) => {
       .order("sort_order");
     const strategyHints = (strategies ?? []).map((s) => `${s.label}: ${s.description ?? ""}`).join("\n");
 
-    if (!ANTHROPIC_API_KEY) return json({ error: "AI not configured" }, 500);
+    const aiSettings = await loadAiSettings(service);
+    const aiKeyPresent =
+      aiSettings.chat_provider === "kimi"
+        ? !!Deno.env.get("KIMI_API_KEY")
+        : !!Deno.env.get("ANTHROPIC_API_KEY");
+    if (!aiKeyPresent) return json({ error: "AI not configured" }, 500);
 
     const systemPrompt = `You are STRATEGOS Suggest Engine. Produce exactly 4 highly specific, case-tailored refinement suggestions for the negotiation draft.
 
@@ -95,8 +99,9 @@ ${strategyHints}
 
     const userPrompt = `Situation:\n"""\n${caseRow.situation_text ?? ""}\n"""\n\nAnalysis (bullets):\n${JSON.stringify(latest.analysis ?? [])}\n\nStrategy:\n"""\n${latest.strategy ?? ""}\n"""\n\nCurrent draft:\n"""\n${latest.draft ?? ""}\n"""\n\nReturn 4 case-specific refinement suggestions via the suggest_refinements tool.`;
 
-    const toolResult = await callAnthropicTool({
-      apiKey: ANTHROPIC_API_KEY,
+    const toolResult = await callChatTool({
+      provider: aiSettings.chat_provider,
+      model: aiSettings.chat_model,
       systemPrompt,
       userMessage: userPrompt,
       timeoutMs: 30_000,

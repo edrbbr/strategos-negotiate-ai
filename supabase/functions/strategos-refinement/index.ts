@@ -3,12 +3,14 @@
 // from the latest case_versions row, then writes a new version.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { CLAUDE_MODEL } from "../_shared/anthropic.ts";
 import {
-  callAnthropicText,
-  callAnthropicTool,
-  callAnthropicVisionExtract,
-  CLAUDE_MODEL,
-} from "../_shared/anthropic.ts";
+  loadAiSettings,
+  callChatTool,
+  callChatText,
+  callVisionExtract,
+  type AiProviderSettings,
+} from "../_shared/aiProvider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -67,7 +69,7 @@ Be concrete, no hedging, no preamble. Reply in the requested language.
 Output ONLY the explanation text — no labels, no markdown fences.`;
 
 async function buildRationale(
-  apiKey: string,
+  chat: { provider: "anthropic" | "kimi"; model: string },
   ctx: {
     instruction: string;
     previousStrategy: string;
@@ -87,8 +89,9 @@ async function buildRationale(
       (ctx.attachmentsContext
         ? `Refinement attachments excerpt:\n"""\n${ctx.attachmentsContext.slice(0, 1500)}\n"""\n`
         : "No new attachments.\n");
-    const res = await callAnthropicText({
-      apiKey,
+    const res = await callChatText({
+      provider: chat.provider,
+      model: chat.model,
       systemPrompt: RATIONALE_PROMPT,
       userMessage: userContent,
       temperature: 0.4,
@@ -123,12 +126,13 @@ function similarityRatio(a: string, b: string): number {
 }
 
 async function callDraft(
-  apiKey: string,
+  chat: { provider: "anthropic" | "kimi"; model: string },
   systemPrompt: string,
   userContent: string,
 ): Promise<{ ok: true; text: string } | { ok: false; status: number; body: string }> {
-  const res = await callAnthropicText({
-    apiKey,
+  const res = await callChatText({
+    provider: chat.provider,
+    model: chat.model,
     systemPrompt,
     userMessage: userContent,
     temperature: 0.7,
@@ -143,12 +147,13 @@ const VALID_STRATEGY_LABELS = new Set([
 ]);
 
 async function classifyInstruction(
-  apiKey: string,
+  chat: { provider: "anthropic" | "kimi"; model: string },
   instruction: string,
   currentStrategy: string,
 ): Promise<{ regenerate_strategy: boolean; strategy_labels: string[] }> {
-  const res = await callAnthropicTool({
-    apiKey,
+  const res = await callChatTool({
+    provider: chat.provider,
+    model: chat.model,
     systemPrompt: STRATEGY_CLASSIFIER_PROMPT,
     userMessage:
       `Current strategy:\n"""\n${currentStrategy.slice(0, 600)}\n"""\n\n` +
@@ -351,12 +356,23 @@ Deno.serve(async (req: Request) => {
     const currentStrategy: string = latest.strategy ?? "";
     const currentLabels: string[] = Array.isArray(latest.strategy_labels) ? latest.strategy_labels : [];
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    // Active AI provider (Admin-Schalter: Claude oder Kimi).
+    const aiSettings = await loadAiSettings(service);
+    const chat = { provider: aiSettings.chat_provider, model: aiSettings.chat_model } as const;
+    const aiKeyPresent =
+      aiSettings.chat_provider === "kimi"
+        ? !!Deno.env.get("KIMI_API_KEY")
+        : !!Deno.env.get("ANTHROPIC_API_KEY");
+    const ANTHROPIC_API_KEY_FOR_VISION = Deno.env.get("ANTHROPIC_API_KEY");
 
     // ---- EXTRACT REFINEMENT ATTACHMENTS (cost-optimized: gemini-flash-lite) ----
     let attachmentsContext = "";
     const usedAttachmentIds: string[] = [];
-    if (attachment_ids.length > 0 && ANTHROPIC_API_KEY) {
+    if (attachment_ids.length > 0 && (
+      aiSettings.vision_provider === "kimi"
+        ? !!Deno.env.get("KIMI_API_KEY")
+        : !!ANTHROPIC_API_KEY_FOR_VISION
+    )) {
       try {
         const { data: atts } = await service
           .from("case_attachments")
@@ -382,8 +398,9 @@ Deno.serve(async (req: Request) => {
               for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
               const b64 = btoa(bin);
               const mime = a.mime_type || "application/octet-stream";
-              const visionRes = await callAnthropicVisionExtract({
-                apiKey: ANTHROPIC_API_KEY,
+              const visionRes = await callVisionExtract({
+                provider: aiSettings.vision_provider,
+                model: aiSettings.vision_model,
                 mediaType: mime,
                 base64: b64,
                 instruction:
@@ -411,7 +428,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (!ANTHROPIC_API_KEY) {
+    if (!aiKeyPresent) {
       const newDraft = `${currentDraft}\n\n[Refinement (mock): ${instruction}]`;
       return await persistAndReply(service, caseRow, latest, {
         analysis: pinnedAnalysis,
@@ -437,7 +454,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Smart classifier: does this instruction require a new strategy?
-    const classification = await classifyInstruction(ANTHROPIC_API_KEY, instruction, currentStrategy);
+    const classification = await classifyInstruction(chat, instruction, currentStrategy);
     let nextStrategy = currentStrategy;
     let nextLabels = currentLabels;
 
@@ -453,8 +470,9 @@ Deno.serve(async (req: Request) => {
         `Previous strategy:\n"""\n${currentStrategy}\n"""\n\n` +
         `User instruction (highest priority — change strategy accordingly):\n${instruction}\n\n` +
         `Now produce the new strategy text in ${caseRow.language_label}.`;
-      const stratRes = await callAnthropicText({
-        apiKey: ANTHROPIC_API_KEY,
+      const stratRes = await callChatText({
+        provider: chat.provider,
+        model: chat.model,
         systemPrompt: STRATEGY_REGEN_PROMPT,
         userMessage: stratUser,
         temperature: 0.5,
@@ -485,7 +503,7 @@ Deno.serve(async (req: Request) => {
       tonalityNote +
       (extraNudge ? `\n\n${extraNudge}` : "");
 
-    let result = await callDraft(ANTHROPIC_API_KEY, SYSTEM_PROMPT, buildUserContent());
+    let result = await callDraft(chat, SYSTEM_PROMPT, buildUserContent());
     if (!result.ok) {
       if (result.status === 429) return json({ error: "Rate limit" }, 429);
       if (result.status === 402) return json({ error: "AI credits exhausted" }, 402);
@@ -500,7 +518,7 @@ Deno.serve(async (req: Request) => {
     if (sim > 0.85) {
       console.log("Refinement too similar (ratio=", sim, "), retrying with stronger nudge");
       const retry = await callDraft(
-        ANTHROPIC_API_KEY,
+        chat,
         SYSTEM_PROMPT,
         buildUserContent(
           "The previous attempt was too similar to the old draft. Rewrite more boldly: change structure, opening, and wording.",
@@ -514,7 +532,7 @@ Deno.serve(async (req: Request) => {
       strategy: nextStrategy,
       strategy_labels: nextLabels,
       draft: newDraft,
-      change_rationale: await buildRationale(ANTHROPIC_API_KEY, {
+      change_rationale: await buildRationale(chat, {
         instruction,
         previousStrategy: currentStrategy,
         nextStrategy,

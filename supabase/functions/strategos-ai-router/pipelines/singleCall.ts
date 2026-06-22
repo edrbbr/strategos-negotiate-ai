@@ -1,5 +1,6 @@
 import { callAnthropic } from "../providers/anthropic.ts";
 import { callGemini } from "../providers/gemini.ts";
+import { callKimi } from "../providers/kimi.ts";
 import { SYSTEM_PROMPT, buildTierAddendum } from "../prompts.ts";
 import {
   ProviderError,
@@ -130,6 +131,7 @@ export interface SingleCallParams {
   escalationLevel?: EscalationLevel;
   knowledgeContext?: string;
   knowledgeSources?: KnowledgeSource[];
+  chatProviderOverride?: { provider: "anthropic" | "kimi"; model: string; apiKey: string } | null;
 }
 
 export async function runSingleCall(params: SingleCallParams): Promise<StrategosResult> {
@@ -154,6 +156,27 @@ export async function runSingleCall(params: SingleCallParams): Promise<Strategos
       : null,
     `Produce the strategic evaluation strictly in the target language and matching the medium conventions. Return ALL required fields including the three variants.`,
   ].filter(Boolean).join("\n\n");
+
+  // Admin-Override: Kimi statt Claude für den Chat-Call.
+  const override = params.chatProviderOverride;
+  if (override && override.provider === "kimi") {
+    if (!override.apiKey) {
+      throw new ProviderError("MISSING_KIMI_API_KEY", 500, "MISSING_KIMI_API_KEY", "anthropic");
+    }
+    const out = await callKimi({
+      apiKey: override.apiKey,
+      model: override.model,
+      systemPrompt,
+      userMessage,
+      maxTokens: 8000,
+      tool: {
+        name: "return_strategos_analysis",
+        description: "Return the elite negotiation analysis as a strict JSON object.",
+        input_schema: FULL_TOOL_PARAMS,
+      },
+    });
+    return coerce(out, sources);
+  }
 
   // Provider-Auswahl anhand Model-Name
   if (modelId.startsWith("claude")) {

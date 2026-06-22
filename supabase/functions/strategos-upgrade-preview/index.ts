@@ -6,7 +6,7 @@
 // - Idempotent: skips if a preview already exists for the case.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callAnthropicTool } from "../_shared/anthropic.ts";
+import { loadAiSettings, callChatTool } from "../_shared/aiProvider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,8 +36,12 @@ Deno.serve(async (req: Request) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const aiSettings = await loadAiSettings(service);
+    const aiKeyPresent =
+      aiSettings.chat_provider === "kimi"
+        ? !!Deno.env.get("KIMI_API_KEY")
+        : !!Deno.env.get("ANTHROPIC_API_KEY");
 
     const body = await req.json().catch(() => ({}));
     const case_id: string | undefined = body?.case_id;
@@ -90,7 +94,7 @@ Deno.serve(async (req: Request) => {
       (s: { min_tier?: string }) => (s.min_tier ?? "free") === "pro",
     );
 
-    if (!ANTHROPIC_API_KEY || proStrategies.length === 0) {
+    if (!aiKeyPresent || proStrategies.length === 0) {
       // Fallback: persist a static placeholder so the UI still shows the panel
       const { error: insErr } = await service.from("upgrade_previews").insert({
         case_id,
@@ -121,8 +125,9 @@ Deno.serve(async (req: Request) => {
       `PRO-ONLY STRATEGY WHITELIST (pick exactly one Pro-only tactic the Free strategy lacks):\n${whitelist}\n\n` +
       `Now return the JSON.`;
 
-    const toolRes = await callAnthropicTool({
-      apiKey: ANTHROPIC_API_KEY,
+    const toolRes = await callChatTool({
+      provider: aiSettings.chat_provider,
+      model: aiSettings.chat_model,
       systemPrompt: PREVIEW_SYSTEM,
       userMessage,
       temperature: 0.3,

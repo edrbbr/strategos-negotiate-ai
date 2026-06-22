@@ -1,6 +1,7 @@
 import { callAnthropic } from "../providers/anthropic.ts";
 import { callGemini } from "../providers/gemini.ts";
 import { callOpenAI } from "../providers/openai.ts";
+import { callKimi } from "../providers/kimi.ts";
 import {
   PROMPT_ANALYSIS,
   PROMPT_DRAFT,
@@ -202,6 +203,7 @@ export interface MultiStageParams {
   escalationLevel?: EscalationLevel;
   knowledgeContext?: string;
   knowledgeSources?: KnowledgeSource[];
+  chatProviderOverride?: { provider: "anthropic" | "kimi"; model: string; apiKey: string } | null;
 }
 
 export interface MultiStageResult {
@@ -219,6 +221,38 @@ export async function runMultiStagePipeline(
   params: MultiStageParams,
 ): Promise<MultiStageResult> {
   const { config, situationText, anthropicKey, openaiKey, lovableKey, onStageComplete, medium, languageLabel, attachmentsContext } = params;
+  const chatOverride = params.chatProviderOverride ?? null;
+  const useKimi = chatOverride?.provider === "kimi";
+  // Helper that swaps callAnthropic ↔ callKimi based on the active override.
+  const chatToolCall = async (a: {
+    model: string;
+    systemPrompt: string;
+    userMessage: string;
+    maxTokens?: number;
+    tool: { name: string; description?: string; input_schema: Record<string, unknown> };
+  }): Promise<Record<string, unknown>> => {
+    if (useKimi) {
+      if (!chatOverride?.apiKey) {
+        throw new ProviderError("MISSING_KIMI_API_KEY", 500, "MISSING_KIMI_API_KEY", "anthropic");
+      }
+      return await callKimi({
+        apiKey: chatOverride.apiKey,
+        model: chatOverride.model || a.model,
+        systemPrompt: a.systemPrompt,
+        userMessage: a.userMessage,
+        maxTokens: a.maxTokens,
+        tool: a.tool,
+      });
+    }
+    return await callAnthropic({
+      apiKey: anthropicKey!,
+      model: a.model,
+      systemPrompt: a.systemPrompt,
+      userMessage: a.userMessage,
+      maxTokens: a.maxTokens,
+      tool: a.tool,
+    });
+  };
   const escalation: EscalationLevel = params.escalationLevel ?? "auto";
   const sources = params.knowledgeSources ?? [];
   const escalationLine = `User-chosen escalation_level: ${escalation}`;
@@ -242,14 +276,13 @@ export async function runMultiStagePipeline(
 
   // ---- Stage 1: Analysis ----
   const s1 = getStage(config, "analysis");
-  if (s1.provider === "anthropic" && !anthropicKey) {
+  if (s1.provider === "anthropic" && !anthropicKey && !useKimi) {
     throw new ProviderError("MISSING_ANTHROPIC_KEY", 500, "MISSING_ANTHROPIC_KEY", "anthropic");
   }
   const t1 = Date.now();
   let analysisOut: Record<string, unknown>;
   try {
-    analysisOut = await callAnthropic({
-      apiKey: anthropicKey!,
+    analysisOut = await chatToolCall({
       model: s1.model,
       systemPrompt: promptAnalysis,
       userMessage: `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""${attachLine}${knowledgeBlock}`,
@@ -350,6 +383,7 @@ export async function runMultiStagePipeline(
           model: s3.model,
           promptDraft,
           userMessage: `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}\n\nrecommended_variant: ${recommendedVariant}${attachLine}${knowledgeBlock}`,
+        chatOverride,
         });
       } catch (draftError) {
         throw stageError("draft", ["analysis", "strategy"], draftError);
@@ -400,6 +434,7 @@ export async function runMultiStagePipeline(
       model: s3.model,
       promptDraft,
       userMessage: `${baseHeader}\n\nSituation:\n"""\n${situationText}\n"""\n\nAnalysis:\n${analysis.join("\n")}\n\nStrategy:\n${strategy}\n\nrecommended_variant: ${recommendedVariant}${attachLine}${knowledgeBlock}`,
+      chatOverride,
     });
   } catch (e) {
     throw stageError("draft", ["analysis", "strategy"], e);
@@ -472,9 +507,30 @@ async function runDraftWithFallback(args: {
   model: string;
   promptDraft: string;
   userMessage: string;
+  chatOverride?: { provider: "anthropic" | "kimi"; model: string; apiKey: string } | null;
 }): Promise<Record<string, unknown>> {
-  const { anthropicKey, lovableKey, model, promptDraft, userMessage } = args;
-  const tryAnthropic = async (): Promise<Record<string, unknown>> => {
+  const { anthropicKey, lovableKey, model, promptDraft, userMessage, chatOverride } = args;
+  const useKimi = chatOverride?.provider === "kimi";
+  const tryPrimary = async (): Promise<Record<string, unknown>> => {
+    if (useKimi) {
+      if (!chatOverride?.apiKey) {
+        throw new ProviderError("MISSING_KIMI_API_KEY", 500, "MISSING_KIMI_API_KEY", "anthropic");
+      }
+      const out = await callKimi({
+        apiKey: chatOverride.apiKey,
+        model: chatOverride.model || model,
+        systemPrompt: promptDraft,
+        userMessage,
+        maxTokens: DRAFT_MAX_TOKENS,
+        tool: {
+          name: "return_draft",
+          description: "Return the final draft, title and icon hint.",
+          input_schema: DRAFT_SCHEMA,
+        },
+      });
+      validateDraftOut(out);
+      return out;
+    }
     const out = await callAnthropic({
       apiKey: anthropicKey,
       model,
@@ -492,7 +548,7 @@ async function runDraftWithFallback(args: {
   };
 
   try {
-    return await tryAnthropic();
+    return await tryPrimary();
   } catch (e) {
     const isFallbackTrigger =
       e instanceof ProviderError &&

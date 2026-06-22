@@ -33,6 +33,7 @@ import {
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
+import { AdminProviderBadge } from "@/components/admin/AdminProviderBadge";
 
 interface NegStrategy {
   key: string;
@@ -271,6 +272,9 @@ export function CaseChatView({ caseRow }: Props) {
     <div className="flex flex-col h-[calc(100dvh-120px)] sm:h-[calc(100vh-180px)] sm:min-h-[600px]">
       {/* Scrollable timeline */}
       <div className="flex-1 overflow-y-auto space-y-6 pb-6 sm:pr-2">
+        <div className="flex justify-end -mb-2">
+          <AdminProviderBadge />
+        </div>
         {/* V0 Initial situation */}
         <InitialBlockInner
           caseRow={caseRow}

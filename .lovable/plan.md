@@ -1,53 +1,95 @@
-## Erweitertes Bild
+# Admin-Schalter: Global Claude ⇄ Kimi für alle Pipelines
 
-Du hast zwei verbundene Symptome gemeldet:
+Ein versteckter, nur für Admins sichtbarer Schalter, der den primären KI-Provider für **alle** Pallanx-Pipelines (B2C + B2B/Retail) global umschaltet. Kimi-Modell: `kimi-k2-0905-preview`. Vision (Anhänge-Extraktion) ist separat schaltbar.
 
-1. **Initial-Analyse schlägt mit `ERR_HTTP2_PROTOCOL_ERROR` ab** (Toast „AI-Analyse fehlgeschlagen / Failed to send a request to the Edge Function").
-2. **Refinement (V2) läuft durch, liefert aber kein Kundenanschreiben** (`Wortlaut für den Kunden` und `E-Mail-Entwurf` fehlen, obwohl Analyse, Risiko, Begründung und Zugeständnis vorhanden sind).
+## Verhalten
 
-Wichtig: Das sind **zwei verschiedene Probleme**, nicht eines.
+- Default = Claude (heute) — nichts ändert sich beim Roll-out
+- Schalter umlegen → alle nachfolgenden Pipeline-Runs nutzen Kimi
+- Fehler/Timeout-Fallback auf Lovable Gemini bleibt erhalten
+- Schalter und Test-Buttons sind nur für `has_role(uid,'admin')` sichtbar
 
-- Das Frontend rendert `customer_wording` und `email_draft` korrekt — es zeigt die Blöcke nur dann nicht, wenn die KI leere Strings zurückgibt (siehe `RefinementChat.tsx`, Zeilen 352–373: `{shown.customer_wording && …}`).
-- Schema-seitig sind beide Felder bereits als `required` markiert (`b2b-case-refine` Zeile 203, `retail-shield-pipeline` Zeile 209), aber JSON-Schema „required" verbietet leere Strings nicht. Claude darf also `""` liefern, vor allem wenn die Strategie „nichts anbieten / nur klären" lautet — das passt exakt zur V2 deines Falls.
-- Im Initial-Pipeline-Run hat die Funktion vermutlich gar nicht durchgeschrieben (Timeout/Verbindungsabbruch), deshalb wurde dort gar kein V1-Wortlaut gespeichert.
+## Betroffene Pipelines (alle umschaltbar)
 
-Beide Symptome werden mit denselben drei Änderungen gelöst.
+| Pipeline | Datei | Stages |
+|---|---|---|
+| B2C Single-Call (Free) | `strategos-ai-router/pipelines/singleCall.ts` | Chat |
+| B2C Multi-Stage (Pro/Elite) | `strategos-ai-router/pipelines/multiStage.ts` | Analysis, Strategy, Draft |
+| B2C Refinement | `strategos-refinement/index.ts` | Chat + Tool |
+| B2C Suggest Refinements | `strategos-suggest-refinements/index.ts` | Tool |
+| B2C Upgrade Preview | `strategos-upgrade-preview/index.ts` | Tool |
+| B2B Case Refine | `b2b-case-refine/index.ts` | Tool + Text |
+| Retail Shield Pipeline | `retail-shield-pipeline/index.ts` | Tool + Text |
+| Vision-Extract (Anhänge) | `_shared/anthropic.ts → callAnthropicVisionExtract` | separater Schalter |
 
-## Plan (aktualisiert)
+## Technische Umsetzung
 
-### A) `supabase/functions/retail-shield-pipeline/index.ts` — Timeout-/Antwort-Stabilität
+### 1. DB — Single-Row Settings-Tabelle
+```sql
+CREATE TABLE public.ai_provider_settings (
+  id text PRIMARY KEY DEFAULT 'global' CHECK (id = 'global'),
+  chat_provider text NOT NULL DEFAULT 'anthropic',   -- 'anthropic' | 'kimi'
+  chat_model    text NOT NULL DEFAULT 'claude-sonnet-4-5',
+  vision_provider text NOT NULL DEFAULT 'anthropic', -- 'anthropic' | 'kimi'
+  vision_model    text NOT NULL DEFAULT 'claude-sonnet-4-5',
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+GRANT SELECT ON public.ai_provider_settings TO authenticated;
+GRANT ALL    ON public.ai_provider_settings TO service_role;
+ALTER TABLE public.ai_provider_settings ENABLE ROW LEVEL SECURITY;
+-- Lesen: authenticated (Router & Frontend brauchen den Status für Banner)
+CREATE POLICY ai_provider_read ON public.ai_provider_settings FOR SELECT TO authenticated USING (true);
+-- Schreiben: nur Admin
+CREATE POLICY ai_provider_write ON public.ai_provider_settings FOR ALL TO authenticated
+  USING (public.has_role(auth.uid(),'admin')) WITH CHECK (public.has_role(auth.uid(),'admin'));
+-- Seed
+INSERT INTO public.ai_provider_settings (id) VALUES ('global') ON CONFLICT DO NOTHING;
+```
 
-Wie zuvor besprochen, plus Pflicht-Wortlaut:
+### 2. Neuer Kimi-Adapter (OpenAI-kompatibel)
+- `supabase/functions/_shared/kimi.ts` — `callKimiTool`, `callKimiText`, `callKimiVisionExtract`
+- Endpoint `https://api.moonshot.ai/v1/chat/completions`, Header `Authorization: Bearer $KIMI_API_KEY`
+- Identische Signaturen wie die Anthropic-Pendants → Drop-in-Tausch
+- Pipeline-Variante in `strategos-ai-router/providers/kimi.ts` mit derselben `callAnthropic`-kompatiblen Signatur
 
-- `max_tokens` von 4500 auf 3500 senken.
-- Sofort nach der Anthropic-Antwort nur den essentiellen `business_cases.update(...)` ausführen und die `Response` bauen.
-- Trailing-Writes (V1-Snapshot in `business_case_versions`, `business_cases.current_version_id`, `business_case_logs`-Insert, optional `business_approvals`-Insert) in `EdgeRuntime.waitUntil((async () => { … })())` verlagern, damit die HTTP-Antwort zuerst rausgeht und der Runtime sie bis zum Ende laufen lässt.
-- Im System-Prompt einen verpflichtenden Absatz ergänzen:
-  „`customer_wording` und `email_draft` sind in JEDER Option PFLICHT und müssen vollständig ausformuliert sein — auch wenn `customer_concession_eur = 0` ist (Deeskalation + Vorschlag eines Begutachtungs-/Lösungs-Schritts). Leere oder einsilbige Felder sind unzulässig."
-- Im Tool-Schema beider Felder `minLength: 60` für `customer_wording` und `minLength: 200` für `email_draft` setzen, damit constrained decoding das Auslassen aktiv verhindert.
-- Server-seitiger Fallback nach der KI-Antwort: wenn trotzdem ein Feld leer/kürzer ist, einen leichten Nachschuss über `callAnthropicText` (Standard-Modell, ~700 Tokens) starten, der nur `customer_wording` + `email_draft` für die empfohlene Option formuliert, und das Ergebnis vor dem `business_cases.update`/V1-Snapshot in `recommended` (und `options[recIdx]`) einpatchen.
+### 3. Provider-Resolver
+Neue Datei `supabase/functions/_shared/aiProvider.ts`:
+```ts
+export async function resolveAiProvider(supabase, kind: 'chat' | 'vision') {
+  const { data } = await supabase.from('ai_provider_settings').select('*').eq('id','global').single();
+  // → { provider, model, callTool, callText, callVision }
+}
+```
+Wrappt Anthropic- oder Kimi-Adapter. Jede Edge Function holt sich vor dem Call den Resolver — eine Query pro Request, minimal.
 
-### B) `supabase/functions/b2b-case-refine/index.ts` — Refinement liefert IMMER ein Kundenanschreiben
+### 4. Anpassung jeder Pipeline
+Alle oben gelisteten Funktionen ersetzen direkte `callAnthropic*`-Aufrufe durch den Resolver. Tool-Schemas, Prompts, Token-Limits bleiben **unverändert**. Fallback-Pfade (Gemini) bleiben.
 
-- Im System-Prompt identischen Pflicht-Absatz ergänzen wie oben („`customer_wording`/`email_draft` sind Pflicht; bei 0-€-Strategie höflicher Deeskalations-Text + nächster konkreter Schritt wie Techniker-/Begutachtungs-Termin").
-- Im Tool-Schema (`recommendation`) `minLength: 60` für `customer_wording` und `minLength: 200` für `email_draft`.
-- Gleichen Fallback wie in (A) anhängen: wenn nach dem Tool-Call eines der beiden Felder leer/kürzer ist, ein zweiter, gezielter `callAnthropicText`-Aufruf produziert die fehlenden Texte und sie werden in `parsed.recommendation` (und damit in `business_case_versions.ai_options[0]`) eingepatcht, bevor die Version in die DB geht. Damit ist die V2 deines Falls reproduzierbar mit Anschreiben.
-- Trailing-Writes (`business_case_logs`-Insert, optional `business_approvals`-Insert, evtl. `current_version_id`-Update) ebenfalls in `EdgeRuntime.waitUntil(...)` verlagern; nur der `business_case_versions.insert` und das `business_cases.update({ current_version_id, ai_options, suggested_offer, … })` müssen vor der Response laufen, weil das UI sie unmittelbar liest.
+### 5. Admin-UI
+Neue Page `src/pages/admin/AdminAIProvider.tsx`, im Admin-Sidebar:
+- 2 Cards: "Chat-Provider", "Vision/Anhänge-Provider"
+- Pro Card: `Select` (Anthropic Claude / Moonshot Kimi) + Modell-Input (Default `claude-sonnet-4-5` bzw. `kimi-k2-0905-preview`)
+- "Speichern"-Button (Update via Supabase Client; RLS schützt)
+- "Test"-Button → ruft neue Edge Function `ai-provider-ping` mit ausgewählter Konfig auf, zeigt Latenz + ersten 200 Zeichen Output
 
-### C) `/select-context` Loader-Falle (unverändert aus dem Vorplan)
+### 6. Edge Function `ai-provider-ping`
+- Admin-only (JWT + `has_role`-Check serverseitig)
+- Body: `{ kind: 'chat' | 'vision', provider, model }`
+- Macht einen kurzen Hello-Call und gibt `{ ok, latency_ms, sample }` zurück
 
-- `src/pages/Login.tsx`: nach erfolgreichem `signInWithEmail` mit `supabase.auth.getUser()` die User-ID holen und in zwei parallelen, lightweight Queries `profiles.b2c_enabled` + aktive `business_users`-Zeile prüfen. Direkter Redirect zu `/app/dashboard` (nur B2C) bzw. `/retail/app/dashboard` (nur B2B); nur bei beidem zu `/select-context`. Bestehender `fromParam`/`hasFirstCasePrefill()`-Vorrang bleibt.
-- `src/pages/SelectContext.tsx`: Auto-Redirect aus dem Render in einen `useEffect` verschieben (reagiert auf jedes Update von `profile`/`membership`); nach ~1,5 s Wartezeit ohne Daten den Picker (mit deaktivierten Karten falls Entitlement unbekannt) plus „Abmelden"-Button rendern, damit niemand auf einem leeren Spinner hängen bleibt.
+### 7. Admin-Sicht-Test-Buttons im B2C & B2B
+- In `CaseChatView.tsx` (B2C) und `src/components/retail/case/ViewChat.tsx` (B2B/Retail) ein kleiner Badge "AI: Kimi · Test" nur sichtbar wenn `useUserRole().isAdmin` true
+- Klick → ruft `ai-provider-ping` mit aktueller Konfig, zeigt Toast mit Ergebnis
+- Für normale Nutzer unsichtbar
 
-## Technische Details
+## Aufwand & Risiko
 
-- `EdgeRuntime.waitUntil` ist auf der Supabase Edge Runtime verfügbar; nutzt das Muster `EdgeRuntime.waitUntil((async () => { … })())` nach `new Response(...)` und vor `return`.
-- Der Fallback-Nachschuss verwendet den vorhandenen `_shared/anthropic.ts#callAnthropicText` mit `max_tokens` ≈ 700 und Default-Timeout — addiert im Worst Case ~6–10 s und nur, wenn das Hauptergebnis lückenhaft war.
-- Keine Migrationen, keine neuen Secrets, keine RLS-Änderungen.
-- Geänderte Dateien: `supabase/functions/retail-shield-pipeline/index.ts`, `supabase/functions/b2b-case-refine/index.ts`, `src/pages/Login.tsx`, `src/pages/SelectContext.tsx`.
+- Aufwand: ~2 Std Implementation
+- Risiko Qualität: Kimi liefert spürbar andere Tonalität als Claude (besonders in Deutsch-Verhandlung). Banner in Admin-UI weist darauf hin.
+- Rollback: Schalter zurück auf "anthropic" → sofort wieder Claude.
 
-## Nicht im Scope
+## Offene Punkte (bitte bestätigen)
 
-- Wechsel vom direkten Anthropic-Aufruf auf das Lovable AI Gateway (Qualitäts-/Tooling-Wechsel — separat besprechen).
-- Inhaltliche Umarbeitung der Prompts jenseits der Pflicht-Klausel.
-- Änderungen an `RetailLogin.tsx` (verwendet weiterhin den `/select-context`-Fallback, der nach (C) self-healing ist).
+1. Soll der Banner "AI: Kimi" für Admins **immer** sichtbar sein oder nur wenn Provider ≠ Default Claude?
+2. Soll die Schreib-Aktion in `analytics_events` geloggt werden (für Audit, wer hat wann umgeschaltet)?

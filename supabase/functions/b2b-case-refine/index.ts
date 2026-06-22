@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callAnthropicTool, callAnthropicText } from "../_shared/anthropic.ts";
+import { loadAiSettings, callChatTool, callChatText } from "../_shared/aiProvider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -187,12 +187,17 @@ ${customerResponseText ? `Kundenreaktion auf das zuletzt gesendete Angebot:\n${c
 
 Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (Stand / was hat der Kunde abgelehnt / was war zuletzt angeboten), dann die aktualisierte Empfehlung (kleinste sinnvolle Konzession mit Gegenwert), Kundenwortlaut + E-Mail-Entwurf. Wenn Abbruch-Auslöser A oder B greift, fülle closure_recommendation.`;
 
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!anthropicKey) {
-      return new Response(JSON.stringify({ error: "anthropic_key_missing" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const aiSettings = await loadAiSettings(svc);
+    const aiKeyPresent =
+      aiSettings.chat_provider === "kimi"
+        ? !!Deno.env.get("KIMI_API_KEY")
+        : !!Deno.env.get("ANTHROPIC_API_KEY");
+    if (!aiKeyPresent) {
+      return new Response(JSON.stringify({ error: "ai_key_missing" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const toolRes = await callAnthropicTool({
-      apiKey: anthropicKey,
+    const toolRes = await callChatTool({
+      provider: aiSettings.chat_provider,
+      model: aiSettings.chat_model,
       systemPrompt,
       userMessage: userPrompt,
       maxTokens: 3500,
@@ -272,7 +277,7 @@ Liefere die nächste strategisch beste Antwort: zuerst Runden-Zusammenfassung (S
       if (needsWording) {
         const fillerSystem = `Du bist Pallanx Retail Shield. Formuliere für eine bereits beschlossene Verhandlungslinie zwei Texte an einen Endkunden. Höflich, wertschätzend, wahrheitsgemäß. Niemals interne Kosten / Reparaturaufwand in EUR nennen. Bei 0-€-Strategien: Emotion anerkennen + konkreten nächsten Schritt (z. B. kostenfreier Techniker-/Begutachtungs-Termin) anbieten. Antworte ausschließlich mit reinem JSON {"customer_wording":"...","email_draft":"..."} (ohne Codeblock).`;
         const fillerUser = `Fall: ${caseRow.product_name ?? "n/a"} (${caseRow.product_category ?? "n/a"}), Kaufpreis ${caseRow.purchase_price_total} EUR, Kundenforderung ${caseRow.claimed_amount} EUR.\nSituation: ${caseRow.situation_text ?? "—"}\n${customerResponseText ? `Letzte Kundenreaktion: ${customerResponseText}\n` : ""}Anweisung des Mitarbeitenden: ${instruction}\n\nGewählte Strategie: ${recommended.strategy_label ?? recommended.strategy_key ?? "Empfehlung"}\nKundenzugeständnis: ${Number(recommended.customer_concession_eur ?? 0)} EUR (${Number(recommended.percent_of_purchase ?? 0)}%)\nGegenwert (Reziprozität): ${recommended.reciprocity_ask ?? "—"}\nBegründung intern: ${recommended.rationale ?? ""}\nRechtliche Hebel: ${(recommended.legal_levers ?? []).join(", ")}\n\ncustomer_wording: mind. 60 Zeichen, 2-4 Sätze.\nemail_draft: mind. 200 Zeichen, mit Anrede, Hauptteil, Lösungsvorschlag, Grußformel.`;
-        const filler = await callAnthropicText({ apiKey: anthropicKey, systemPrompt: fillerSystem, userMessage: fillerUser, maxTokens: 900 });
+        const filler = await callChatText({ provider: aiSettings.chat_provider, model: aiSettings.chat_model, systemPrompt: fillerSystem, userMessage: fillerUser, maxTokens: 900 });
         if (filler.ok) {
           try {
             const txt = filler.text.replace(/^```json\s*|\s*```$/g, "").trim();
