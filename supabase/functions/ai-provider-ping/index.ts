@@ -46,7 +46,7 @@ Deno.serve(async (req: Request) => {
       typeof body?.model === "string" && body.model.trim().length > 0
         ? body.model.trim()
         : providerRaw === "kimi"
-          ? "kimi-k2-0905-preview"
+          ? "kimi-k2.6"
           : "claude-sonnet-4-5";
 
     const t0 = Date.now();
